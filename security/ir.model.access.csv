@@ -1,0 +1,6 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_event_room_booking_coordinator,elks.event.room.booking.coordinator,model_elks_event_room_booking,elksevent.group_event_coordinator,1,1,1,1
+access_event_cost_line_coordinator,elks.event.cost.line.coordinator,model_elks_event_cost_line,elksevent.group_event_coordinator,1,1,1,1
+access_event_pl_wizard_coordinator,elks.event.pl.wizard.coordinator,model_elks_event_pl_wizard,elksevent.group_event_coordinator,1,1,1,1
+access_event_room_booking_user,elks.event.room.booking.user,model_elks_event_room_booking,project.group_project_user,1,0,0,0
+access_event_cost_line_user,elks.event.cost.line.user,model_elks_event_cost_line,project.group_project_user,1,0,0,0

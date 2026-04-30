@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- HTML report action -->
+    <record id="action_report_event_pl" model="ir.actions.report">
+        <field name="name">Event P&amp;L Report</field>
+        <field name="model">elks.event.pl.wizard</field>
+        <field name="report_type">qweb-html</field>
+        <field name="report_name">elksevent.report_event_pl</field>
+        <field name="report_file">elksevent.report_event_pl</field>
+        <field name="print_report_name">
+            'Event_PL_%s_%s' % (object.date_from, object.date_to)
+        </field>
+        <field name="binding_type">report</field>
+        <field name="paperformat_id" ref="base.paperformat_us"/>
+    </record>
+
+    <!-- Companion PDF report -->
+    <record id="action_report_event_pl_pdf" model="ir.actions.report">
+        <field name="name">Event P&amp;L Report (PDF)</field>
+        <field name="model">elks.event.pl.wizard</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_event_pl</field>
+        <field name="report_file">elksevent.report_event_pl</field>
+        <field name="print_report_name">
+            'Event_PL_%s_%s' % (object.date_from, object.date_to)
+        </field>
+        <field name="paperformat_id" ref="base.paperformat_us"/>
+    </record>
+
+    <!-- P&L Wizard form view -->
+    <record id="view_event_pl_wizard_form" model="ir.ui.view">
+        <field name="name">elksevent.pl.wizard.form</field>
+        <field name="model">elks.event.pl.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Event P&amp;L Report">
+                <group>
+                    <group>
+                        <field name="date_from"/>
+                        <field name="date_to"/>
+                    </group>
+                    <group>
+                        <field name="event_id"/>
+                    </group>
+                </group>
+                <footer>
+                    <button name="action_view_report"
+                            string="View Report" type="object"
+                            class="btn-primary"/>
+                    <button name="action_download_pdf"
+                            string="Download PDF" type="object"
+                            class="btn-secondary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_event_pl_wizard" model="ir.actions.act_window">
+        <field name="name">Event P&amp;L Report</field>
+        <field name="res_model">elks.event.pl.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <!-- ================================================================
+         QWeb Template
+         ================================================================ -->
+    <template id="report_event_pl">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="wizard">
+                <t t-set="data" t-value="wizard._get_report_data()"/>
+                <t t-set="settings"
+                   t-value="wizard.env['elks.lodge.settings'].sudo().search([], limit=1)"
+                   t-if="wizard.env['ir.module.module'].sudo().search([('name','=','elksfrs'),('state','=','installed')], limit=1)"/>
+
+                <div class="page" style="font-size: 11px;">
+
+                    <!-- ===== LODGE HEADER WITH LOGOS ===== -->
+                    <table style="width: 100%; margin-bottom: 10px; border: none;">
+                        <tr>
+                            <td style="width: 15%; text-align: center; vertical-align: middle; border: none; padding: 0;">
+                                <t t-if="settings and settings.logo_primary">
+                                    <img t-att-src="image_data_uri(settings.logo_primary)"
+                                         style="max-height: 80px; max-width: 100px;"
+                                         alt="Elks USA"/>
+                                </t>
+                            </td>
+                            <td style="text-align: center; vertical-align: middle; border: none;">
+                                <div t-if="settings" style="font-size: 16px; font-weight: bold;">
+                                    <t t-esc="settings.name"/>
+                                    <t t-if="settings.lodge_number">
+                                        #<t t-esc="settings.lodge_number"/>
+                                    </t>
+                                </div>
+                                <div style="font-size: 14px; font-weight: bold; margin-top: 4px;">
+                                    Event Profit &amp; Loss Report
+                                </div>
+                                <div style="font-size: 11px; color: #666; margin-top: 2px;">
+                                    Period: <t t-esc="wizard.date_from" t-options="{'widget': 'date'}"/>
+                                    through <t t-esc="wizard.date_to" t-options="{'widget': 'date'}"/>
+                                    <t t-if="wizard.event_id">
+                                        — Event: <t t-esc="wizard.event_id.name"/>
+                                    </t>
+                                </div>
+                            </td>
+                            <td style="width: 15%; text-align: center; vertical-align: middle; border: none; padding: 0;">
+                                <t t-if="settings and settings.logo_lodge">
+                                    <img t-att-src="image_data_uri(settings.logo_lodge)"
+                                         style="max-height: 80px; max-width: 100px;"
+                                         alt="Lodge Logo"/>
+                                </t>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <hr style="border-top: 2px solid #46166a; margin: 8px 0 15px 0;"/>
+
+                    <!-- ===== GRAND SUMMARY CARDS ===== -->
+                    <table style="width: 100%; margin-bottom: 20px; border: none;">
+                        <tr>
+                            <td style="width: 25%; padding: 8px; border: none;">
+                                <div style="background: #d4edda; border: 1px solid #28a745;
+                                            border-radius: 6px; padding: 12px; text-align: center;">
+                                    <div style="font-size: 22px; font-weight: bold; color: #155724;">
+                                        $<t t-esc="'{:,.2f}'.format(data['grand_income'])"/>
+                                    </div>
+                                    <div style="font-size: 11px; color: #155724; font-weight: bold;">
+                                        TOTAL INCOME
+                                    </div>
+                                </div>
+                            </td>
+                            <td style="width: 25%; padding: 8px; border: none;">
+                                <div style="background: #f8d7da; border: 1px solid #dc3545;
+                                            border-radius: 6px; padding: 12px; text-align: center;">
+                                    <div style="font-size: 22px; font-weight: bold; color: #721c24;">
+                                        $<t t-esc="'{:,.2f}'.format(data['grand_costs'])"/>
+                                    </div>
+                                    <div style="font-size: 11px; color: #721c24; font-weight: bold;">
+                                        TOTAL EXPENSES
+                                    </div>
+                                </div>
+                            </td>
+                            <td style="width: 25%; padding: 8px; border: none;">
+                                <div t-att-style="'background: %s; border: 1px solid %s; border-radius: 6px; padding: 12px; text-align: center;' % ('#d4edda' if data['grand_profit'] >= 0 else '#f8d7da', '#28a745' if data['grand_profit'] >= 0 else '#dc3545')">
+                                    <div t-att-style="'font-size: 22px; font-weight: bold; color: %s;' % ('#155724' if data['grand_profit'] >= 0 else '#721c24')">
+                                        $<t t-esc="'{:,.2f}'.format(data['grand_profit'])"/>
+                                    </div>
+                                    <div t-att-style="'font-size: 11px; font-weight: bold; color: %s;' % ('#155724' if data['grand_profit'] >= 0 else '#721c24')">
+                                        NET PROFIT / (LOSS)
+                                    </div>
+                                </div>
+                            </td>
+                            <td style="width: 25%; padding: 8px; border: none;">
+                                <div style="background: #fff3cd; border: 1px solid #ffc107;
+                                            border-radius: 6px; padding: 12px; text-align: center;">
+                                    <div style="font-size: 22px; font-weight: bold; color: #856404;">
+                                        <t t-esc="data['event_count']"/>
+                                    </div>
+                                    <div style="font-size: 11px; color: #856404; font-weight: bold;">
+                                        EVENTS
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <!-- ===== PER-EVENT DETAIL ===== -->
+                    <t t-foreach="data['events']" t-as="ed">
+                        <h4 style="color: #46166a; border-bottom: 1px solid #46166a;
+                                   padding-bottom: 4px; margin-bottom: 10px; margin-top: 20px;">
+                            <t t-esc="ed['event'].name"/>
+                            <span style="font-size: 11px; color: #666; margin-left: 10px;">
+                                <t t-esc="ed['event'].x_event_date" t-options="{'widget': 'date'}"/>
+                                — <t t-esc="dict(ed['event']._fields['x_event_type'].selection).get(ed['event'].x_event_type, '')"/>
+                                — <t t-esc="ed['event'].x_guest_count"/> guests
+                            </span>
+                        </h4>
+
+                        <!-- Income section -->
+                        <t t-if="ed['room_lines']">
+                            <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10px;">
+                                <thead>
+                                    <tr style="background: #28a745; color: white;">
+                                        <th style="padding: 5px 8px; text-align: left;" colspan="5">
+                                            INCOME — Room Bookings
+                                        </th>
+                                    </tr>
+                                    <tr style="background: #e8f5e9;">
+                                        <th style="padding: 4px 8px; text-align: left;">Room</th>
+                                        <th style="padding: 4px 8px; text-align: right;">Rate</th>
+                                        <th style="padding: 4px 8px; text-align: right;">Cleaning</th>
+                                        <th style="padding: 4px 8px; text-align: right;">Service</th>
+                                        <th style="padding: 4px 8px; text-align: right;">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-foreach="ed['room_lines']" t-as="rl">
+                                        <tr t-att-style="'background: %s;' % ('#f8f9fa' if rl_index % 2 else '#ffffff')">
+                                            <td style="padding: 4px 8px; border-bottom: 1px solid #dee2e6;">
+                                                <t t-esc="rl['name']"/>
+                                            </td>
+                                            <td style="padding: 4px 8px; text-align: right; border-bottom: 1px solid #dee2e6;">
+                                                $<t t-esc="'{:,.2f}'.format(rl['rate'] or 0)"/>
+                                            </td>
+                                            <td style="padding: 4px 8px; text-align: right; border-bottom: 1px solid #dee2e6;">
+                                                $<t t-esc="'{:,.2f}'.format(rl['cleaning'] or 0)"/>
+                                            </td>
+                                            <td style="padding: 4px 8px; text-align: right; border-bottom: 1px solid #dee2e6;">
+                                                $<t t-esc="'{:,.2f}'.format(rl['service'] or 0)"/>
+                                            </td>
+                                            <td style="padding: 4px 8px; text-align: right; border-bottom: 1px solid #dee2e6; font-weight: bold;">
+                                                $<t t-esc="'{:,.2f}'.format(rl['subtotal'] or 0)"/>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                    <tr style="background: #e8f5e9;">
+                                        <td colspan="4" style="padding: 4px 8px; text-align: right; font-weight: bold;">
+                                            Room Income:
+                                        </td>
+                                        <td style="padding: 4px 8px; text-align: right; font-weight: bold;">
+                                            $<t t-esc="'{:,.2f}'.format(ed['room_income'])"/>
+                                        </td>
+                                    </tr>
+                                    <tr style="background: #e8f5e9;">
+                                        <td colspan="4" style="padding: 4px 8px; text-align: right;">
+                                            Coordinator Fee:
+                                        </td>
+                                        <td style="padding: 4px 8px; text-align: right;">
+                                            $<t t-esc="'{:,.2f}'.format(ed['coordinator_fee'])"/>
+                                        </td>
+                                    </tr>
+                                    <tr style="background: #c8e6c9; font-weight: bold;">
+                                        <td colspan="4" style="padding: 4px 8px; text-align: right;">
+                                            TOTAL INCOME:
+                                        </td>
+                                        <td style="padding: 4px 8px; text-align: right;">
+                                            $<t t-esc="'{:,.2f}'.format(ed['total_income'])"/>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </t>
+
+                        <!-- Expense section: Cost lines -->
+                        <t t-if="ed['cost_lines'] or ed['po_lines']">
+                            <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10px;">
+                                <thead>
+                                    <tr style="background: #dc3545; color: white;">
+                                        <th style="padding: 5px 8px; text-align: left;" colspan="5">
+                                            EXPENSES — Event Costs
+                                        </th>
+                                    </tr>
+                                    <tr style="background: #fce4ec;">
+                                        <th style="padding: 4px 8px; text-align: left;">Type</th>
+                                        <th style="padding: 4px 8px; text-align: left;">Description</th>
+                                        <th style="padding: 4px 8px; text-align: right;">Qty</th>
+                                        <th style="padding: 4px 8px; text-align: right;">Unit Cost</th>
+                                        <th style="padding: 4px 8px; text-align: right;">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-foreach="ed['cost_lines']" t-as="cl">
+                                        <tr t-att-style="'background: %s;' % ('#f8f9fa' if cl_index % 2 else '#ffffff')">
+                                            <td style="padding: 4px 8px; border-bottom: 1px solid #dee2e6;">
+                                                <t t-esc="cl['type']"/>
+                                            </td>
+                                            <td style="padding: 4px 8px; border-bottom: 1px solid #dee2e6;">
+                                                <t t-esc="cl['name']"/>
+                                            </td>
+                                            <td style="padding: 4px 8px; text-align: right; border-bottom: 1px solid #dee2e6;">
+                                                <t t-esc="'{:.1f}'.format(cl['quantity'])"/>
+                                            </td>
+                                            <td style="padding: 4px 8px; text-align: right; border-bottom: 1px solid #dee2e6;">
+                                                $<t t-esc="'{:,.2f}'.format(cl['unit_cost'] or 0)"/>
+                                            </td>
+                                            <td style="padding: 4px 8px; text-align: right; border-bottom: 1px solid #dee2e6; font-weight: bold;">
+                                                $<t t-esc="'{:,.2f}'.format(cl['total'] or 0)"/>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                    <t t-if="ed['cost_lines']">
+                                        <tr style="background: #fce4ec;">
+                                            <td colspan="4" style="padding: 4px 8px; text-align: right; font-weight: bold;">
+                                                Cost Lines Subtotal:
+                                            </td>
+                                            <td style="padding: 4px 8px; text-align: right; font-weight: bold;">
+                                                $<t t-esc="'{:,.2f}'.format(ed['total_costs'])"/>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                    <!-- PO costs -->
+                                    <t t-foreach="ed['po_lines']" t-as="pl">
+                                        <tr style="background: #fff3cd;">
+                                            <td style="padding: 4px 8px; border-bottom: 1px solid #dee2e6;">
+                                                PO
+                                            </td>
+                                            <td colspan="3" style="padding: 4px 8px; border-bottom: 1px solid #dee2e6;">
+                                                <t t-esc="pl['name']"/>
+                                                <t t-if="pl['origin']"> — <t t-esc="pl['origin']"/></t>
+                                            </td>
+                                            <td style="padding: 4px 8px; text-align: right; border-bottom: 1px solid #dee2e6; font-weight: bold;">
+                                                $<t t-esc="'{:,.2f}'.format(pl['total'] or 0)"/>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                    <tr style="background: #e57373; color: white; font-weight: bold;">
+                                        <td colspan="4" style="padding: 4px 8px; text-align: right;">
+                                            TOTAL EXPENSES:
+                                        </td>
+                                        <td style="padding: 4px 8px; text-align: right;">
+                                            $<t t-esc="'{:,.2f}'.format(ed['total_expense'])"/>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </t>
+
+                        <!-- Event profit line -->
+                        <table style="width: 100%; margin-bottom: 15px; font-size: 11px;">
+                            <tr>
+                                <td style="text-align: right; padding: 6px 8px; font-weight: bold; font-size: 13px;"
+                                    t-att-class="'text-success' if ed['profit'] >= 0 else 'text-danger'">
+                                    Net Profit / (Loss): $<t t-esc="'{:,.2f}'.format(ed['profit'])"/>
+                                </td>
+                            </tr>
+                        </table>
+                    </t>
+
+                    <!-- Empty state -->
+                    <t t-if="not data['events']">
+                        <p style="color: #666; font-style: italic; text-align: center; padding: 40px;">
+                            No events found in the selected date range.
+                        </p>
+                    </t>
+
+                    <!-- ===== FOOTER ===== -->
+                    <div style="margin-top: 20px; padding-top: 8px;
+                                border-top: 1px solid #ccc; font-size: 9px;
+                                color: #999; text-align: center;">
+                        Generated from Odoo Elks Events on
+                        <t t-esc="context_timestamp(datetime.datetime.now()).strftime('%B %d, %Y at %I:%M %p')"/>
+                    </div>
+
+                </div>
+            </t>
+        </t>
+    </template>
+
+</odoo>

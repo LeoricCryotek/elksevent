@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <!-- Top-level app menu -->
+    <menuitem id="menu_elksevent_root"
+              name="Elks Events"
+              sequence="58"
+              web_icon="elksevent,static/description/icon.png"
+              groups="elksevent.group_event_coordinator"/>
+
+    <!-- Bookings -->
+    <menuitem id="menu_event_bookings"
+              name="All Bookings"
+              parent="menu_elksevent_root"
+              action="action_event_bookings"
+              sequence="10"/>
+
+    <menuitem id="menu_event_board_queue"
+              name="Board Approval Queue"
+              parent="menu_elksevent_root"
+              action="action_event_board_queue"
+              sequence="20"/>
+
+    <!-- Reports -->
+    <menuitem id="menu_event_reports"
+              name="Reports"
+              parent="menu_elksevent_root"
+              sequence="30"/>
+
+    <menuitem id="menu_event_pl_report"
+              name="Event P&amp;L Report"
+              parent="menu_event_reports"
+              action="action_event_pl_wizard"
+              sequence="10"/>
+
+    <!-- Configuration -->
+    <menuitem id="menu_event_config"
+              name="Configuration"
+              parent="menu_elksevent_root"
+              sequence="90"/>
+
+    <menuitem id="menu_event_venues"
+              name="Rooms / Venues"
+              parent="menu_event_config"
+              action="action_event_venues"
+              sequence="10"/>
+
+</odoo>

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <!-- ================================================================
+         Extend maintenance.location form with rentable venue fields
+         ================================================================ -->
+    <record id="view_location_form_event" model="ir.ui.view">
+        <field name="name">elksevent.maintenance.location.form</field>
+        <field name="model">maintenance.location</field>
+        <field name="inherit_id" ref="elksmaintenance.view_maintenance_location_list"/>
+        <field name="priority">50</field>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='note']" position="after">
+                <field name="x_is_rentable"/>
+                <field name="x_room_rate" invisible="not x_is_rentable"/>
+                <field name="x_cleaning_fee" invisible="not x_is_rentable"/>
+                <field name="x_service_fee" invisible="not x_is_rentable"/>
+                <field name="x_capacity" invisible="not x_is_rentable"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- ================================================================
+         Rentable Venues list view (filtered to rentable locations)
+         ================================================================ -->
+    <record id="view_event_venue_list" model="ir.ui.view">
+        <field name="name">elksevent.venue.list</field>
+        <field name="model">maintenance.location</field>
+        <field name="arch" type="xml">
+            <list string="Event Venues" editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="x_is_rentable"/>
+                <field name="x_room_rate"/>
+                <field name="x_cleaning_fee"/>
+                <field name="x_service_fee"/>
+                <field name="x_capacity"/>
+                <field name="active" column_invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_event_venues" model="ir.actions.act_window">
+        <field name="name">Event Venues / Rooms</field>
+        <field name="res_model">maintenance.location</field>
+        <field name="view_mode">list</field>
+        <field name="domain">[('x_is_rentable', '=', True)]</field>
+        <field name="context">{'default_x_is_rentable': True}</field>
+    </record>
+
+    <record id="action_event_venues_list" model="ir.actions.act_window.view">
+        <field name="sequence">1</field>
+        <field name="view_mode">list</field>
+        <field name="view_id" ref="view_event_venue_list"/>
+        <field name="act_window_id" ref="action_event_venues"/>
+    </record>
+
+    <!-- ================================================================
+         Lodge Settings — Event Coordinator Fee Configuration
+         ================================================================ -->
+    <record id="view_lodge_settings_event" model="ir.ui.view">
+        <field name="name">elksevent.lodge.settings.form</field>
+        <field name="model">elks.lodge.settings</field>
+        <field name="inherit_id" ref="elksfrs.view_elks_lodge_settings_form"/>
+        <field name="priority">60</field>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet" position="inside">
+                <group string="Event Coordinator Fee">
+                    <group>
+                        <field name="x_coordinator_fee_type"/>
+                        <field name="x_coordinator_fixed_rate"
+                               invisible="x_coordinator_fee_type != 'fixed'"/>
+                        <field name="x_coordinator_percentage"
+                               invisible="x_coordinator_fee_type != 'percentage'"
+                               widget="percentage"/>
+                    </group>
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>
