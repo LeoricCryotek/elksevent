@@ -10,7 +10,6 @@
                 status, enter financial details, manage rooms, and
                 process deposits and invoices.
             </field>
-            <field name="category_id" ref="base.module_category_services_project"/>
             <field name="implied_ids" eval="[(4, ref('project.group_project_user'))]"/>
         </record>
 
@@ -22,7 +21,6 @@
                 total billed amount.  Typically assigned to the Lodge
                 Secretary or Exalted Ruler.
             </field>
-            <field name="category_id" ref="base.module_category_services_project"/>
             <field name="implied_ids" eval="[(4, ref('group_event_coordinator'))]"/>
         </record>
 

@@ -297,7 +297,7 @@
                         domain="[('x_event_date', '>=', context_today().strftime('%Y-%m-%d'))]"/>
                 <filter name="filter_has_invoice"
                         string="Invoiced"
-                        domain="[('x_invoice_count', '>', 0)]"/>
+                        domain="[('x_invoice_ids', '!=', False)]"/>
                 <separator/>
                 <group expand="0" string="Group By">
                     <filter name="group_board_status"
