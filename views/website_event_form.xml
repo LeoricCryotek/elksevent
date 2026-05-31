@@ -9,7 +9,7 @@
                     <div class="col-lg-8">
 
                         <h2 class="mb-4">
-                            <i class="fa fa-calendar me-2"/>
+                            <i class="fa fa-calendar me-2" title="Calendar"/>
                             Request an Event Booking
                         </h2>
                         <p class="text-muted mb-4">
@@ -146,7 +146,7 @@
                                 </div>
 
                                 <div class="alert alert-info mt-3" role="alert">
-                                    <i class="fa fa-info-circle me-1"/>
+                                    <i class="fa fa-info-circle me-1" title="Info"/>
                                     <strong>Please note:</strong> All event requests
                                     are subject to board approval.  A deposit will be
                                     required upon confirmation.  We will contact you
@@ -157,7 +157,7 @@
                             <div class="card-footer text-end">
                                 <button type="submit"
                                         class="btn btn-primary btn-lg">
-                                    <i class="fa fa-paper-plane me-2"/>
+                                    <i class="fa fa-paper-plane me-2" title="Submit"/>
                                     Submit Request
                                 </button>
                             </div>
@@ -175,7 +175,7 @@
                 <div class="row justify-content-center">
                     <div class="col-lg-6 text-center">
                         <i class="fa fa-check-circle text-success"
-                           style="font-size: 5rem;"/>
+                           style="font-size: 5rem;" title="Done"/>
                         <h2 class="mt-3">Thank You!</h2>
                         <p class="lead mt-3">
                             Your event request has been submitted.
@@ -205,7 +205,7 @@
                             </div>
                         </div>
                         <a href="/event-request" class="btn btn-outline-primary mt-4">
-                            <i class="fa fa-plus me-1"/>
+                            <i class="fa fa-plus me-1" title="Add"/>
                             Submit Another Request
                         </a>
                     </div>
@@ -221,7 +221,7 @@
                 <div class="row justify-content-center">
                     <div class="col-lg-6 text-center">
                         <i class="fa fa-exclamation-triangle text-warning"
-                           style="font-size: 5rem;"/>
+                           style="font-size: 5rem;" title="Warning"/>
                         <h2 class="mt-3">Something went wrong</h2>
                         <p class="lead mt-3">
                             <t t-esc="error"/>

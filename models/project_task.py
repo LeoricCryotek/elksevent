@@ -426,8 +426,12 @@ class ProjectTask(models.Model):
         )
         if not secretary_group:
             return
-        # Find a secretary user to assign the activity
-        secretary_user = secretary_group.users[:1]
+        # Find a secretary user to assign the activity.
+        # Odoo 19 removed res.groups.users; query res.users by group instead.
+        secretary_user = self.env['res.users'].search(
+            [('group_ids', 'in', secretary_group.id)],
+            limit=1,
+        )
         if not secretary_user:
             return
         self.activity_schedule(
