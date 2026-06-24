@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Wizard form -->
+    <record id="view_event_assessor_wizard_form" model="ir.ui.view">
+        <field name="name">elks.event.assessor.wizard.form</field>
+        <field name="model">elks.event.assessor.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Assessor / UBI Income Report">
+                <p class="text-muted">
+                    Lists non-member, non-Elks events with income (UBI) and their
+                    net income, for the property-tax assessor.
+                </p>
+                <group>
+                    <field name="date_from"/>
+                    <field name="date_to"/>
+                </group>
+                <footer>
+                    <button name="action_view_report" string="View Report"
+                            type="object" class="btn-primary"/>
+                    <button name="action_download_pdf" string="Download PDF"
+                            type="object" class="btn-secondary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_event_assessor_wizard" model="ir.actions.act_window">
+        <field name="name">Assessor / UBI Income</field>
+        <field name="res_model">elks.event.assessor.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <!-- Report actions -->
+    <record id="action_report_event_assessor" model="ir.actions.report">
+        <field name="name">Assessor / UBI Income</field>
+        <field name="model">elks.event.assessor.wizard</field>
+        <field name="report_type">qweb-html</field>
+        <field name="report_name">elksevent.report_event_assessor</field>
+        <field name="report_file">elksevent.report_event_assessor</field>
+        <field name="paperformat_id" ref="base.paperformat_us"/>
+    </record>
+
+    <record id="action_report_event_assessor_pdf" model="ir.actions.report">
+        <field name="name">Assessor / UBI Income (PDF)</field>
+        <field name="model">elks.event.assessor.wizard</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_event_assessor</field>
+        <field name="report_file">elksevent.report_event_assessor</field>
+        <field name="paperformat_id" ref="base.paperformat_us"/>
+    </record>
+
+    <!-- QWeb template -->
+    <template id="report_event_assessor">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="wizard">
+                <t t-set="data" t-value="wizard._get_report_data()"/>
+                <t t-set="settings"
+                   t-value="wizard.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
+                <div class="page" style="font-size: 11px;">
+                    <div style="text-align:center; margin-bottom:10px;">
+                        <div t-if="settings" style="font-size:16px; font-weight:bold;">
+                            <t t-esc="settings.name"/>
+                            <t t-if="settings.lodge_number">#<t t-esc="settings.lodge_number"/></t>
+                        </div>
+                        <div style="font-size:14px; font-weight:bold;">
+                            Assessor — Unrelated Business Income (Event Rentals)
+                        </div>
+                        <div style="font-size:11px; color:#666;">
+                            Period: <t t-esc="wizard.date_from"/> through <t t-esc="wizard.date_to"/>
+                        </div>
+                    </div>
+                    <hr style="border-top:2px solid #46166a; margin:6px 0 12px 0;"/>
+
+                    <table style="width:100%; border-collapse:collapse; font-size:10px;">
+                        <thead>
+                            <tr style="background:#46166a; color:white;">
+                                <th style="padding:5px; text-align:left;">Date</th>
+                                <th style="padding:5px; text-align:left;">Event</th>
+                                <th style="padding:5px; text-align:left;">Customer</th>
+                                <th style="padding:5px; text-align:left;">Room(s)</th>
+                                <th style="padding:5px; text-align:right;">Gross Income</th>
+                                <th style="padding:5px; text-align:right;">Costs</th>
+                                <th style="padding:5px; text-align:right;">Net Income</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-foreach="data['rows']" t-as="r">
+                                <tr t-att-style="'background:%s;' % ('#f4f0f8' if r_index % 2 else '#ffffff')">
+                                    <td style="padding:4px; border-bottom:1px solid #ddd;"><t t-esc="r['date']"/></td>
+                                    <td style="padding:4px; border-bottom:1px solid #ddd;"><t t-esc="r['name']"/></td>
+                                    <td style="padding:4px; border-bottom:1px solid #ddd;"><t t-esc="r['customer']"/></td>
+                                    <td style="padding:4px; border-bottom:1px solid #ddd;"><t t-esc="r['rooms']"/></td>
+                                    <td style="padding:4px; text-align:right; border-bottom:1px solid #ddd;">$<t t-esc="'{:,.2f}'.format(r['income'])"/></td>
+                                    <td style="padding:4px; text-align:right; border-bottom:1px solid #ddd;">$<t t-esc="'{:,.2f}'.format(r['cost'])"/></td>
+                                    <td style="padding:4px; text-align:right; border-bottom:1px solid #ddd; font-weight:bold;">$<t t-esc="'{:,.2f}'.format(r['net'])"/></td>
+                                </tr>
+                            </t>
+                            <tr style="background:#e8e0f0; font-weight:bold;">
+                                <td colspan="4" style="padding:5px; text-align:right;">
+                                    TOTALS (<t t-esc="data['count']"/> events):
+                                </td>
+                                <td style="padding:5px; text-align:right;">$<t t-esc="'{:,.2f}'.format(data['grand_income'])"/></td>
+                                <td style="padding:5px; text-align:right;">$<t t-esc="'{:,.2f}'.format(data['grand_costs'])"/></td>
+                                <td style="padding:5px; text-align:right;">$<t t-esc="'{:,.2f}'.format(data['grand_net'])"/></td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <t t-if="not data['rows']">
+                        <p style="text-align:center; color:#666; font-style:italic; padding:30px;">
+                            No UBI events found in the selected period.
+                        </p>
+                    </t>
+                </div>
+            </t>
+        </t>
+    </template>
+
+</odoo>

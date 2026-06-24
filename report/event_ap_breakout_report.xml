@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- AP GL Breakout — bound to the event quote (sale.order) -->
+    <record id="action_report_event_ap_breakout" model="ir.actions.report">
+        <field name="name">Event AP GL Breakout</field>
+        <field name="model">sale.order</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_event_ap_breakout</field>
+        <field name="report_file">elksevent.report_event_ap_breakout</field>
+        <field name="binding_model_id" ref="sale.model_sale_order"/>
+        <field name="binding_type">report</field>
+        <field name="paperformat_id" ref="base.paperformat_us"/>
+    </record>
+
+    <template id="report_event_ap_breakout">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="order">
+                <t t-set="settings"
+                   t-value="order.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
+                <div class="page" style="font-size: 11px;">
+                    <div style="text-align:center; margin-bottom:8px;">
+                        <div t-if="settings" style="font-size:15px; font-weight:bold;">
+                            <t t-esc="settings.name"/>
+                            <t t-if="settings.lodge_number">#<t t-esc="settings.lodge_number"/></t>
+                        </div>
+                        <div style="font-size:13px; font-weight:bold;">
+                            Event AP GL Breakout — <t t-esc="order.name"/>
+                        </div>
+                        <div style="font-size:10px; color:#666;"
+                             t-if="order.x_event_task_id">
+                            Event: <t t-esc="order.x_event_task_id.name"/>
+                            <t t-if="order.x_event_task_id.x_event_date">
+                                (<t t-esc="order.x_event_task_id.x_event_date"/>)
+                            </t>
+                        </div>
+                    </div>
+                    <hr style="border-top:2px solid #46166a; margin:6px 0 12px 0;"/>
+
+                    <t t-foreach="order.event_ap_breakdown()" t-as="grp">
+                        <table style="width:100%; border-collapse:collapse; margin-bottom:10px; font-size:10px;">
+                            <thead>
+                                <tr style="background:#46166a; color:white;">
+                                    <th colspan="3" style="padding:5px; text-align:left;">
+                                        GL: <t t-esc="grp['account']"/>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-foreach="grp['lines']" t-as="ln">
+                                    <tr>
+                                        <td style="padding:4px; border-bottom:1px solid #ddd;"><t t-esc="ln['name']"/></td>
+                                        <td style="padding:4px; text-align:right; border-bottom:1px solid #ddd;"><t t-esc="'{:g}'.format(ln['qty'])"/></td>
+                                        <td style="padding:4px; text-align:right; border-bottom:1px solid #ddd;">$<t t-esc="'{:,.2f}'.format(ln['subtotal'])"/></td>
+                                    </tr>
+                                </t>
+                                <tr style="background:#e8e0f0; font-weight:bold;">
+                                    <td colspan="2" style="padding:4px; text-align:right;">Subtotal:</td>
+                                    <td style="padding:4px; text-align:right;">$<t t-esc="'{:,.2f}'.format(grp['subtotal'])"/></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </t>
+
+                    <table style="width:100%; font-size:12px; margin-top:8px;">
+                        <tr>
+                            <td style="text-align:right; font-weight:bold; padding:6px;">
+                                Quote Total (untaxed): $<t t-esc="'{:,.2f}'.format(order.amount_untaxed)"/>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </t>
+        </t>
+    </template>
+
+</odoo>

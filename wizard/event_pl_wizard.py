@@ -1,9 +1,19 @@
 # -*- coding: utf-8 -*-
 """Event P&L Report Wizard.
 
-Allows selecting a date range and optionally a single event, then
-generates a Profit & Loss report showing income (room bookings)
-vs. expenses (cost lines / POs) with Elks lodge header.
+HUMAN
+-----
+Shows whether events made or lost money. Pick a date range (or one specific
+event) and it builds a Profit & Loss: income for each event versus its costs
+(internal cost lines plus any linked purchase orders), with the lodge header.
+
+AI
+--
+- TransientModel `elks.event.pl.wizard`; report actions
+  action_report_event_pl (html) / _pdf.
+- `_get_report_data`: when event_id is set, dates are ignored (so dateless/
+  tentative events still report). Income now prefers evt.x_total_billed (which
+  is quote-aware) and falls back to room_income+coordinator.
 """
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
@@ -42,13 +52,16 @@ class EventPLReportWizard(models.TransientModel):
     def _get_report_data(self):
         """Gather P&L data for the report template."""
         self.ensure_one()
-        domain = [
-            ('x_is_event', '=', True),
-            ('x_event_date', '>=', self.date_from),
-            ('x_event_date', '<=', self.date_to),
-        ]
         if self.event_id:
-            domain.append(('id', '=', self.event_id.id))
+            # A specific event was chosen — report on it regardless of date
+            # (some events, e.g. tentative ones, have no event date set).
+            domain = [('id', '=', self.event_id.id)]
+        else:
+            domain = [
+                ('x_is_event', '=', True),
+                ('x_event_date', '>=', self.date_from),
+                ('x_event_date', '<=', self.date_to),
+            ]
 
         events = self.env['project.task'].search(domain, order='x_event_date')
 
@@ -95,8 +108,16 @@ class EventPLReportWizard(models.TransientModel):
 
             room_income = evt.x_room_income or 0.0
             coordinator = evt.x_coordinator_fee or 0.0
-            total_income = room_income + coordinator
-            total_costs = evt.x_total_costs or 0.0
+            # Income reflects the itemized quote when present (the real
+            # customer-facing total); otherwise the legacy room+coordinator sum.
+            total_income = evt.x_total_billed or (room_income + coordinator)
+            # Labor is a P&L cost (not a customer charge): use actuals once any
+            # hours are clocked, otherwise the estimate.
+            labor_cost = (
+                evt.x_actual_labor_cost
+                if (evt.x_actual_event_hours or evt.x_actual_cleaning_hours)
+                else evt.x_est_labor_cost)
+            total_costs = (evt.x_total_costs or 0.0) + labor_cost
             po_total = sum(p['total'] for p in po_lines)
             total_expense = total_costs + po_total
             profit = total_income - total_expense

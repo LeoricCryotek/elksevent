@@ -1,11 +1,29 @@
 # -*- coding: utf-8 -*-
-"""Event cost lines — the 'PO section' for tracking actual event expenses.
+"""Event cost lines — internal expense tracking for an event.
 
-Each line represents a cost category (setup labour, supplies, bar services,
-coordinator fee, etc.).  Lines flagged *counts_for_coordinator* are used
-to compute the coordinator fee when the fee type is 'percentage'.
+HUMAN
+-----
+These are the lodge's *costs* for running an event (setup/event/cleanup
+labor hours, supplies, linens, bar services, etc.), kept separate from what
+the customer is charged. They feed the cost side of the P&L and the
+"event-staff hours" reminder on the coordinator-fee button.
+
+AI
+--
+- Model `elks.event.cost.line`; m2o `event_id` -> project.task; `total`
+  is computed from quantity x unit_cost.
+- `cost_type` in COST_TYPE_CHOICES; labor types ('setup_labor',
+  'event_labor','cleanup_labor') are what action_add_coordinator_fee checks.
+- Summed by project.task._compute_financials into x_total_costs.
 """
 from odoo import api, fields, models
+
+
+# ──────────────────────────────────────────────────────────────────────
+# SECTION: Cost categories
+# HUMAN: The kinds of expense a line can represent.
+# AI: Labor codes are referenced by name in project_task; keep stable.
+# ──────────────────────────────────────────────────────────────────────
 
 
 COST_TYPE_CHOICES = [

@@ -13,37 +13,84 @@
 
             <!-- Smart / action buttons -->
             <xpath expr="//div[hasclass('oe_button_box')]" position="inside">
-                <button name="action_submit_to_board"
-                        string="Submit to Board"
+                <button name="action_submit"
+                        string="Submit for Approval"
                         type="object"
                         class="oe_stat_button"
-                        icon="fa-gavel"
-                        invisible="not x_is_event or x_board_status != 'not_submitted'"
-                        confirm="Submit this event to the board for approval?"/>
+                        icon="fa-paper-plane"
+                        invisible="not x_is_event or x_approval_state != 'draft'"
+                        confirm="Submit this event for Board review?"/>
                 <button name="action_board_approve"
                         string="Board Approve"
                         type="object"
                         class="oe_stat_button"
                         icon="fa-check-circle"
-                        invisible="not x_is_event or x_board_status != 'submitted'"/>
-                <button name="action_board_deny"
-                        string="Board Deny"
+                        groups="elksevent.group_event_officer"
+                        invisible="not x_is_event or x_approval_state != 'board'"/>
+                <button name="action_board_reject"
+                        string="Board Reject"
                         type="object"
                         class="oe_stat_button"
                         icon="fa-times-circle"
-                        invisible="not x_is_event or x_board_status != 'submitted'"/>
+                        groups="elksevent.group_event_officer"
+                        invisible="not x_is_event or x_approval_state != 'board'"/>
+                <button name="action_floor_approve"
+                        string="Record Floor Vote"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-gavel"
+                        groups="elksevent.group_event_officer"
+                        invisible="not x_is_event or x_approval_state != 'floor'"/>
+                <button name="action_floor_reject"
+                        string="Floor Reject"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-times-circle"
+                        groups="elksevent.group_event_officer"
+                        invisible="not x_is_event or x_approval_state != 'floor'"/>
+                <button name="action_reset_to_draft"
+                        string="Reset to Draft"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-undo"
+                        groups="elksevent.group_event_officer"
+                        invisible="not x_is_event or x_approval_state != 'rejected'"/>
                 <button name="action_receive_deposit"
                         string="Deposit Received"
                         type="object"
                         class="oe_stat_button"
                         icon="fa-money"
-                        invisible="not x_is_event or x_deposit_received"/>
-                <button name="action_create_invoice"
-                        string="Create Invoice"
+                        invisible="not x_is_event or x_is_elks_event or x_deposit_received"/>
+                <button name="action_build_quote"
+                        string="Build Quote"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-list-alt"
+                        invisible="not x_is_event or x_is_elks_event"/>
+                <button name="action_add_coordinator_fee"
+                        string="Coordinator Fee"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-user"
+                        invisible="not x_is_event or x_is_elks_event or not x_sale_order_id"/>
+                <button name="action_create_deposit_invoice"
+                        string="Deposit Invoice"
                         type="object"
                         class="oe_stat_button"
                         icon="fa-file-text-o"
-                        invisible="not x_is_event or x_total_billed &lt;= 0"/>
+                        invisible="not x_is_event or x_is_elks_event or x_quote_total &lt;= 0"/>
+                <button name="action_create_final_invoice"
+                        string="Final Invoice"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-file-text"
+                        invisible="not x_is_event or x_is_elks_event or x_quote_total &lt;= 0"/>
+                <button name="action_refresh_invoice_from_quote"
+                        string="Refresh from Quote"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-refresh"
+                        invisible="not x_is_event or x_invoice_count == 0"/>
                 <button name="action_view_invoices"
                         type="object"
                         class="oe_stat_button"
@@ -71,17 +118,37 @@
                     <group>
                         <group string="Event Information">
                             <field name="x_is_event" invisible="1"/>
+                            <field name="project_id"
+                                   options="{'no_create': True}"/>
+                            <field name="x_is_elks_event"/>
+                            <field name="x_is_member"/>
+                            <field name="x_member_number"
+                                   invisible="not x_is_member"
+                                   required="x_is_member"/>
+                            <field name="x_event_committee"
+                                   invisible="not x_is_elks_event"
+                                   required="x_is_elks_event"/>
+                            <field name="x_responsible_party_id"
+                                   invisible="not x_is_elks_event"
+                                   required="x_is_elks_event"/>
                             <field name="x_event_type"/>
                             <field name="x_event_date"/>
-                            <field name="x_event_start_time" widget="float_time"/>
-                            <field name="x_event_end_time" widget="float_time"/>
-                            <field name="x_event_duration" widget="float_time"/>
+                            <field name="x_event_start_time_text"
+                                   placeholder="e.g. 10:30 am"/>
+                            <field name="x_event_end_time_text"
+                                   placeholder="e.g. 12:00 pm"/>
+                            <field name="x_event_duration" widget="float_time"
+                                   readonly="1"/>
                             <field name="x_guest_count"/>
+                            <field name="x_double_booking_override"
+                                   groups="elksevent.group_event_officer"/>
                         </group>
                         <group string="Customer Contact">
                             <field name="x_customer_name"/>
                             <field name="x_customer_phone" widget="phone"/>
                             <field name="x_customer_email" widget="email"/>
+                            <field name="x_facebook_event_url" widget="url"/>
+                            <field name="x_related_url" widget="url"/>
                             <field name="tag_ids" widget="many2many_tags"
                                    options="{'color_field': 'color'}"
                                    placeholder="Add tags..."/>
@@ -99,9 +166,78 @@
                     </group>
                 </page>
 
+                <!-- ===== Checklist (worksheet) ===== -->
+                <page string="Checklist" name="event_checklist"
+                      invisible="not x_is_event">
+                    <div class="oe_button_box" name="checklist_buttons">
+                        <button name="action_generate_checklist_tasks"
+                                string="Generate Checklist Tasks"
+                                type="object" class="btn-primary"
+                                icon="fa-tasks"/>
+                    </div>
+                    <group>
+                        <group string="Equipment">
+                            <field name="x_need_tables"/>
+                            <field name="x_need_chairs"/>
+                            <field name="x_need_podium"/>
+                            <field name="x_need_sound"/>
+                            <field name="x_need_microphone"/>
+                            <field name="x_need_linen"/>
+                            <field name="x_linen_qty" invisible="not x_need_linen"/>
+                            <field name="x_linen_color" invisible="not x_need_linen"/>
+                        </group>
+                        <group string="Setup &amp; Service">
+                            <field name="x_setup_by"/>
+                            <field name="x_takedown_by"/>
+                            <field name="x_has_decorations"/>
+                            <field name="x_decor_takedown_by"
+                                   invisible="not x_has_decorations"/>
+                            <field name="x_decoration_notes"
+                                   invisible="not x_has_decorations"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Bar &amp; Garbage">
+                            <field name="x_num_bars"/>
+                            <field name="x_need_beer_tub"/>
+                            <field name="x_need_garbage"/>
+                        </group>
+                        <group string="Insurance (required for all events)"
+                               invisible="x_is_elks_event">
+                            <field name="x_insurance_by"/>
+                            <field name="x_insurance_on_file"
+                                   string="Renter's Certificate on File"
+                                   invisible="x_insurance_by != 'renter'"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Food">
+                            <field name="x_food_request"/>
+                            <field name="x_catering_details"
+                                   invisible="not x_food_request"/>
+                            <field name="x_food_by_us"/>
+                            <field name="x_food_menu" invisible="not x_food_by_us"/>
+                            <field name="x_caterer_id"/>
+                            <field name="x_caterer_license_on_file"
+                                   invisible="not x_caterer_id"/>
+                            <field name="x_caterer_insurance_on_file"
+                                   invisible="not x_caterer_id"/>
+                        </group>
+                        <group string="Other">
+                            <field name="x_gratuity_amount"/>
+                            <field name="x_extras"/>
+                        </group>
+                    </group>
+                </page>
+
                 <!-- ===== Rooms / Venues ===== -->
                 <page string="Rooms" name="event_rooms"
                       invisible="not x_is_event">
+                    <p class="text-muted">
+                        Add a room with "Add a line" (its rate, cleaning, and
+                        service fees fill in automatically); remove one with the
+                        trash icon. Adjust any fee per event.
+                    </p>
                     <field name="x_room_booking_ids">
                         <list editable="bottom">
                             <field name="sequence" widget="handle"/>
@@ -139,50 +275,50 @@
                     </group>
                 </page>
 
-                <!-- ===== Board Approval ===== -->
-                <page string="Board Approval" name="board_approval"
+                <!-- ===== Board / Floor Approval ===== -->
+                <page string="Approval" name="board_approval"
                       invisible="not x_is_event">
                     <div class="alert alert-info" role="alert"
-                         invisible="x_board_status != 'not_submitted'">
-                        <strong>Not yet submitted</strong> — review the event details,
-                        then click "Submit to Board" when ready.
+                         invisible="x_approval_state != 'draft'">
+                        <strong>Draft</strong> — review the event details, then click
+                        "Submit for Approval" when ready.
                     </div>
                     <div class="alert alert-warning" role="alert"
-                         invisible="x_board_status != 'submitted'">
-                        <strong>Awaiting board vote</strong> — submitted
+                         invisible="x_approval_state != 'board'">
+                        <strong>Awaiting Board review</strong> — submitted
                         <field name="x_board_submitted_date" readonly="1" nolabel="1"
                                class="d-inline"/>.
                     </div>
+                    <div class="alert alert-warning" role="alert"
+                         invisible="x_approval_state != 'floor'">
+                        <strong>Board approved — awaiting Floor vote.</strong>
+                    </div>
                     <div class="alert alert-success" role="alert"
-                         invisible="x_board_status != 'approved'">
-                        <strong>Approved</strong> by
-                        <field name="x_board_approved_by" readonly="1" nolabel="1"
-                               class="d-inline"/>
-                        on <field name="x_board_approval_date" readonly="1" nolabel="1"
-                                  class="d-inline"/>.
+                         invisible="x_approval_state != 'approved'">
+                        <strong>Approved</strong> on
+                        <field name="x_board_approval_date" readonly="1" nolabel="1"
+                               class="d-inline"/>.
                     </div>
                     <div class="alert alert-danger" role="alert"
-                         invisible="x_board_status != 'denied'">
-                        <strong>Denied</strong> by
-                        <field name="x_board_approved_by" readonly="1" nolabel="1"
-                               class="d-inline"/>
-                        on <field name="x_board_approval_date" readonly="1" nolabel="1"
-                                  class="d-inline"/>.
+                         invisible="x_approval_state != 'rejected'">
+                        <strong>Rejected</strong> on
+                        <field name="x_board_approval_date" readonly="1" nolabel="1"
+                               class="d-inline"/>.
                     </div>
                     <group>
                         <group string="Approval Audit Trail">
-                            <field name="x_board_status" readonly="1"/>
+                            <field name="x_approval_state" readonly="1"/>
                             <field name="x_board_submitted_date" readonly="1"/>
                             <field name="x_board_meeting_date"/>
                             <field name="x_board_approval_date" readonly="1"/>
                             <field name="x_board_approved_by" readonly="1"/>
                         </group>
-                        <group string="Board Notes">
+                        <group string="Board / Floor Notes">
                             <field name="x_board_notes" nolabel="1"
-                                   placeholder="Notes or conditions from the board..."/>
+                                   placeholder="Notes or conditions from the vote..."/>
                             <field name="x_board_denial_reason" nolabel="1"
-                                   invisible="x_board_status != 'denied'"
-                                   placeholder="Reason for denial..."/>
+                                   invisible="x_approval_state != 'rejected'"
+                                   placeholder="Reason for rejection..."/>
                         </group>
                     </group>
                 </page>
@@ -217,11 +353,35 @@
                                    decoration-danger="x_budget_remaining &lt; 0"
                                    decoration-success="x_budget_remaining &gt;= 0"/>
                         </group>
-                        <group string="Invoice Settings">
-                            <field name="x_invoice_style"/>
+                        <group string="Quote &amp; Invoice">
+                            <field name="x_sale_order_id" readonly="1"/>
+                            <field name="x_quote_total" readonly="1"/>
                             <field name="x_balance_due" readonly="1"
                                    class="oe_subtotal_footer_separator"/>
                         </group>
+                    </group>
+                    <group string="Labor (internal estimate for P&amp;L — not charged to the customer)">
+                        <group string="Event Staff">
+                            <field name="x_est_event_hours"/>
+                            <field name="x_actual_event_hours"/>
+                            <field name="x_event_hours_variance"
+                                   decoration-danger="x_event_hours_variance &lt; 0"
+                                   decoration-success="x_event_hours_variance &gt;= 0"/>
+                        </group>
+                        <group string="Cleaning / Custodial">
+                            <field name="x_est_cleaning_hours"/>
+                            <field name="x_actual_cleaning_hours"/>
+                            <field name="x_cleaning_hours_variance"
+                                   decoration-danger="x_cleaning_hours_variance &lt; 0"
+                                   decoration-success="x_cleaning_hours_variance &gt;= 0"/>
+                        </group>
+                        <group string="Labor Cost (P&amp;L)">
+                            <field name="x_est_labor_cost"/>
+                            <field name="x_actual_labor_cost"/>
+                        </group>
+                        <button name="action_trueup_labor_hours" type="object"
+                                string="True-up to Actual Hours" class="btn-secondary"
+                                help="Set the estimated hours to the hours actually worked (updates the P&amp;L)."/>
                     </group>
                     <group string="Contract / Agreement Notes">
                         <field name="x_contract_notes" nolabel="1"
@@ -246,11 +406,11 @@
                 <field name="x_event_type" string="Type" optional="show"/>
                 <field name="x_customer_name" string="Customer"/>
                 <field name="x_guest_count" string="Guests" optional="show"/>
-                <field name="x_board_status" string="Board Status"
+                <field name="x_approval_state" string="Approval"
                        widget="badge"
-                       decoration-info="x_board_status == 'submitted'"
-                       decoration-success="x_board_status == 'approved'"
-                       decoration-danger="x_board_status == 'denied'"/>
+                       decoration-info="x_approval_state in ('board', 'floor')"
+                       decoration-success="x_approval_state == 'approved'"
+                       decoration-danger="x_approval_state == 'rejected'"/>
                 <field name="x_room_income" string="Room Income" optional="show"/>
                 <field name="x_total_billed" string="Total Billed"/>
                 <field name="x_total_costs" string="Costs" optional="show"/>
@@ -280,14 +440,27 @@
                 <field name="user_ids" string="Coordinator"/>
                 <separator/>
                 <filter name="filter_pending_board"
-                        string="Pending Board Approval"
-                        domain="[('x_board_status', '=', 'submitted')]"/>
+                        string="Pending Board Review"
+                        domain="[('x_approval_state', '=', 'board')]"/>
+                <filter name="filter_pending_floor"
+                        string="Pending Floor Vote"
+                        domain="[('x_approval_state', '=', 'floor')]"/>
                 <filter name="filter_approved"
-                        string="Board Approved"
-                        domain="[('x_board_status', '=', 'approved')]"/>
-                <filter name="filter_denied"
-                        string="Board Denied"
-                        domain="[('x_board_status', '=', 'denied')]"/>
+                        string="Approved"
+                        domain="[('x_approval_state', '=', 'approved')]"/>
+                <filter name="filter_rejected"
+                        string="Rejected"
+                        domain="[('x_approval_state', '=', 'rejected')]"/>
+                <separator/>
+                <filter name="filter_elks_event"
+                        string="Elks Events"
+                        domain="[('x_is_elks_event', '=', True)]"/>
+                <filter name="filter_member"
+                        string="Member Rentals"
+                        domain="[('x_is_member', '=', True)]"/>
+                <filter name="filter_ubi"
+                        string="UBI / Taxable"
+                        domain="[('x_is_ubi', '=', True)]"/>
                 <separator/>
                 <filter name="filter_deposit_pending"
                         string="Deposit Pending"
@@ -299,23 +472,21 @@
                         string="Invoiced"
                         domain="[('x_invoice_ids', '!=', False)]"/>
                 <separator/>
-                <group expand="0" string="Group By">
-                    <filter name="group_board_status"
-                            string="Board Status"
-                            context="{'group_by': 'x_board_status'}"/>
-                    <filter name="group_event_type"
-                            string="Event Type"
-                            context="{'group_by': 'x_event_type'}"/>
-                    <filter name="group_event_date"
-                            string="Event Date"
-                            context="{'group_by': 'x_event_date:month'}"/>
-                    <filter name="group_stage"
-                            string="Stage"
-                            context="{'group_by': 'stage_id'}"/>
-                    <filter name="group_tag"
-                            string="Tags"
-                            context="{'group_by': 'tag_ids'}"/>
-                </group>
+                <filter name="group_approval_state"
+                        string="Approval Status"
+                        context="{'group_by': 'x_approval_state'}"/>
+                <filter name="group_event_type"
+                        string="Event Type"
+                        context="{'group_by': 'x_event_type'}"/>
+                <filter name="group_event_date"
+                        string="Event Date"
+                        context="{'group_by': 'x_event_date:month'}"/>
+                <filter name="group_stage"
+                        string="Stage"
+                        context="{'group_by': 'stage_id'}"/>
+                <filter name="group_tag"
+                        string="Tags"
+                        context="{'group_by': 'tag_ids'}"/>
             </search>
         </field>
     </record>
@@ -349,7 +520,7 @@
         <field name="view_mode">list,form</field>
         <field name="domain">[
             ('x_is_event', '=', True),
-            ('x_board_status', '=', 'submitted'),
+            ('x_approval_state', 'in', ('board', 'floor')),
         ]</field>
         <field name="context">{
             'default_project_id': %(elksevent.project_event_bookings)d,

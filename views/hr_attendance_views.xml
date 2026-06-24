@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <!-- Add the event link to the attendance form -->
+    <record id="view_hr_attendance_form_event" model="ir.ui.view">
+        <field name="name">elksevent.hr.attendance.form</field>
+        <field name="model">hr.attendance</field>
+        <field name="inherit_id" ref="hr_attendance.hr_attendance_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='check_out']" position="after">
+                <field name="x_event_id"/>
+                <field name="x_event_role" invisible="not x_event_id"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Show the event on the attendance list (optional column) -->
+    <record id="view_hr_attendance_list_event" model="ir.ui.view">
+        <field name="name">elksevent.hr.attendance.list</field>
+        <field name="model">hr.attendance</field>
+        <field name="inherit_id" ref="hr_attendance.view_attendance_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='worked_hours']" position="after">
+                <field name="x_event_id" optional="hide"/>
+                <field name="x_event_role" optional="hide"/>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

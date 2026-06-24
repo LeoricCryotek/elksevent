@@ -1,9 +1,20 @@
 # -*- coding: utf-8 -*-
 """Extend purchase.order with an event link and budget guard.
 
-Every PO tied to an event must not exceed the event's total billed
-amount unless a user with the budget override permission provides
-a written note.
+HUMAN
+-----
+When the lodge buys things for an event (a PO), this keeps the spend in
+check: the total of all POs tied to an event can't go over what the customer
+is being billed — unless a manager ticks the override and writes down why.
+That note and approver are recorded on the PO chatter for the audit trail.
+
+AI
+--
+- Extends `purchase.order` with `x_event_id` -> project.task and the override
+  trio (`x_event_budget_override`, `_note`, `_by`).
+- `action_event_budget_override` requires group_event_officer + a note.
+- `@api.constrains` `_check_event_budget` sums non-cancelled POs per event and
+  compares to event.x_total_billed (now quote-aware via _compute_financials).
 """
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
@@ -32,7 +43,7 @@ class PurchaseOrder(models.Model):
     def action_event_budget_override(self):
         """Set the budget override flag (requires permission)."""
         self.ensure_one()
-        if not self.env.user.has_group('elksevent.group_event_budget_override'):
+        if not self.env.user.has_group('elksevent.group_event_officer'):
             raise UserError(_(
                 "You do not have permission to override the event budget. "
                 "Contact a manager or the Event Coordinator."

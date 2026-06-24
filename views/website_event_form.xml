@@ -4,6 +4,18 @@
     <!-- ===== Public Event Request Form ===== -->
     <template id="website_event_request_form" name="Request an Event Booking">
         <t t-call="website.layout">
+            <!-- Defaults so the page renders safely even if opened without the
+                 controller's context (e.g. in the website editor). The
+                 /event-request route normally supplies the real values. -->
+            <t t-set="venues" t-value="venues or []"/>
+            <t t-set="max_bars" t-value="max_bars or 0"/>
+            <t t-set="blocked_dates" t-value="blocked_dates or []"/>
+            <t t-set="pricing" t-value="pricing or {
+                'per_plate': 0, 'gpb': 100, 'bartender': 0, 'bar': 0,
+                'coord_type': 'percentage', 'coord_pct': 0, 'coord_fixed': 0,
+                'deposit_pct': 50, 'member_pct': 0,
+                'event_labor': 0, 'cleaning': 0,
+                'event_hours': 0, 'cleaning_hours': 0}"/>
             <div class="container py-5">
                 <div class="row justify-content-center">
                     <div class="col-lg-8">
@@ -17,6 +29,10 @@
                             All event requests require board approval before
                             confirmation.  A deposit will be required.
                         </p>
+
+                        <!-- Editable drop zone: drag any building block here
+                             (banner, text, image) from the website editor. -->
+                        <div class="oe_structure" id="event_request_top"/>
 
                         <form action="/event-request/submit" method="post"
                               enctype="multipart/form-data"
@@ -35,7 +51,8 @@
                                         </label>
                                         <input type="text" name="customer_name"
                                                class="form-control" required="required"
-                                               placeholder="John Smith"/>
+                                               placeholder="John Smith"
+                                               title="Your full name — this is who the booking is under."/>
                                     </div>
                                     <div class="col-md-4">
                                         <label class="form-label">
@@ -43,13 +60,42 @@
                                         </label>
                                         <input type="email" name="customer_email"
                                                class="form-control" required="required"
-                                               placeholder="john@example.com"/>
+                                               placeholder="john@example.com"
+                                               title="We'll send your confirmation and updates to this address."/>
                                     </div>
                                     <div class="col-md-4">
                                         <label class="form-label">Phone</label>
                                         <input type="tel" name="customer_phone"
                                                class="form-control"
-                                               placeholder="(208) 555-1234"/>
+                                               placeholder="(208) 555-1234"
+                                               title="The best phone number to reach you about your event."/>
+                                    </div>
+                                </div>
+                                <div class="row mb-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label">
+                                            Are you an Elk member?
+                                            <span class="text-danger">*</span>
+                                        </label>
+                                        <select name="is_member" class="form-select"
+                                                required="required"
+                                                data-cond-trigger="elk_member"
+                                                title="Elk members may qualify for a member discount.">
+                                            <option value="no">No</option>
+                                            <option value="yes">Yes</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4" data-cond-group="elk_member"
+                                         data-cond-show="yes" style="display:none;">
+                                        <label class="form-label">
+                                            Membership Number
+                                            <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="text" name="member_number"
+                                               class="form-control"
+                                               data-cond-required="1"
+                                               placeholder="e.g. 12345"
+                                               title="Your Elks membership number (required for the member rate)."/>
                                     </div>
                                 </div>
 
@@ -64,16 +110,19 @@
                                     </label>
                                     <input type="text" name="event_name"
                                            class="form-control" required="required"
-                                           placeholder="Smith Wedding Reception"/>
+                                           placeholder="Smith Wedding Reception"
+                                           title="A short name for your event, e.g. 'Smith Wedding Reception'."/>
                                 </div>
 
                                 <div class="row mb-3">
-                                    <div class="col-md-4">
+                                    <div class="col-md-6">
                                         <label class="form-label">
                                             Event Type <span class="text-danger">*</span>
                                         </label>
                                         <select name="event_type" class="form-select"
-                                                required="required">
+                                                required="required"
+                                                data-cond-trigger="evt_type"
+                                                title="The kind of event you're hosting.">
                                             <option value="wedding">Wedding / Reception</option>
                                             <option value="birthday">Birthday Party</option>
                                             <option value="anniversary">Anniversary</option>
@@ -85,27 +134,14 @@
                                             <option value="other">Other</option>
                                         </select>
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-md-6">
                                         <label class="form-label">
                                             Expected Guests <span class="text-danger">*</span>
                                         </label>
                                         <input type="number" name="guest_count"
                                                class="form-control" required="required"
-                                               min="1" placeholder="50"/>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label">Preferred Venue</label>
-                                        <select name="venue_id" class="form-select">
-                                            <option value="">-- No preference --</option>
-                                            <t t-foreach="venues" t-as="v">
-                                                <option t-att-value="v.id">
-                                                    <t t-esc="v.name"/>
-                                                    <t t-if="v.x_capacity">
-                                                        (up to <t t-esc="v.x_capacity"/> guests)
-                                                    </t>
-                                                </option>
-                                            </t>
-                                        </select>
+                                               min="1" placeholder="50"
+                                               title="Approximate number of guests — this helps us plan staffing and the room."/>
                                     </div>
                                 </div>
 
@@ -115,34 +151,339 @@
                                             Event Date <span class="text-danger">*</span>
                                         </label>
                                         <input type="date" name="event_date"
-                                               class="form-control" required="required"/>
+                                               class="form-control" required="required"
+                                               t-att-data-blocked="','.join(blocked_dates or [])"
+                                               title="The date of your event. Already-reserved dates can't be booked."/>
+                                        <small class="text-danger d-none" id="date_blocked_msg">
+                                            That date is already reserved — please choose another.
+                                        </small>
                                     </div>
                                     <div class="col-md-4">
                                         <label class="form-label">Start Time</label>
                                         <input type="time" name="start_time"
                                                class="form-control"
-                                               placeholder="18:00"/>
+                                               placeholder="18:00"
+                                               title="What time your event begins."/>
                                     </div>
                                     <div class="col-md-4">
                                         <label class="form-label">End Time</label>
                                         <input type="time" name="end_time"
                                                class="form-control"
-                                               placeholder="22:00"/>
+                                               placeholder="22:00"
+                                               title="What time your event ends (events must end by midnight)."/>
                                     </div>
                                 </div>
+
+                                <!-- Editable drop zone: drop the building map
+                                     (or any block) above the room choices. -->
+                                <div class="oe_structure" id="event_request_map"/>
+
+                                <!-- Celebration of Life: capture the (deceased)
+                                     member's number so the facility is no charge
+                                     and family gets the member rate. -->
+                                <div class="row mb-3" data-cond-group="evt_type"
+                                     data-cond-show="memorial" style="display:none;">
+                                    <div class="col-md-6">
+                                        <label class="form-label">
+                                            Member's Number (Celebration of Life)
+                                        </label>
+                                        <input type="text" name="col_member_number"
+                                               class="form-control" placeholder="e.g. 12345"
+                                               title="For a Celebration of Life, enter the member's number — the facility is no charge and family receives the member rate."/>
+                                    </div>
+                                </div>
+
+                                <!-- Choose room(s): lodge floor-plan picture + checkboxes -->
+                                <div class="mb-3">
+                                    <label class="form-label d-block">
+                                        Choose Your Room(s)
+                                    </label>
+                                    <t t-if="floor_plan">
+                                        <div class="mb-2 text-center">
+                                            <img t-att-src="image_data_uri(floor_plan)"
+                                                 class="img-fluid border rounded"
+                                                 style="max-height: 360px;"
+                                                 alt="Lodge floor plan"
+                                                 title="Map of the lodge — see where each room is located."/>
+                                        </div>
+                                    </t>
+                                    <div class="row g-2">
+                                        <t t-foreach="venues" t-as="v">
+                                            <div class="col-6 col-md-4">
+                                                <div class="form-check"
+                                                     t-att-title="'Room: ' + v.name">
+                                                    <input type="checkbox" name="venue_ids"
+                                                           class="form-check-input"
+                                                           t-att-value="v.id"
+                                                           t-att-id="'room_%s' % v.id"
+                                                           t-att-data-room-price="(v.x_room_rate or 0) + (v.x_cleaning_fee or 0) + (v.x_service_fee or 0)"/>
+                                                    <label class="form-check-label"
+                                                           t-att-for="'room_%s' % v.id">
+                                                        <t t-esc="v.name"/>
+                                                        <t t-if="v.x_capacity">
+                                                            (up to <t t-esc="v.x_capacity"/>)
+                                                        </t>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </t>
+                                    </div>
+                                </div>
+
+                                <!-- Editable drop zone: extra content below the
+                                     room choices (notes, gallery, pricing, etc.). -->
+                                <div class="oe_structure" id="event_request_below_rooms"/>
 
                                 <div class="mb-3">
                                     <label class="form-label">Event Description</label>
                                     <textarea name="event_description" rows="3"
                                               class="form-control"
-                                              placeholder="Tell us about your event..."/>
+                                              placeholder="Tell us about your event..."
+                                              title="Tell us what you're planning so we can prepare."/>
                                 </div>
 
                                 <div class="mb-3">
                                     <label class="form-label">Special Requests</label>
                                     <textarea name="special_requests" rows="2"
                                               class="form-control"
-                                              placeholder="AV equipment, decorations, catering preferences..."/>
+                                              placeholder="AV equipment, decorations, catering preferences..."
+                                              title="Anything special we should know — accessibility, timing, vendors, etc."/>
+                                </div>
+
+                                <hr/>
+                                <h5 class="fw-bold mb-1">What You'll Need</h5>
+                                <p class="text-muted small mb-3">
+                                    Estimates are fine — staff will confirm the
+                                    details with you.
+                                </p>
+
+                                <div class="row mb-3">
+                                    <div class="col-6 col-md-4">
+                                        <label class="form-label">Tables</label>
+                                        <input type="number" name="need_tables"
+                                               class="form-control" min="0"
+                                               placeholder="0"
+                                               title="How many tables you'll need."/>
+                                    </div>
+                                    <div class="col-6 col-md-4">
+                                        <label class="form-label">Chairs</label>
+                                        <input type="number" name="need_chairs"
+                                               class="form-control" min="0"
+                                               placeholder="0"
+                                               title="How many chairs you'll need."/>
+                                    </div>
+                                    <div class="col-6 col-md-4">
+                                        <label class="form-label">Number of Bars</label>
+                                        <select name="num_bars" class="form-select"
+                                                title="How many bars you'd like open (the lodge has a limited number of bar locations).">
+                                            <t t-foreach="range(0, (max_bars or 0) + 1)" t-as="n">
+                                                <option t-att-value="n"><t t-esc="n"/></option>
+                                            </t>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Clean, uniform checkbox grid -->
+                                <label class="form-label d-block">Check anything you'll need:</label>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-6 col-md-3">
+                                        <div class="form-check"
+                                             title="A podium for speeches or presentations.">
+                                            <input type="checkbox" name="need_podium" value="1"
+                                                   class="form-check-input" id="cb_podium"/>
+                                            <label class="form-check-label" for="cb_podium">Podium</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="form-check"
+                                             title="House sound system for music or announcements.">
+                                            <input type="checkbox" name="need_sound" value="1"
+                                                   class="form-check-input" id="cb_sound"/>
+                                            <label class="form-check-label" for="cb_sound">Sound System</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="form-check"
+                                             title="A microphone for toasts, speeches, or a DJ.">
+                                            <input type="checkbox" name="need_microphone" value="1"
+                                                   class="form-check-input" id="cb_mic"/>
+                                            <label class="form-check-label" for="cb_mic">Microphone</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="form-check"
+                                             title="Table linens — set the quantity and color below.">
+                                            <input type="checkbox" name="need_linen" value="1"
+                                                   class="form-check-input" id="cb_linen"/>
+                                            <label class="form-check-label" for="cb_linen">Linens</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="form-check"
+                                             title="A beer tub for self-serve canned/bottled beer.">
+                                            <input type="checkbox" name="need_beer_tub" value="1"
+                                                   class="form-check-input" id="cb_beertub"/>
+                                            <label class="form-check-label" for="cb_beertub">Beer Tub</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="form-check"
+                                             title="You'll be bringing or arranging decorations.">
+                                            <input type="checkbox" name="has_decorations" value="1"
+                                                   class="form-check-input" id="cb_decor"/>
+                                            <label class="form-check-label" for="cb_decor">Decorations</label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Insurance is mandatory for every event -->
+                                <div class="row mb-3">
+                                    <div class="col-12">
+                                        <label class="form-label">
+                                            Liability Insurance
+                                            <span class="text-danger">*</span>
+                                        </label>
+                                        <select name="insurance_by" class="form-select"
+                                                required="required"
+                                                title="Insurance is required for every event. Either have the lodge provide it (added to your quote), or provide your own certificate naming Lewiston Elks Lodge #896 as additional insured.">
+                                            <option value="lodge">I need the lodge to provide insurance (added to my quote)</option>
+                                            <option value="renter">I will provide my own certificate (naming Lewiston Elks Lodge #896 as additional insured)</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="row mb-3">
+                                    <div class="col-6 col-md-3">
+                                        <label class="form-label">Setup By</label>
+                                        <select name="setup_by" class="form-select"
+                                                title="Who sets the room up — the lodge, or you?">
+                                            <option value="">—</option>
+                                            <option value="us">Lodge</option>
+                                            <option value="them">We will set up</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <label class="form-label">Takedown By</label>
+                                        <select name="takedown_by" class="form-select"
+                                                title="Who tears the room down afterward — the lodge, or you?">
+                                            <option value="">—</option>
+                                            <option value="us">Lodge</option>
+                                            <option value="them">We will take down</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <label class="form-label">Linen Qty</label>
+                                        <input type="number" name="linen_qty"
+                                               class="form-control" min="0"
+                                               title="How many linens you need (if Linens is checked)."/>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <label class="form-label">Linen Color</label>
+                                        <select name="linen_color" class="form-select"
+                                                data-cond-trigger="linen_color"
+                                                title="Choose a base color, or 'Other' to request a specific color.">
+                                            <option value="White">White</option>
+                                            <option value="Black">Black</option>
+                                            <option value="Other">Other (specify)</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6 col-md-3" data-cond-group="linen_color"
+                                         data-cond-show="Other" style="display:none;">
+                                        <label class="form-label">Color Request</label>
+                                        <input type="text" name="linen_color_other"
+                                               class="form-control"
+                                               title="Tell us the linen color you'd like."/>
+                                    </div>
+                                </div>
+
+                                <div class="row mb-3">
+                                    <div class="col-12">
+                                        <div class="form-check mb-2"
+                                             title="Check if you'd like the lodge to provide food/catering. All food is catered through the lodge.">
+                                            <input type="checkbox" name="food_request"
+                                                   value="1" class="form-check-input"
+                                                   id="cb_foodreq"
+                                                   data-cond-trigger="food_req"/>
+                                            <label class="form-check-label" for="cb_foodreq">
+                                                Food / Catering Request
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12" data-cond-group="food_req"
+                                         data-cond-show="yes" style="display:none;">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <label class="form-label">Catering Details</label>
+                                                <textarea name="catering_details"
+                                                          class="form-control" rows="2"
+                                                          title="What kind of catering you'd like — style, dietary needs, headcount."/>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label">Menu Requests</label>
+                                                <textarea name="food_menu"
+                                                          class="form-control" rows="2"
+                                                          title="Specific dishes or menu items you'd like."/>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row mb-3">
+                                    <div class="col-12">
+                                        <label class="form-label">Extras / Notes</label>
+                                        <textarea name="extras" class="form-control"
+                                                  rows="2"
+                                                  title="Anything else you'll need that isn't listed above."/>
+                                    </div>
+                                </div>
+
+                                <hr/>
+                                <h5 class="fw-bold mb-3">Promotion (optional)</h5>
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Facebook Event URL</label>
+                                        <input type="url" name="facebook_url"
+                                               class="form-control"
+                                               placeholder="https://facebook.com/events/..."
+                                               title="Link to your Facebook event page, if you have one."/>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Related Website URL</label>
+                                        <input type="url" name="related_url"
+                                               class="form-control"
+                                               placeholder="https://..."
+                                               title="Any other website related to your event."/>
+                                    </div>
+                                </div>
+
+                                <!-- Live estimate (computed client-side from the
+                                     prices below; approximate, staff confirm). -->
+                                <div id="event_estimate" class="alert alert-secondary mt-3"
+                                     style="position: sticky; bottom: 0; z-index: 1020; box-shadow: 0 -2px 10px rgba(0,0,0,.12);"
+                                     t-att-data-per-plate="pricing['per_plate']"
+                                     t-att-data-gpb="pricing['gpb']"
+                                     t-att-data-bartender="pricing['bartender']"
+                                     t-att-data-bar="pricing['bar']"
+                                     t-att-data-coord-type="pricing['coord_type']"
+                                     t-att-data-coord-pct="pricing['coord_pct']"
+                                     t-att-data-coord-fixed="pricing['coord_fixed']"
+                                     t-att-data-deposit-pct="pricing['deposit_pct']"
+                                     t-att-data-member-pct="pricing['member_pct']"
+                                     t-att-data-event-labor="pricing['event_labor']"
+                                     t-att-data-cleaning="pricing['cleaning']"
+                                     t-att-data-event-hours="pricing['event_hours']"
+                                     t-att-data-cleaning-hours="pricing['cleaning_hours']">
+                                    <div class="d-flex justify-content-between">
+                                        <strong>Estimated Total:</strong>
+                                        <strong><span id="est_total">$0.00</span></strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>Reservation Fee due at signing:</span>
+                                        <span id="est_deposit">$0.00</span>
+                                    </div>
+                                    <small class="text-muted">
+                                        Estimate only — your final quote is confirmed by lodge staff.
+                                    </small>
                                 </div>
 
                                 <div class="alert alert-info mt-3" role="alert">
@@ -156,12 +497,135 @@
 
                             <div class="card-footer text-end">
                                 <button type="submit"
-                                        class="btn btn-primary btn-lg">
+                                        class="btn btn-primary btn-lg"
+                                        title="Send your request to the lodge.">
                                     <i class="fa fa-paper-plane me-2" title="Submit"/>
                                     Submit Request
                                 </button>
                             </div>
                         </form>
+
+                        <!-- Progressive disclosure: any [data-cond-trigger]
+                             reveals matching [data-cond-group] blocks when its
+                             value equals data-cond-show; required is toggled and
+                             the value cleared while hidden (so it appears empty).
+                             The server fills 000000000 when not a member. -->
+                        <script type="text/javascript">
+                            (function () {
+                                function applyCond(trigger) {
+                                    var key = trigger.getAttribute('data-cond-trigger');
+                                    var val = trigger.type === 'checkbox'
+                                        ? (trigger.checked ? 'yes' : 'no')
+                                        : trigger.value;
+                                    var groups = document.querySelectorAll(
+                                        '[data-cond-group="' + key + '"]');
+                                    groups.forEach(function (grp) {
+                                        var show = grp.getAttribute('data-cond-show') === val;
+                                        grp.style.display = show ? '' : 'none';
+                                        grp.querySelectorAll('[data-cond-required]').forEach(
+                                            function (inp) {
+                                                if (show) {
+                                                    inp.setAttribute('required', 'required');
+                                                } else {
+                                                    inp.removeAttribute('required');
+                                                    inp.value = '';
+                                                }
+                                            });
+                                    });
+                                }
+                                document.addEventListener('DOMContentLoaded', function () {
+                                    document.querySelectorAll('[data-cond-trigger]').forEach(
+                                        function (t) {
+                                            applyCond(t);
+                                            t.addEventListener('change', function () {
+                                                applyCond(t);
+                                            });
+                                        });
+                                });
+                            })();
+
+                            // Live, approximate estimate.
+                            (function () {
+                                function money(n) { return '$' + (Number(n) || 0).toFixed(2); }
+                                function recalc() {
+                                    var box = document.getElementById('event_estimate');
+                                    if (!box) { return; }
+                                    var d = box.dataset;
+                                    var roomTotal = 0;
+                                    document.querySelectorAll('input[name="venue_ids"]:checked').forEach(
+                                        function (cb) {
+                                            roomTotal += parseFloat(cb.getAttribute('data-room-price')) || 0;
+                                        });
+                                    var g = document.querySelector('[name="guest_count"]');
+                                    var guests = g ? (parseInt(g.value) || 0) : 0;
+                                    var b = document.querySelector('[name="num_bars"]');
+                                    var bars = b ? (parseInt(b.value) || 0) : 0;
+                                    var foodEl = document.querySelector('[name="food_request"]');
+                                    var food = foodEl ? foodEl.checked : false;
+                                    var memEl = document.querySelector('[name="is_member"]');
+                                    var isMember = memEl ? (memEl.value === 'yes') : false;
+
+                                    var perPlate = parseFloat(d.perPlate) || 0;
+                                    var gpb = parseFloat(d.gpb) || 100;
+                                    var bartender = parseFloat(d.bartender) || 0;
+                                    var barPrice = parseFloat(d.bar) || 0;
+                                    var coordPct = parseFloat(d.coordPct) || 0;
+                                    var coordFixed = parseFloat(d.coordFixed) || 0;
+                                    var depositPct = parseFloat(d.depositPct) || 50;
+                                    var memberPct = parseFloat(d.memberPct) || 0;
+
+                                    var catering = food ? (guests * perPlate) : 0;
+                                    var bartenders = (bars > 0) ? (Math.ceil(guests / gpb) * bartender) : 0;
+                                    var barFee = bars * barPrice;
+                                    var coord = (d.coordType === 'fixed') ? coordFixed : (roomTotal * coordPct / 100);
+                                    // Labor is an internal P and L cost, not a customer charge.
+                                    var subtotal = roomTotal + catering + bartenders + barFee + coord;
+                                    if (isMember) { subtotal = subtotal * (1 - memberPct / 100); }
+                                    var reservation = subtotal * depositPct / 100;
+
+                                    var et = document.getElementById('est_total');
+                                    var ed = document.getElementById('est_deposit');
+                                    if (et) { et.textContent = money(subtotal); }
+                                    if (ed) { ed.textContent = money(reservation); }
+                                }
+                                document.addEventListener('DOMContentLoaded', function () {
+                                    recalc();
+                                    var form = document.querySelector('form[action="/event-request/submit"]');
+                                    if (form) {
+                                        form.addEventListener('change', recalc);
+                                        form.addEventListener('input', recalc);
+                                    }
+                                });
+                            })();
+
+                            // Block already-reserved dates on the date picker.
+                            (function () {
+                                function checkDate() {
+                                    var inp = document.querySelector('[name="event_date"]');
+                                    if (!inp) { return; }
+                                    var blocked = (inp.getAttribute('data-blocked') || '')
+                                        .split(',').filter(Boolean);
+                                    var msg = document.getElementById('date_blocked_msg');
+                                    if (inp.value &amp;&amp; blocked.indexOf(inp.value) !== -1) {
+                                        if (msg) { msg.classList.remove('d-none'); }
+                                        inp.classList.add('is-invalid');
+                                        inp.setCustomValidity('This date is already reserved.');
+                                    } else {
+                                        if (msg) { msg.classList.add('d-none'); }
+                                        inp.classList.remove('is-invalid');
+                                        inp.setCustomValidity('');
+                                    }
+                                }
+                                document.addEventListener('DOMContentLoaded', function () {
+                                    var inp = document.querySelector('[name="event_date"]');
+                                    if (inp) {
+                                        inp.addEventListener('change', checkDate);
+                                        inp.addEventListener('input', checkDate);
+                                        checkDate();
+                                    }
+                                });
+                            })();
+                        </script>
                     </div>
                 </div>
             </div>
@@ -234,5 +698,16 @@
             </div>
         </t>
     </template>
+
+    <!-- Register /event-request as a website page so it appears in
+         Website → Site → Pages (listed, publishable, editable). The
+         /event-request controller route still serves it with live data
+         (venues, pricing); this record just surfaces it in the Pages list. -->
+    <record id="event_request_website_page" model="website.page">
+        <field name="name">Request an Event Booking</field>
+        <field name="view_id" ref="website_event_request_form"/>
+        <field name="url">/event-request</field>
+        <field name="is_published" eval="True"/>
+    </record>
 
 </odoo>

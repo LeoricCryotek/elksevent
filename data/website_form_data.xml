@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- noupdate: the form-access flags live on the core project.model_project_task
+         row; without noupdate every upgrade would overwrite admin changes
+         (e.g. someone turning the form access back off). -->
+    <data noupdate="1">
+
+        <!-- Let the website Form widget target project.task. After this loads,
+             the builder's Form > Action dropdown gains "Submit an Event Request",
+             so staff can build/edit their own event form on any page. -->
+        <record id="project.model_project_task" model="ir.model">
+            <field name="website_form_access">True</field>
+            <field name="website_form_label">Submit an Event Request</field>
+            <field name="website_form_key">submit_event_request</field>
+        </record>
+
+    </data>
+
+    <!-- Updatable: add a field name here and bump the module to expose it in
+         the form builder. NOTE the *text* time fields (not the Float ones) so
+         the builder renders normal text boxes that accept "10:30 am". -->
+    <data>
+        <function model="ir.model.fields" name="formbuilder_whitelist">
+            <value>project.task</value>
+            <value eval="[
+                'name',
+                'x_customer_name',
+                'x_customer_email',
+                'x_customer_phone',
+                'x_requested_room_ids',
+                'x_is_member',
+                'x_member_number',
+                'x_event_type',
+                'x_event_date',
+                'x_event_start_time_text',
+                'x_event_end_time_text',
+                'x_guest_count',
+                'x_event_description',
+                'x_special_requests',
+                'x_food_request',
+                'x_catering_details',
+                'x_insurance_by',
+                'x_facebook_event_url',
+                'x_related_url',
+            ]"/>
+        </function>
+    </data>
+</odoo>

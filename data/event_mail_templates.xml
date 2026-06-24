@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <record id="tmpl_event_request_received" model="mail.template">
+            <field name="name">Event: Request Received</field>
+            <field name="model_id" ref="project.model_project_task"/>
+            <field name="subject">We received your event request — {{ object.name }}</field>
+            <field name="email_from">{{ (user.email_formatted or '') }}</field>
+            <field name="email_to">{{ object.x_customer_email }}</field>
+            <field name="body_html" type="html">
+                <div style="font-family:Arial,sans-serif;">
+                    <p>Hi <t t-out="object.x_customer_name or 'there'"/>,</p>
+                    <p>Thank you for your event request (<strong t-out="object.name"/>).
+                       All requests require board approval; we'll contact you within
+                       3 business days. A deposit will be required to secure your date.</p>
+                    <p t-if="object.x_event_date">Requested date:
+                       <strong t-out="object.x_event_date"/></p>
+                    <p>— Lewiston Elks Lodge #896</p>
+                </div>
+            </field>
+        </record>
+
+        <record id="tmpl_event_approved" model="mail.template">
+            <field name="name">Event: Approved</field>
+            <field name="model_id" ref="project.model_project_task"/>
+            <field name="subject">Your event is approved — {{ object.name }}</field>
+            <field name="email_from">{{ (user.email_formatted or '') }}</field>
+            <field name="email_to">{{ object.x_customer_email }}</field>
+            <field name="body_html" type="html">
+                <div style="font-family:Arial,sans-serif;">
+                    <p>Hi <t t-out="object.x_customer_name or 'there'"/>,</p>
+                    <p>Good news — your event <strong t-out="object.name"/>
+                       has been approved by the Board and Floor.</p>
+                    <p t-if="object.x_event_date">Date:
+                       <strong t-out="object.x_event_date"/></p>
+                    <p>To secure the date, your deposit is due now. We'll follow up
+                       with the agreement and payment details.</p>
+                    <p>— Lewiston Elks Lodge #896</p>
+                </div>
+            </field>
+        </record>
+
+        <record id="tmpl_event_denied" model="mail.template">
+            <field name="name">Event: Not Approved</field>
+            <field name="model_id" ref="project.model_project_task"/>
+            <field name="subject">Update on your event request — {{ object.name }}</field>
+            <field name="email_from">{{ (user.email_formatted or '') }}</field>
+            <field name="email_to">{{ object.x_customer_email }}</field>
+            <field name="body_html" type="html">
+                <div style="font-family:Arial,sans-serif;">
+                    <p>Hi <t t-out="object.x_customer_name or 'there'"/>,</p>
+                    <p>Thank you for your interest. Unfortunately your event request
+                       <strong t-out="object.name"/> was not approved at this time.
+                       Please contact the lodge office if you have questions.</p>
+                    <p>— Lewiston Elks Lodge #896</p>
+                </div>
+            </field>
+        </record>
+
+        <record id="tmpl_event_deposit_received" model="mail.template">
+            <field name="name">Event: Deposit Received</field>
+            <field name="model_id" ref="project.model_project_task"/>
+            <field name="subject">Deposit received — {{ object.name }}</field>
+            <field name="email_from">{{ (user.email_formatted or '') }}</field>
+            <field name="email_to">{{ object.x_customer_email }}</field>
+            <field name="body_html" type="html">
+                <div style="font-family:Arial,sans-serif;">
+                    <p>Hi <t t-out="object.x_customer_name or 'there'"/>,</p>
+                    <p>We've received your deposit for <strong t-out="object.name"/>.
+                       Your date is secured. The balance is due before the event.</p>
+                    <p>— Lewiston Elks Lodge #896</p>
+                </div>
+            </field>
+        </record>
+
+        <record id="tmpl_event_balance_reminder" model="mail.template">
+            <field name="name">Event: Balance Due Reminder</field>
+            <field name="model_id" ref="project.model_project_task"/>
+            <field name="subject">Balance due for your event — {{ object.name }}</field>
+            <field name="email_from">{{ (user.email_formatted or '') }}</field>
+            <field name="email_to">{{ object.x_customer_email }}</field>
+            <field name="body_html" type="html">
+                <div style="font-family:Arial,sans-serif;">
+                    <p>Hi <t t-out="object.x_customer_name or 'there'"/>,</p>
+                    <p>This is a friendly reminder that the remaining balance for your
+                       event <strong t-out="object.name"/>
+                       (<t t-out="object.x_event_date or ''"/>) is now due.</p>
+                    <p>— Lewiston Elks Lodge #896</p>
+                </div>
+            </field>
+        </record>
+
+    </data>
+</odoo>

@@ -33,6 +33,12 @@
               action="action_event_pl_wizard"
               sequence="10"/>
 
+    <menuitem id="menu_event_assessor_report"
+              name="Assessor / UBI Income"
+              parent="menu_event_reports"
+              action="action_event_assessor_wizard"
+              sequence="20"/>
+
     <!-- Configuration -->
     <menuitem id="menu_event_config"
               name="Configuration"
@@ -44,5 +50,11 @@
               parent="menu_event_config"
               action="action_event_venues"
               sequence="10"/>
+
+    <menuitem id="menu_event_checklist_templates"
+              name="Checklist Templates"
+              parent="menu_event_config"
+              action="action_event_checklist_templates"
+              sequence="20"/>
 
 </odoo>

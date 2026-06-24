@@ -16,6 +16,7 @@
                 <field name="x_cleaning_fee" invisible="not x_is_rentable"/>
                 <field name="x_service_fee" invisible="not x_is_rentable"/>
                 <field name="x_capacity" invisible="not x_is_rentable"/>
+                <field name="x_product_id" invisible="not x_is_rentable"/>
             </xpath>
         </field>
     </record>
@@ -35,6 +36,7 @@
                 <field name="x_cleaning_fee"/>
                 <field name="x_service_fee"/>
                 <field name="x_capacity"/>
+                <field name="x_product_id" optional="show"/>
                 <field name="active" column_invisible="1"/>
             </list>
         </field>
@@ -65,15 +67,58 @@
         <field name="priority">60</field>
         <field name="arch" type="xml">
             <xpath expr="//sheet" position="inside">
-                <group string="Event Coordinator Fee">
-                    <group>
+                <field name="x_event_currency_id" invisible="1"/>
+                <group string="Event Rentals — Pricing &amp; Policy"
+                       name="event_rentals_pricing">
+                    <group string="Coordinator Fee">
                         <field name="x_coordinator_fee_type"/>
                         <field name="x_coordinator_fixed_rate"
                                invisible="x_coordinator_fee_type != 'fixed'"/>
                         <field name="x_coordinator_percentage"
-                               invisible="x_coordinator_fee_type != 'percentage'"
-                               widget="percentage"/>
+                               invisible="x_coordinator_fee_type != 'percentage'"/>
                     </group>
+                    <group string="Guest-Driven Defaults">
+                        <field name="x_guests_per_bartender"/>
+                        <field name="x_max_bars"/>
+                        <field name="x_per_plate_cost"/>
+                        <field name="x_per_plate_charge"/>
+                        <field name="x_default_event_hours"/>
+                        <field name="x_default_cleaning_hours"/>
+                    </group>
+                    <group string="Deposit &amp; Tax">
+                        <field name="x_deposit_pct"/>
+                        <field name="x_balance_due_days_before"/>
+                        <field name="x_member_discount_pct"/>
+                        <field name="x_event_tax_id"/>
+                    </group>
+                    <group string="Terms &amp; Checklist">
+                        <field name="x_event_terms_url" widget="url"/>
+                        <field name="x_event_terms_label"/>
+                        <field name="x_event_checklist_template_id"/>
+                        <field name="x_event_project_id"/>
+                        <field name="x_event_floor_plan" widget="image"
+                               class="oe_avatar"/>
+                    </group>
+                </group>
+                <group string="Event Rentals — Default Products"
+                       name="event_rentals_products">
+                    <group>
+                        <field name="x_facility_product_id"/>
+                        <field name="x_deposit_product_id"/>
+                        <field name="x_coordinator_product_id"/>
+                        <field name="x_event_labor_product_id"/>
+                        <field name="x_bar_product_id"/>
+                        <field name="x_bartender_product_id"/>
+                    </group>
+                    <group>
+                        <field name="x_catering_product_id"/>
+                        <field name="x_linen_product_id"/>
+                        <field name="x_cleaning_product_id"/>
+                        <field name="x_garbage_product_id"/>
+                        <field name="x_insurance_product_id"/>
+                    </group>
+                    <field name="x_default_quote_product_ids"
+                           widget="many2many_tags"/>
                 </group>
             </xpath>
         </field>

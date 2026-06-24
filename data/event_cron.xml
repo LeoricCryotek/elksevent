@@ -2,12 +2,26 @@
 <odoo>
     <data noupdate="1">
 
-        <!-- Auto-create Elk Year event project on April 1 -->
+        <!-- Auto-create Elk Year event project on April 1.
+             Disabled: events now route to one global "Events" project, so
+             yearly folders aren't needed. Re-enable here (and set a Default
+             Events Project per year) only if you want year-folder routing. -->
         <record id="cron_create_elk_year_project" model="ir.cron">
             <field name="name">Elks Events: Create Elk Year Project</field>
             <field name="model_id" ref="project.model_project_task"/>
             <field name="state">code</field>
             <field name="code">env['project.task']._cron_create_elk_year_project()</field>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <field name="active">False</field>
+        </record>
+
+        <!-- Balance-due reminder emails -->
+        <record id="cron_event_balance_due" model="ir.cron">
+            <field name="name">Elks Events: Balance Due Reminders</field>
+            <field name="model_id" ref="project.model_project_task"/>
+            <field name="state">code</field>
+            <field name="code">env['project.task']._cron_event_balance_due_reminders()</field>
             <field name="interval_number">1</field>
             <field name="interval_type">days</field>
             <field name="active">True</field>

@@ -7,10 +7,11 @@
              projects are created automatically by cron)
              ============================================================ -->
         <record id="project_event_bookings" model="project.project">
-            <field name="name">Event Bookings</field>
+            <field name="name">Events</field>
             <field name="description">Facility event booking requests, board approval, room billing, and P&amp;L tracking.</field>
             <field name="privacy_visibility">portal</field>
             <field name="allow_task_dependencies">True</field>
+            <field name="x_is_event_project">True</field>
         </record>
 
         <!-- ============================================================

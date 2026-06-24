@@ -1,8 +1,20 @@
 # -*- coding: utf-8 -*-
 """Extend maintenance.location with rentable venue fields.
 
-Adds a flag so certain lodge locations (Bar, Lodge Room, Dining Room, etc.)
-can be marked as rentable event venues with associated rates and fees.
+HUMAN
+-----
+Lodge spaces (Bar, Lodge Room, Dining Room, Seaport, Riverview, VIP, etc.)
+already live in the maintenance module as "locations". These fields let the
+lodge mark which ones can be rented for events, set their default rates/fees
+and capacity, and point each room at the product used to bill it.
+
+AI
+--
+- Extends `maintenance.location`. Monetary fields use `x_currency_id`.
+- `x_is_rentable` filters the public venue picker and the venue list/action.
+- `x_product_id` -> product.product: the quote builder
+  (project.task._sync_quote_lines) creates a room line from this product;
+  rooms with no product are skipped.
 """
 from odoo import fields, models
 
@@ -10,6 +22,12 @@ from odoo import fields, models
 class MaintenanceLocation(models.Model):
     _inherit = "maintenance.location"
 
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Rentable venue fields
+    # HUMAN: Make a location bookable and give it its default pricing + product.
+    # AI: Additive fields only. x_product_id is the bridge to the sale.order
+    #     quote; rate/cleaning/service seed elks.event.room.booking via onchange.
+    # ──────────────────────────────────────────────────────────────────
     x_is_rentable = fields.Boolean(
         "Available for Events",
         default=False,
@@ -38,4 +56,8 @@ class MaintenanceLocation(models.Model):
     x_currency_id = fields.Many2one(
         'res.currency', string="Currency",
         default=lambda self: self.env.company.currency_id,
+    )
+    x_product_id = fields.Many2one(
+        'product.product', string="Rental Product",
+        help="Product used on the event quote/invoice for renting this room.",
     )

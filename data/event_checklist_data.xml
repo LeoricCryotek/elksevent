@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- noupdate: this is a starting template the lodge will customize;
+         don't overwrite their edits on upgrade. -->
+    <data noupdate="1">
+
+        <record id="checklist_template_standard" model="elks.event.checklist.template">
+            <field name="name">Standard Event Checklist</field>
+            <field name="is_default">True</field>
+        </record>
+
+        <record id="checklist_line_tables" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">10</field>
+            <field name="item_code">tables</field>
+            <field name="name">Set up tables</field>
+        </record>
+        <record id="checklist_line_chairs" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">20</field>
+            <field name="item_code">chairs</field>
+            <field name="name">Set up chairs</field>
+        </record>
+        <record id="checklist_line_podium" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">30</field>
+            <field name="item_code">podium</field>
+            <field name="name">Place podium</field>
+        </record>
+        <record id="checklist_line_sound" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">40</field>
+            <field name="item_code">sound</field>
+            <field name="name">Set up sound system</field>
+        </record>
+        <record id="checklist_line_microphone" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">50</field>
+            <field name="item_code">microphone</field>
+            <field name="name">Provide microphone</field>
+        </record>
+        <record id="checklist_line_linen" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">60</field>
+            <field name="item_code">linen</field>
+            <field name="name">Set up linens</field>
+        </record>
+        <record id="checklist_line_insurance" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">70</field>
+            <field name="item_code">insurance</field>
+            <field name="name">Collect insurance certificate</field>
+        </record>
+        <record id="checklist_line_kitchen" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">80</field>
+            <field name="item_code">kitchen</field>
+            <field name="name">Prepare kitchen</field>
+        </record>
+        <record id="checklist_line_garbage" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">90</field>
+            <field name="item_code">garbage</field>
+            <field name="name">Garbage removal</field>
+        </record>
+        <record id="checklist_line_bars" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">100</field>
+            <field name="item_code">bars</field>
+            <field name="name">Staff the bar(s)</field>
+        </record>
+        <record id="checklist_line_beer_tub" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">110</field>
+            <field name="item_code">beer_tub</field>
+            <field name="name">Stock beer tub</field>
+        </record>
+        <record id="checklist_line_decorations" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">120</field>
+            <field name="item_code">decorations</field>
+            <field name="name">Decorations</field>
+        </record>
+        <record id="checklist_line_decor_takedown" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">130</field>
+            <field name="item_code">decor_takedown</field>
+            <field name="name">Take down decorations</field>
+        </record>
+        <record id="checklist_line_setup" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">140</field>
+            <field name="item_code">setup</field>
+            <field name="name">Event setup</field>
+        </record>
+        <record id="checklist_line_takedown" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">150</field>
+            <field name="item_code">takedown</field>
+            <field name="name">Event takedown</field>
+        </record>
+        <record id="checklist_line_cleanup" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">155</field>
+            <field name="item_code">cleanup</field>
+            <field name="name">Assign clean-up duties</field>
+        </record>
+        <record id="checklist_line_food_us" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">160</field>
+            <field name="item_code">food_us</field>
+            <field name="name">Kitchen / food prep</field>
+        </record>
+        <record id="checklist_line_food_catered" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">170</field>
+            <field name="item_code">food_catered</field>
+            <field name="name">Verify caterer license &amp; insurance</field>
+        </record>
+        <record id="checklist_line_extras" model="elks.event.checklist.template.line">
+            <field name="template_id" ref="checklist_template_standard"/>
+            <field name="sequence">180</field>
+            <field name="item_code">extras</field>
+            <field name="name">Provide extras</field>
+        </record>
+
+    </data>
+</odoo>

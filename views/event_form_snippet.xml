@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================
+         Starter "Event Booking Form" snippet — creates a project.task
+         (event) on submit. Drop it on any page from the builder's
+         Inner Content > Form area, then fully edit it (add/remove/
+         reorder fields) like any website form. This is the simpler,
+         builder-controlled companion to the coded /event-request page.
+         Times use the *text* fields so they accept "10:30 am".
+         ============================================================ -->
+    <template id="s_event_booking_form" name="Event Booking Form">
+        <section class="s_website_form pt16 pb16"
+                 data-vcss="001"
+                 data-snippet="s_event_booking_form">
+            <div class="container">
+                <form action="/website/form/"
+                      method="post"
+                      enctype="multipart/form-data"
+                      class="o_mark_required"
+                      data-mark="*"
+                      data-pre-fill="true"
+                      data-model_name="project.task">
+                    <div class="s_website_form_rows row s_col_no_bgcolor">
+
+                        <!-- Event Name (name) — required -->
+                        <div data-name="Field"
+                             class="s_website_form_field mb-3 col-12 s_website_form_required"
+                             data-type="char">
+                            <div class="row s_col_no_resize s_col_no_bgcolor">
+                                <label class="col-form-label col-sm-auto s_website_form_label"
+                                       style="width: 200px" for="elksevt_name">
+                                    <span class="s_website_form_label_content">Event Name</span>
+                                    <span class="s_website_form_mark"> *</span>
+                                </label>
+                                <div class="col-sm">
+                                    <input class="form-control s_website_form_input"
+                                           type="text" name="name" required="1"
+                                           placeholder="e.g. Smith Wedding Reception"
+                                           id="elksevt_name"/>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Your Name -->
+                        <div data-name="Field" class="s_website_form_field mb-3 col-12"
+                             data-type="char">
+                            <div class="row s_col_no_resize s_col_no_bgcolor">
+                                <label class="col-form-label col-sm-auto s_website_form_label"
+                                       style="width: 200px" for="elksevt_cname">
+                                    <span class="s_website_form_label_content">Your Name</span>
+                                </label>
+                                <div class="col-sm">
+                                    <input class="form-control s_website_form_input"
+                                           type="text" name="x_customer_name"
+                                           data-fill-with="name" id="elksevt_cname"/>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Email -->
+                        <div data-name="Field" class="s_website_form_field mb-3 col-12"
+                             data-type="email">
+                            <div class="row s_col_no_resize s_col_no_bgcolor">
+                                <label class="col-form-label col-sm-auto s_website_form_label"
+                                       style="width: 200px" for="elksevt_email">
+                                    <span class="s_website_form_label_content">Email</span>
+                                </label>
+                                <div class="col-sm">
+                                    <input class="form-control s_website_form_input"
+                                           type="email" name="x_customer_email"
+                                           data-fill-with="email" id="elksevt_email"/>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Phone -->
+                        <div data-name="Field" class="s_website_form_field mb-3 col-12"
+                             data-type="tel">
+                            <div class="row s_col_no_resize s_col_no_bgcolor">
+                                <label class="col-form-label col-sm-auto s_website_form_label"
+                                       style="width: 200px" for="elksevt_phone">
+                                    <span class="s_website_form_label_content">Phone</span>
+                                </label>
+                                <div class="col-sm">
+                                    <input class="form-control s_website_form_input"
+                                           type="tel" name="x_customer_phone"
+                                           data-fill-with="phone" id="elksevt_phone"/>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Event Type -->
+                        <div data-name="Field" class="s_website_form_field mb-3 col-12"
+                             data-type="selection">
+                            <div class="row s_col_no_resize s_col_no_bgcolor">
+                                <label class="col-form-label col-sm-auto s_website_form_label"
+                                       style="width: 200px" for="elksevt_type">
+                                    <span class="s_website_form_label_content">Event Type</span>
+                                </label>
+                                <div class="col-sm">
+                                    <select class="form-select s_website_form_input"
+                                            name="x_event_type" id="elksevt_type">
+                                        <option value="wedding">Wedding / Reception</option>
+                                        <option value="birthday">Birthday Party</option>
+                                        <option value="anniversary">Anniversary</option>
+                                        <option value="corporate">Corporate Event</option>
+                                        <option value="fundraiser">Fundraiser</option>
+                                        <option value="memorial">Memorial / Celebration of Life</option>
+                                        <option value="meeting">Meeting / Conference</option>
+                                        <option value="holiday">Holiday Party</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Event Date -->
+                        <div data-name="Field" class="s_website_form_field mb-3 col-12"
+                             data-type="date">
+                            <div class="row s_col_no_resize s_col_no_bgcolor">
+                                <label class="col-form-label col-sm-auto s_website_form_label"
+                                       style="width: 200px" for="elksevt_date">
+                                    <span class="s_website_form_label_content">Event Date</span>
+                                </label>
+                                <div class="col-sm">
+                                    <input class="form-control s_website_form_input datetimepicker-input"
+                                           type="date" name="x_event_date" id="elksevt_date"/>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Start Time (text) -->
+                        <div data-name="Field" class="s_website_form_field mb-3 col-12"
+                             data-type="char">
+                            <div class="row s_col_no_resize s_col_no_bgcolor">
+                                <label class="col-form-label col-sm-auto s_website_form_label"
+                                       style="width: 200px" for="elksevt_start">
+                                    <span class="s_website_form_label_content">Start Time</span>
+                                </label>
+                                <div class="col-sm">
+                                    <input class="form-control s_website_form_input"
+                                           type="text" name="x_event_start_time_text"
+                                           placeholder="e.g. 10:30 am" id="elksevt_start"/>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- End Time (text) -->
+                        <div data-name="Field" class="s_website_form_field mb-3 col-12"
+                             data-type="char">
+                            <div class="row s_col_no_resize s_col_no_bgcolor">
+                                <label class="col-form-label col-sm-auto s_website_form_label"
+                                       style="width: 200px" for="elksevt_end">
+                                    <span class="s_website_form_label_content">End Time</span>
+                                </label>
+                                <div class="col-sm">
+                                    <input class="form-control s_website_form_input"
+                                           type="text" name="x_event_end_time_text"
+                                           placeholder="e.g. 12:00 pm" id="elksevt_end"/>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Expected Guests -->
+                        <div data-name="Field" class="s_website_form_field mb-3 col-12"
+                             data-type="integer">
+                            <div class="row s_col_no_resize s_col_no_bgcolor">
+                                <label class="col-form-label col-sm-auto s_website_form_label"
+                                       style="width: 200px" for="elksevt_guests">
+                                    <span class="s_website_form_label_content">Expected Guests</span>
+                                </label>
+                                <div class="col-sm">
+                                    <input class="form-control s_website_form_input"
+                                           type="number" name="x_guest_count"
+                                           min="1" id="elksevt_guests"/>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Description -->
+                        <div data-name="Field" class="s_website_form_field mb-3 col-12"
+                             data-type="text">
+                            <div class="row s_col_no_resize s_col_no_bgcolor">
+                                <label class="col-form-label col-sm-auto s_website_form_label"
+                                       style="width: 200px" for="elksevt_desc">
+                                    <span class="s_website_form_label_content">Event Description</span>
+                                </label>
+                                <div class="col-sm">
+                                    <textarea class="form-control s_website_form_input"
+                                              name="x_event_description" rows="4"
+                                              placeholder="Tell us about your event..."
+                                              id="elksevt_desc"/>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Submit -->
+                        <div class="mb-0 py-2 col-12 s_website_form_submit text-end s_website_form_no_submit_label"
+                             data-name="Submit Button">
+                            <div style="width: 200px;" class="s_website_form_label"/>
+                            <span id="s_website_form_result"/>
+                            <a href="#" role="button"
+                               class="btn btn-primary s_website_form_send">
+                                Submit Request
+                            </a>
+                        </div>
+
+                    </div>
+                </form>
+            </div>
+        </section>
+    </template>
+
+    <!-- Register the snippet next to the built-in Form widget -->
+    <template id="snippets_event_booking_form"
+              inherit_id="website.snippets"
+              name="Event Booking Form Snippet">
+        <xpath expr="//snippets[@id='snippet_content']//t[@t-snippet='website.s_website_form']"
+               position="after">
+            <t t-snippet="elksevent.s_event_booking_form"
+               string="Event Booking Form"
+               t-forbid-sanitize="form"
+               t-thumbnail="/website/static/src/img/snippets_thumbs/s_website_form.svg">
+                <keywords>event, booking, rental, facility, lodge, request, form</keywords>
+            </t>
+        </xpath>
+    </template>
+
+</odoo>

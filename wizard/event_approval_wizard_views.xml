@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <!-- Floor Vote wizard -->
+    <record id="view_event_floor_vote_wizard_form" model="ir.ui.view">
+        <field name="name">elks.event.floor.vote.wizard.form</field>
+        <field name="model">elks.event.floor.vote.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Record Floor Vote">
+                <field name="event_id" invisible="1"/>
+                <group>
+                    <field name="vote_result"/>
+                    <field name="motion_number"/>
+                    <field name="vote_date"/>
+                </group>
+                <group string="Vote Tally">
+                    <field name="vote_for"/>
+                    <field name="vote_against"/>
+                </group>
+                <group string="Notes">
+                    <field name="notes" nolabel="1"
+                           placeholder="Conditions, amendments, or context from the vote..."/>
+                </group>
+                <footer>
+                    <button name="action_record_vote" string="Record Vote"
+                            type="object" class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Reject wizard -->
+    <record id="view_event_reject_wizard_form" model="ir.ui.view">
+        <field name="name">elks.event.reject.wizard.form</field>
+        <field name="model">elks.event.reject.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Reject Event">
+                <field name="event_id" invisible="1"/>
+                <field name="reject_stage" invisible="1"/>
+                <group>
+                    <field name="reason" nolabel="1"
+                           placeholder="Reason for rejection..."/>
+                </group>
+                <footer>
+                    <button name="action_reject" string="Reject"
+                            type="object" class="btn-danger"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+</odoo>

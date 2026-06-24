@@ -1,22 +1,39 @@
 # -*- coding: utf-8 -*-
-"""Event booking fields on project.task.
+"""Event booking fields and workflow on project.task.
 
-Each event booking is a project task inside the current Elk Year's
-"Event Bookings" project.  This inheritance layer adds:
-  - Event details (date, time, type, guest count)
-  - Board approval workflow with secretary notification
-  - Room / venue selection with per-booking rates
-  - Event cost lines (setup, event, cleanup hours, supplies, bar, coordinator)
-  - Coordinator fee — configurable as fixed or % of room income
-  - Customer invoicing — single-line or itemised by room
-  - Budget control — costs cannot exceed billed without override
-  - Elk Year project auto-creation (April – March)
+HUMAN
+-----
+This is the heart of the module. An "event" is just a Project task living in
+the current Elk-Year "Events" project, with a lot bolted on so the lodge can
+run a facility rental end to end:
+  - the event details and the staff "checklist" (tables, bar, linens, …);
+  - a Board -> Floor approval workflow (only the right people can approve);
+  - rooms, an itemized staff-only Quote, and a guest-driven cost build;
+  - two customer invoices (deposit + final) and the coordinator fee;
+  - a tentative calendar hold that turns solid on approval;
+  - customer emails, a tax/UBI flag for the assessor, and a double-booking guard.
+Most buttons on the event form call a method in this file.
+
+AI
+--
+- Inherits `project.task`; all custom fields/methods are x_*-prefixed.
+- `x_is_event` (computed, stored) gates everything to event tasks.
+- Approval: x_approval_state draft->board->floor->approved|rejected, mirroring
+  elkspurchase; actions are group-gated via _ensure_approver + has_group.
+- Money: legacy room/cost fields still compute, but x_total_billed/x_balance_due
+  and the P&L now PREFER x_sale_order_id (the quote), net of member discount.
+- Side-effect hooks fire on floor approval: checklist subtasks, calendar
+  promotion, approval email. Quote build/invoice/calendar/email helpers are all
+  in their own SECTION banners below. Settings read via _event_settings().
+- Elk-Year project auto-creation (April–March) drives x_is_event + cron.
 """
 import logging
-from datetime import date
+import math
+import re
+from datetime import date, timedelta
 
 from odoo import _, api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 
 _logger = logging.getLogger(__name__)
 
@@ -33,11 +50,12 @@ EVENT_TYPE_CHOICES = [
     ('other', 'Other'),
 ]
 
-BOARD_STATUS_CHOICES = [
-    ('not_submitted', 'Not Yet Submitted'),
-    ('submitted', 'Submitted to Board'),
+EVENT_APPROVAL_STATES = [
+    ('draft', 'Draft'),
+    ('board', 'Board Review'),
+    ('floor', 'Floor Vote'),
     ('approved', 'Approved'),
-    ('denied', 'Denied'),
+    ('rejected', 'Rejected'),
 ]
 
 
@@ -54,6 +72,56 @@ class ProjectTask(models.Model):
     )
 
     # ------------------------------------------------------------------
+    # Event type flags (drive billing + tax reporting)
+    # ------------------------------------------------------------------
+    x_is_elks_event = fields.Boolean(
+        "Elks Event", tracking=True, copy=False,
+        help="Lodge's own event. Runs the same checklist/approval/calendar "
+             "pipeline but is NOT billed — no quote, invoices, or deposit holds.",
+    )
+    x_is_member = fields.Boolean(
+        "Member Rental", tracking=True,
+        help="The renter is an Elks member (gets the member discount). "
+             "Member rentals are not unrelated business income (UBI).",
+    )
+    x_member_number = fields.Char(
+        "Member Number", copy=False,
+        help="Elks membership number — shown on the quote and invoice.",
+    )
+    # Elks (lodge's own) events — who owns it; not billed, no insurance needed.
+    x_event_committee = fields.Char(
+        "Committee",
+        help="The lodge committee responsible for this Elks event.")
+    x_responsible_party_id = fields.Many2one(
+        'res.partner', string="Responsible Party",
+        help="The person responsible for this Elks event.")
+    x_is_ubi = fields.Boolean(
+        "Taxable (UBI)", compute='_compute_is_ubi', store=True,
+        help="Unrelated Business Income: a non-member, non-Elks event with "
+             "net income. Appears on the Assessor / UBI report.",
+    )
+    x_event_net_income = fields.Monetary(
+        "Net Income", currency_field='x_currency_id',
+        compute='_compute_is_ubi', store=True,
+        help="Total billed minus total costs.",
+    )
+
+    # Promotional links (entered on the web form / event)
+    x_facebook_event_url = fields.Char(
+        "Facebook Event URL",
+        help="Link to the Facebook event page, if any.",
+    )
+    x_related_url = fields.Char(
+        "Related Website URL",
+        help="Any other website URL related to this event.",
+    )
+    x_double_booking_override = fields.Boolean(
+        "Double-Booking Override", copy=False,
+        help="Allow this event to share a room/date/time with another event. "
+             "Restricted to managers.",
+    )
+
+    # ------------------------------------------------------------------
     # Event details
     # ------------------------------------------------------------------
     x_event_type = fields.Selection(
@@ -61,12 +129,28 @@ class ProjectTask(models.Model):
     )
     x_event_date = fields.Date("Event Date", tracking=True)
     x_event_start_time = fields.Float(
-        "Start Time", tracking=True,
-        help="Event start time (24h decimal, e.g. 14.5 = 2:30 PM).",
+        "Start Time (24h)", tracking=True,
+        help="Event start time (24h decimal, e.g. 14.5 = 2:30 PM). "
+             "Usually set via the text field, not edited directly.",
     )
     x_event_end_time = fields.Float(
-        "End Time", tracking=True,
-        help="Event end time (24h decimal, e.g. 22.0 = 10:00 PM).",
+        "End Time (24h)", tracking=True,
+        help="Event end time (24h decimal, e.g. 22.0 = 10:00 PM). "
+             "Usually set via the text field, not edited directly.",
+    )
+    # Text mirrors of the start/end times. The Float fields above store the
+    # real value (decimal hours); these Char fields let humans type "10:30 am"
+    # and are what the WEBSITE FORM BUILDER should bind to (a Float renders as
+    # a number box on the website, which rejects "10:30 am").
+    x_event_start_time_text = fields.Char(
+        "Start Time", compute='_compute_event_time_text',
+        inverse='_inverse_event_time_text', store=True,
+        help="Type a time like '10:30 am' or '2 pm'.",
+    )
+    x_event_end_time_text = fields.Char(
+        "End Time", compute='_compute_event_time_text',
+        inverse='_inverse_event_time_text', store=True,
+        help="Type a time like '12:00 pm' or '11 pm'.",
     )
     x_event_duration = fields.Float(
         "Duration (hrs)", compute='_compute_event_duration', store=True,
@@ -79,16 +163,69 @@ class ProjectTask(models.Model):
     x_special_requests = fields.Text("Special Requests")
 
     # Customer contact (separate from partner_id for public submissions)
-    x_customer_name = fields.Char("Customer Name", tracking=True)
-    x_customer_phone = fields.Char("Customer Phone")
-    x_customer_email = fields.Char("Customer Email")
+    # Label "Host Name" (not "Customer Name") to avoid clashing with the
+    # partner_name field website_project adds to project.task.
+    x_customer_name = fields.Char("Host Name", tracking=True)
+    x_customer_phone = fields.Char("Host Phone")
+    x_customer_email = fields.Char("Host Email")
+
+    # ------------------------------------------------------------------
+    # Event Checklist — the 20-point worksheet answers (drive subtasks)
+    # ------------------------------------------------------------------
+    x_need_tables = fields.Integer("Tables Needed")
+    x_need_chairs = fields.Integer("Chairs Needed")
+    x_need_podium = fields.Boolean("Podium")
+    x_need_sound = fields.Boolean("Sound System")
+    x_need_microphone = fields.Boolean("Microphone")
+    x_need_linen = fields.Boolean("Linen")
+    x_linen_qty = fields.Integer("Linen Qty")
+    x_linen_color = fields.Char("Linen Color")
+    x_need_insurance = fields.Boolean("Insurance Required")
+    x_insurance_on_file = fields.Boolean("Insurance Certificate on File")
+    # Insurance is mandatory for every event. Either the renter provides their
+    # own certificate (naming the lodge as additional insured) OR the lodge
+    # provides it and adds it to the quote.
+    x_insurance_by = fields.Selection([
+        ('renter', 'Renter provides own (lodge named as additional insured)'),
+        ('lodge', 'Lodge provides (added to the quote)'),
+    ], string="Insurance Provided By", default='lodge')
+    x_use_kitchen = fields.Boolean("Use of Kitchen")
+    x_need_garbage = fields.Boolean(
+        "Garbage Handling", default=True,
+        help="The lodge handles garbage for every event.")
+    x_num_bars = fields.Integer("Number of Bars")
+    x_need_beer_tub = fields.Boolean("Beer Tub")
+    x_has_decorations = fields.Boolean("Decorations")
+    x_decoration_notes = fields.Text("Decoration Notes")
+    _US_THEM = [('us', 'Us (Lodge)'), ('them', 'Them (Renter)')]
+    x_decor_takedown_by = fields.Selection(
+        _US_THEM, string="Decoration Takedown By")
+    x_setup_by = fields.Selection(_US_THEM, string="Setup By")
+    x_takedown_by = fields.Selection(_US_THEM, string="Takedown By")
+    x_gratuity_amount = fields.Monetary(
+        "Gratuity", currency_field='x_currency_id')
+    x_food_by_us = fields.Boolean("Food by Us")
+    x_food_menu = fields.Text("Menu")
+    x_food_request = fields.Boolean(
+        "Food / Catering Request",
+        help="The customer is requesting food or catering for the event.")
+    x_catering_details = fields.Text(
+        "Catering Details",
+        help="What kind of catering the customer is requesting.")
+    x_caterer_id = fields.Many2one('res.partner', string="Catered By")
+    x_caterer_license_on_file = fields.Boolean("Caterer License on File")
+    x_caterer_insurance_on_file = fields.Boolean("Caterer Insurance on File")
+    x_extras = fields.Text("Extras Supplied")
+
+    # Marker on a generated subtask so we never duplicate it
+    x_checklist_code = fields.Char("Checklist Item Code", copy=False, index=True)
 
     # ------------------------------------------------------------------
     # Board approval — full audit trail
     # ------------------------------------------------------------------
-    x_board_status = fields.Selection(
-        BOARD_STATUS_CHOICES, string="Board Status",
-        default='not_submitted', tracking=True, copy=False,
+    x_approval_state = fields.Selection(
+        EVENT_APPROVAL_STATES, string="Approval Status",
+        default='draft', tracking=True, copy=False, index=True,
     )
     x_board_submitted_date = fields.Date(
         "Submitted to Board", tracking=True, copy=False,
@@ -134,6 +271,15 @@ class ProjectTask(models.Model):
     # ------------------------------------------------------------------
     x_room_booking_ids = fields.One2many(
         'elks.event.room.booking', 'event_id', string="Rooms Booked",
+    )
+    # Multi-select of requested rooms — the website-form-builder-friendly way
+    # to pick MANY rooms (renders as "Multiple Checkboxes"). Selecting rooms
+    # here auto-creates the booking lines above with each room's default fees.
+    x_requested_room_ids = fields.Many2many(
+        'maintenance.location', 'elks_event_requested_room_rel',
+        'task_id', 'room_id', string="Requested Rooms",
+        domain="[('x_is_rentable', '=', True), ('active', '=', True)]",
+        help="Pick one or more rooms; booking lines are created from these.",
     )
     x_room_income = fields.Monetary(
         "Room Income", currency_field='x_currency_id',
@@ -221,6 +367,48 @@ class ProjectTask(models.Model):
     x_invoice_count = fields.Integer(
         compute='_compute_invoice_count', string="Invoice Count",
     )
+
+    # Itemized staff-only quote (sale.order)
+    x_sale_order_id = fields.Many2one(
+        'sale.order', string="Event Quote", copy=False,
+    )
+    x_quote_total = fields.Monetary(
+        "Quote Total", currency_field='x_currency_id',
+        compute='_compute_quote_total',
+        help="Untaxed total of the itemized quote — the customer-facing "
+             "invoice total before member discount.",
+    )
+    x_calendar_event_id = fields.Many2one(
+        'calendar.event', string="Calendar Booking", copy=False,
+    )
+
+    # Labor hours — estimated/charged vs actual (from the timeclock)
+    x_est_event_hours = fields.Float(
+        "Est. Event-Staff Hours",
+        help="Event-staff hours charged on the quote.")
+    x_est_cleaning_hours = fields.Float(
+        "Est. Cleaning Hours",
+        help="Custodial/cleaning hours charged on the quote.")
+    x_actual_event_hours = fields.Float(
+        "Actual Event-Staff Hours", compute='_compute_actual_hours',
+        help="Event-staff hours actually worked (from the timeclock).")
+    x_actual_cleaning_hours = fields.Float(
+        "Actual Cleaning Hours", compute='_compute_actual_hours',
+        help="Custodial hours actually worked (from the timeclock).")
+    x_event_hours_variance = fields.Float(
+        "Event Hours Variance", compute='_compute_actual_hours',
+        help="Charged minus actual event-staff hours.")
+    x_cleaning_hours_variance = fields.Float(
+        "Cleaning Hours Variance", compute='_compute_actual_hours',
+        help="Estimated minus actual cleaning hours.")
+    x_est_labor_cost = fields.Monetary(
+        "Estimated Labor Cost", currency_field='x_currency_id',
+        compute='_compute_actual_hours',
+        help="Estimated event-staff + cleaning hours x their rate — a P&L cost.")
+    x_actual_labor_cost = fields.Monetary(
+        "Actual Labor Cost", currency_field='x_currency_id',
+        compute='_compute_actual_hours',
+        help="Actual hours worked x their rate — a P&L cost.")
     x_total_billed = fields.Monetary(
         "Total Billed", currency_field='x_currency_id',
         compute='_compute_financials', store=True,
@@ -261,20 +449,106 @@ class ProjectTask(models.Model):
         compute='_compute_financials', store=True,
     )
 
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Create override — file builder-form events into the project
+    # HUMAN: A request submitted from the website Form builder doesn't carry
+    #        a project, so it would land "loose". If a new task clearly looks
+    #        like an event (has an event type/date/customer) and no project
+    #        was set, drop it into the default Events project.
+    # AI: @api.model_create_multi. Guard: not vals.get('project_id') AND any
+    #     event-ish key present. Uses settings.x_event_project_id, else the
+    #     base project_event_bookings. Normal tasks always carry project_id,
+    #     so they're untouched.
+    # ──────────────────────────────────────────────────────────────────
+    @api.model_create_multi
+    def create(self, vals_list):
+        default_proj = -1  # sentinel: not looked up yet
+        event_keys = ('x_event_type', 'x_event_date', 'x_customer_email',
+                      'x_is_event', 'x_event_start_time_text')
+        for vals in vals_list:
+            if vals.get('project_id') or not any(k in vals for k in event_keys):
+                continue
+            if default_proj == -1:
+                settings = self.env['elks.lodge.settings'].sudo().search(
+                    [], limit=1)
+                proj = settings.x_event_project_id if settings else False
+                if not proj:
+                    proj = self.env.ref(
+                        'elksevent.project_event_bookings',
+                        raise_if_not_found=False)
+                default_proj = proj.id if proj else False
+            if default_proj:
+                vals['project_id'] = default_proj
+        records = super().create(vals_list)
+        records._sync_requested_rooms()
+        return records
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Requested rooms <-> booking lines (full reconcile)
+    # HUMAN: The "Requested Rooms" checkboxes are the room selector. Ticking a
+    #        room adds a booking line (with its default fees); UN-ticking it
+    #        removes the line. Use the booking list below to adjust prices.
+    # AI: Bidirectional + idempotent: removes bookings whose room is no longer
+    #     requested and any duplicates, then adds requested rooms that aren't
+    #     booked. Runs from create() and write() (when x_requested_room_ids is
+    #     in vals) on PERSISTED records, so unlink/create are safe.
+    # ──────────────────────────────────────────────────────────────────
+    def _sync_requested_rooms(self):
+        Booking = self.env['elks.event.room.booking']
+        for rec in self:
+            # Only acts when rooms were picked via the m2m (the website builder
+            # form). Backend staff manage rooms directly on the booking list,
+            # so an empty selection must never remove their lines.
+            if not rec.x_requested_room_ids:
+                continue
+            requested_ids = set(rec.x_requested_room_ids.ids)
+            # Drop bookings for un-requested rooms + collapse duplicates.
+            seen = set()
+            to_remove = Booking
+            for b in rec.x_room_booking_ids:
+                rid = b.room_id.id
+                if rid not in requested_ids or rid in seen:
+                    to_remove |= b
+                else:
+                    seen.add(rid)
+            if to_remove:
+                to_remove.unlink()
+            # Add requested rooms that aren't booked yet.
+            for room in rec.x_requested_room_ids:
+                if room.id not in seen:
+                    Booking.create({
+                        'event_id': rec.id,
+                        'room_id': room.id,
+                        'rate': room.x_room_rate,
+                        'cleaning_fee': room.x_cleaning_fee,
+                        'service_fee': room.x_service_fee,
+                    })
+                    seen.add(room.id)
+
     # ------------------------------------------------------------------
     # Computed: is_event
     # ------------------------------------------------------------------
-    @api.depends('project_id')
+    @api.depends('project_id', 'project_id.x_is_event_project')
     def _compute_is_event(self):
-        """True if task belongs to any event bookings project (including
-        Elk Year projects that are children of the base project)."""
+        """True if the task's project is an events project.
+
+        Robust signal first: any project flagged `x_is_event_project`. We also
+        keep the legacy fallbacks (the base project + the 'Events YYYY-YYYY'
+        name pattern) so existing year folders created before the flag still
+        classify correctly.
+        """
         base_project = self.env.ref(
             'elksevent.project_event_bookings', raise_if_not_found=False,
         )
         event_project_ids = set()
         if base_project:
             event_project_ids.add(base_project.id)
-        # Also find Elk Year projects by naming convention
+        # Flagged event projects (the robust, name-independent signal)
+        flagged = self.env['project.project'].sudo().search([
+            ('x_is_event_project', '=', True),
+        ])
+        event_project_ids.update(flagged.ids)
+        # Legacy: Elk Year projects detected by naming convention
         year_projects = self.env['project.project'].sudo().search([
             ('name', 'like', 'Events %-%'),
         ])
@@ -290,9 +564,81 @@ class ProjectTask(models.Model):
         for rec in self:
             if rec.x_event_start_time and rec.x_event_end_time:
                 dur = rec.x_event_end_time - rec.x_event_start_time
-                rec.x_event_duration = max(dur, 0.0)
+                # Event runs past midnight (e.g. 22:00 → 01:00): add 24h
+                if dur < 0:
+                    dur += 24.0
+                rec.x_event_duration = dur
             else:
                 rec.x_event_duration = 0.0
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Human-friendly time text (website + display)
+    # HUMAN: Lets people type "10:30 am" / "2 pm" for the start/end times.
+    #        The real value still lives in the Float fields; these just
+    #        translate to/from a readable string. Point any website form-
+    #        builder time field at *_text (a Float renders as a number box
+    #        and rejects "10:30 am").
+    # AI: store=True compute (Float -> text) + inverse (text -> Float).
+    #     Parser accepts h[:mm][am|pm], 12h or 24h; unparseable text is
+    #     ignored (leaves the Float untouched) so a bad entry never crashes.
+    # ──────────────────────────────────────────────────────────────────
+    @staticmethod
+    def _parse_time_text(txt):
+        """Parse '10:30 am' / '2 pm' / '14:30' -> decimal hours, or None."""
+        if not txt:
+            return None
+        m = re.match(r'^\s*(\d{1,2})(?::(\d{2}))?\s*([ap]m)?\s*$',
+                     txt.strip().lower())
+        if not m:
+            return None
+        h = int(m.group(1))
+        mn = int(m.group(2) or 0)
+        ap = m.group(3)
+        if ap == 'pm' and h != 12:
+            h += 12
+        elif ap == 'am' and h == 12:
+            h = 0
+        if h > 23 or mn > 59:
+            return None
+        return h + mn / 60.0
+
+    @staticmethod
+    def _format_time_text(val):
+        """Format decimal hours -> '10:30 AM' (blank for 0/empty)."""
+        if not val:
+            return ''
+        h = int(val)
+        mn = int(round((val - h) * 60))
+        if mn == 60:
+            h += 1
+            mn = 0
+        ap = 'AM'
+        h12 = h
+        if h == 0:
+            h12 = 12
+        elif h == 12:
+            ap = 'PM'
+        elif h > 12:
+            h12 = h - 12
+            ap = 'PM'
+        return f"{h12}:{mn:02d} {ap}"
+
+    @api.depends('x_event_start_time', 'x_event_end_time')
+    def _compute_event_time_text(self):
+        for rec in self:
+            rec.x_event_start_time_text = rec._format_time_text(
+                rec.x_event_start_time)
+            rec.x_event_end_time_text = rec._format_time_text(
+                rec.x_event_end_time)
+
+    def _inverse_event_time_text(self):
+        for rec in self:
+            start = rec._parse_time_text(rec.x_event_start_time_text)
+            if start is not None:
+                rec.x_event_start_time = start
+            end = rec._parse_time_text(rec.x_event_end_time_text)
+            if end is not None:
+                rec.x_event_end_time = end
 
     # ------------------------------------------------------------------
     # Computed: staff totals (legacy fields)
@@ -313,9 +659,16 @@ class ProjectTask(models.Model):
                 rec.x_staff_total_hours * (rec.x_staff_hourly_rate or 0.0)
             )
 
-    # ------------------------------------------------------------------
-    # Computed: financials (room income, coordinator fee, totals)
-    # ------------------------------------------------------------------
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Computed financials (room income, coordinator fee, totals)
+    # HUMAN: Works out the headline numbers — what the customer is charged,
+    #        the deposit/balance, costs, and budget left. When a quote exists
+    #        it uses the quote total (minus member discount); otherwise it
+    #        falls back to the older room+coordinator math.
+    # AI: Stored compute. Cannot @api.depends on settings, so member-discount %
+    #     / coordinator config changes don't retro-recompute existing events.
+    #     x_total_billed feeds the PO budget guard and the assessor net income.
+    # ──────────────────────────────────────────────────────────────────
     @api.depends(
         'x_room_booking_ids.subtotal',
         'x_cost_line_ids.total',
@@ -326,6 +679,7 @@ class ProjectTask(models.Model):
         'x_deposit_amount', 'x_deposit_received',
         'x_purchase_order_ids.amount_total',
         'x_purchase_order_ids.state',
+        'x_sale_order_id.amount_untaxed', 'x_is_member',
     )
     def _compute_financials(self):
         Settings = self.env['elks.lodge.settings'].sudo()
@@ -347,10 +701,19 @@ class ProjectTask(models.Model):
                     pct = settings.x_coordinator_percentage
                 rec.x_coordinator_fee = room_income * (pct / 100.0)
 
-            # Total billed = room income + coordinator fee
-            rec.x_total_billed = room_income + rec.x_coordinator_fee
-            rec.x_subtotal = rec.x_total_billed
-            rec.x_event_total = rec.x_total_billed
+            # Customer-facing total — prefer the itemized quote (net of the
+            # member discount) when a quote exists; otherwise fall back to the
+            # legacy room-income + coordinator figure.
+            if rec.x_sale_order_id:
+                # The quote's amount_untaxed is ALREADY net of member discount
+                # and any COL waiver (applied as line discounts in
+                # _sync_quote_lines), so do not discount again here.
+                customer_total = rec.x_sale_order_id.amount_untaxed or 0.0
+            else:
+                customer_total = room_income + rec.x_coordinator_fee
+            rec.x_total_billed = customer_total
+            rec.x_subtotal = customer_total
+            rec.x_event_total = customer_total
 
             # Total costs from cost lines
             rec.x_total_costs = sum(rec.x_cost_line_ids.mapped('total'))
@@ -388,77 +751,219 @@ class ProjectTask(models.Model):
             rec.x_po_total = sum(pos.mapped('amount_total'))
 
     # ------------------------------------------------------------------
-    # Board approval actions
+    # Computed: net income + UBI flag (for the Assessor report)
     # ------------------------------------------------------------------
-    def action_submit_to_board(self):
-        """Mark event as submitted for board approval and notify secretary."""
-        self.ensure_one()
-        if not self.x_event_date:
-            raise UserError(_(
-                "Please set the event date before submitting to the board."
-            ))
-        vals = {
-            'x_board_status': 'submitted',
-            'x_board_submitted_date': fields.Date.context_today(self),
-        }
-        # Move to the "Submitted to Board" stage
-        submitted_stage = self.env.ref(
-            'elksevent.stage_submitted_to_board', raise_if_not_found=False,
-        )
-        if submitted_stage:
-            vals['stage_id'] = submitted_stage.id
-        self.write(vals)
-        self.message_post(
-            body=_(
-                "<b>Submitted to Board</b> for approval by %s.",
-                self.env.user.name,
-            ),
-            subtype_xmlid='mail.mt_comment',
-        )
-        # Notify secretary group via activity
-        self._notify_secretary_board_submission()
+    @api.depends(
+        'x_total_billed', 'x_total_costs',
+        'x_is_event', 'x_is_elks_event', 'x_is_member',
+    )
+    def _compute_is_ubi(self):
+        for rec in self:
+            rec.x_event_net_income = (rec.x_total_billed or 0.0) - (
+                rec.x_total_costs or 0.0)
+            rec.x_is_ubi = (
+                rec.x_is_event
+                and not rec.x_is_elks_event
+                and not rec.x_is_member
+                and rec.x_event_net_income != 0.0
+            )
 
-    def _notify_secretary_board_submission(self):
-        """Schedule an activity for the secretary group about this event."""
-        secretary_group = self.env.ref(
-            'elkssecretary.group_elkssecretary_secretary',
-            raise_if_not_found=False,
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Double-booking guard
+    # HUMAN: Stops two events from claiming the same room at overlapping
+    #        times on the same day — unless a manager ticks the override.
+    # AI: @api.constrains scans elks.event.room.booking for same room+date,
+    #     skips rejected events and x_double_booking_override. Blank end time
+    #     is treated as an open/all-day window by _event_times_overlap.
+    # ──────────────────────────────────────────────────────────────────
+    @staticmethod
+    def _event_times_overlap(s1, e1, s2, e2):
+        """True if two [start, end) windows overlap. Blank end = open day."""
+        s1 = s1 or 0.0
+        s2 = s2 or 0.0
+        e1 = e1 or 24.0
+        e2 = e2 or 24.0
+        return s1 < e2 and s2 < e1
+
+    @api.constrains(
+        'x_event_date', 'x_event_start_time', 'x_event_end_time',
+        'x_room_booking_ids', 'x_double_booking_override',
+    )
+    def _check_double_booking(self):
+        for rec in self:
+            if (not rec.x_is_event or rec.x_double_booking_override
+                    or not rec.x_event_date or not rec.x_room_booking_ids):
+                continue
+            room_ids = rec.x_room_booking_ids.mapped('room_id').ids
+            if not room_ids:
+                continue
+            others = self.env['elks.event.room.booking'].search([
+                ('event_id', '!=', rec.id),
+                ('room_id', 'in', room_ids),
+                ('event_id.x_event_date', '=', rec.x_event_date),
+                ('event_id.x_approval_state', '!=', 'rejected'),
+            ])
+            for ob in others:
+                oe = ob.event_id
+                if rec._event_times_overlap(
+                    rec.x_event_start_time, rec.x_event_end_time,
+                    oe.x_event_start_time, oe.x_event_end_time,
+                ):
+                    raise ValidationError(_(
+                        "Double booking: room '%(room)s' on %(date)s overlaps "
+                        "event '%(other)s'.\n\nTick 'Double-Booking Override' "
+                        "(managers) if this is intentional.",
+                        room=ob.room_id.name,
+                        date=rec.x_event_date,
+                        other=oe.name,
+                    ))
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Board / Floor approval workflow  (mirrors elkspurchase)
+    # HUMAN: The path every event walks: Draft -> Board -> Floor ->
+    #        Approved (or Rejected). A Coordinator can submit but can't
+    #        approve; an Event Officer does the Board approval AND records the
+    #        Floor vote (and holds the budget / double-booking overrides).
+    # AI: state = x_approval_state. Each action calls _ensure_approver(group)
+    #     (server-side has_group, in addition to view groups=). Floor approval
+    #     fans out: checklist subtasks, calendar promote, approval email.
+    #     Wizards call action_record_floor_approved / _rejected back here.
+    # ──────────────────────────────────────────────────────────────────
+    def _ensure_approver(self, group_xmlid, action_label):
+        """Raise unless the current user belongs to the approver group."""
+        if not self.env.user.has_group(group_xmlid):
+            raise UserError(_(
+                "You do not have permission to %s. This is restricted to the "
+                "designated approvers (assigned under Settings → Users).",
+                action_label,
+            ))
+
+    def action_submit(self):
+        """Submit the event for Board review (draft -> board)."""
+        for rec in self:
+            if rec.x_approval_state != 'draft':
+                raise UserError(_("Only draft events can be submitted."))
+            if not rec.x_event_date:
+                raise UserError(_(
+                    "Please set the event date before submitting for approval."
+                ))
+            vals = {
+                'x_approval_state': 'board',
+                'x_board_submitted_date': fields.Date.context_today(rec),
+            }
+            submitted_stage = self.env.ref(
+                'elksevent.stage_submitted_to_board', raise_if_not_found=False,
+            )
+            if submitted_stage:
+                vals['stage_id'] = submitted_stage.id
+            rec.write(vals)
+            rec.message_post(
+                body=_("Submitted to <b>Board</b> for review by %s.",
+                       self.env.user.name),
+                subtype_xmlid='mail.mt_comment',
+            )
+            rec._ensure_placeholder_calendar()
+            rec._notify_board_submission()
+
+    def _notify_board_submission(self):
+        """Schedule an activity for a Floor Recorder / Secretary."""
+        self.ensure_one()
+        floor_group = self.env.ref(
+            'elksevent.group_event_officer', raise_if_not_found=False,
         )
-        if not secretary_group:
+        if not floor_group:
             return
-        # Find a secretary user to assign the activity.
-        # Odoo 19 removed res.groups.users; query res.users by group instead.
-        secretary_user = self.env['res.users'].search(
-            [('group_ids', 'in', secretary_group.id)],
-            limit=1,
+        recorder = self.env['res.users'].search(
+            [('group_ids', 'in', floor_group.id)], limit=1,
         )
-        if not secretary_user:
+        if not recorder:
             return
         self.activity_schedule(
             'mail.mail_activity_data_todo',
-            user_id=secretary_user.id,
-            summary=_(
-                "Event submitted for Board agenda: %s", self.name,
-            ),
+            user_id=recorder.id,
+            summary=_("Event submitted for Board agenda: %s", self.name),
             note=_(
-                "Event '%(name)s' on %(date)s for %(guests)d guests has been "
-                "submitted for board approval. Please add to the next board "
+                "Event '%(name)s' on %(date)s for %(guests)s guests has been "
+                "submitted for approval. Please add it to the next Board "
                 "meeting agenda.\n\nCustomer: %(customer)s",
                 name=self.name,
-                date=self.x_event_date,
+                date=self.x_event_date or 'N/A',
                 guests=self.x_guest_count or 0,
                 customer=self.x_customer_name or 'N/A',
             ),
         )
 
     def action_board_approve(self):
-        """Mark event as approved by the board and move to Booked."""
+        """Board approves -> advance to the Floor vote."""
+        self._ensure_approver(
+            'elksevent.group_event_officer', _("approve at the Board level"))
+        for rec in self:
+            if rec.x_approval_state != 'board':
+                raise UserError(_("This event is not in the Board queue."))
+            rec.x_approval_state = 'floor'
+            rec.message_post(
+                body=_("<b>Board Approved</b> by %s. Advanced to Floor vote.",
+                       self.env.user.name),
+                subtype_xmlid='mail.mt_comment',
+            )
+
+    def action_board_reject(self):
+        """Open the reject-reason wizard for a Board rejection."""
+        self.ensure_one()
+        self._ensure_approver(
+            'elksevent.group_event_officer', _("reject at the Board level"))
+        if self.x_approval_state != 'board':
+            raise UserError(_("This event is not in the Board queue."))
+        return self._open_reject_wizard('board')
+
+    def action_floor_approve(self):
+        """Open the Floor Vote wizard (motion #, vote counts, notes)."""
+        self.ensure_one()
+        self._ensure_approver(
+            'elksevent.group_event_officer', _("record the Floor vote"))
+        if self.x_approval_state != 'floor':
+            raise UserError(_("This event is not in the Floor queue."))
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _("Record Floor Vote"),
+            'res_model': 'elks.event.floor.vote.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {'default_event_id': self.id},
+        }
+
+    def action_floor_reject(self):
+        """Open the reject-reason wizard for a Floor rejection."""
+        self.ensure_one()
+        self._ensure_approver(
+            'elksevent.group_event_officer', _("reject at the Floor level"))
+        if self.x_approval_state != 'floor':
+            raise UserError(_("This event is not in the Floor queue."))
+        return self._open_reject_wizard('floor')
+
+    def _open_reject_wizard(self, stage):
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _("Reject Event"),
+            'res_model': 'elks.event.reject.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {
+                'default_event_id': self.id,
+                'default_reject_stage': stage,
+            },
+        }
+
+    def action_record_floor_approved(self, notes=""):
+        """Called by the Floor Vote wizard on an approval result."""
         self.ensure_one()
         vals = {
-            'x_board_status': 'approved',
+            'x_approval_state': 'approved',
             'x_board_approval_date': fields.Date.context_today(self),
             'x_board_approved_by': self.env.uid,
         }
+        if notes:
+            vals['x_board_notes'] = notes
         booked_stage = self.env.ref(
             'elksevent.stage_booked', raise_if_not_found=False,
         )
@@ -466,26 +971,28 @@ class ProjectTask(models.Model):
             vals['stage_id'] = booked_stage.id
         self.write(vals)
         self.message_post(
-            body=_(
-                "<b>Board Approved</b> on %(date)s by %(user)s.%(notes)s",
-                date=self.x_board_approval_date,
-                user=self.env.user.name,
-                notes=(
-                    f"<br/>Notes: {self.x_board_notes}"
-                    if self.x_board_notes else ""
-                ),
-            ),
-            subtype_xmlid='mail.mt_note',
+            body=_("<b>Floor Approved</b> on %(date)s.%(notes)s",
+                   date=self.x_board_approval_date,
+                   notes=(f"<br/>{notes}" if notes else "")),
+            subtype_xmlid='mail.mt_comment',
         )
+        # Auto-build the staff checklist subtasks on approval (best-effort)
+        self._generate_checklist_subtasks(raise_if_missing=False)
+        # Promote the tentative calendar entry to a confirmed booking
+        self._promote_calendar()
+        # Notify the customer
+        self._send_event_mail('elksevent.tmpl_event_approved')
 
-    def action_board_deny(self):
-        """Mark event as denied by the board and move to Cancelled."""
+    def action_record_floor_rejected(self, notes=""):
+        """Called by the reject wizard (board or floor) on a rejection."""
         self.ensure_one()
         vals = {
-            'x_board_status': 'denied',
+            'x_approval_state': 'rejected',
             'x_board_approval_date': fields.Date.context_today(self),
             'x_board_approved_by': self.env.uid,
         }
+        if notes:
+            vals['x_board_denial_reason'] = notes
         cancelled_stage = self.env.ref(
             'elksevent.stage_cancelled', raise_if_not_found=False,
         )
@@ -493,17 +1000,490 @@ class ProjectTask(models.Model):
             vals['stage_id'] = cancelled_stage.id
         self.write(vals)
         self.message_post(
-            body=_(
-                "<b>Board Denied</b> on %(date)s by %(user)s.%(reason)s",
-                date=self.x_board_approval_date,
-                user=self.env.user.name,
-                reason=(
-                    f"<br/>Reason: {self.x_board_denial_reason}"
-                    if self.x_board_denial_reason else ""
+            body=_("<b>Rejected</b> on %(date)s.%(reason)s",
+                   date=self.x_board_approval_date,
+                   reason=(f"<br/>Reason: {notes}" if notes else "")),
+            subtype_xmlid='mail.mt_comment',
+        )
+        self._send_event_mail('elksevent.tmpl_event_denied')
+
+    def action_reset_to_draft(self):
+        """Reset a rejected event back to draft."""
+        for rec in self:
+            if rec.x_approval_state != 'rejected':
+                raise UserError(_("Only rejected events can be reset."))
+            rec.x_approval_state = 'draft'
+            rec.message_post(
+                body=_("Reset to <b>Draft</b> by %s.", self.env.user.name),
+                subtype_xmlid='mail.mt_comment',
+            )
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Event checklist → staff subtasks
+    # HUMAN: Turns the checklist answers into a to-do list. Only the items
+    #        that actually apply become sub-tasks for staff, pulled from the
+    #        default checklist template. Runs on approval and on the button.
+    # AI: _checklist_applicability maps item_code -> bool (MUST match
+    #     CHECKLIST_ITEM_CODES). _generate_checklist_subtasks is idempotent via
+    #     child x_checklist_code; allocated_hours set only if the field exists.
+    # ──────────────────────────────────────────────────────────────────
+    def _checklist_applicability(self):
+        """Map each checklist item code to whether it applies to this event."""
+        self.ensure_one()
+        return {
+            'tables': (self.x_need_tables or 0) > 0,
+            'chairs': (self.x_need_chairs or 0) > 0,
+            'podium': self.x_need_podium,
+            'sound': self.x_need_sound,
+            'microphone': self.x_need_microphone,
+            'linen': self.x_need_linen,
+            'insurance': self.x_need_insurance,
+            'kitchen': self.x_use_kitchen,
+            'garbage': self.x_need_garbage,
+            'bars': (self.x_num_bars or 0) > 0,
+            'beer_tub': self.x_need_beer_tub,
+            'decorations': self.x_has_decorations,
+            'decor_takedown': (
+                self.x_has_decorations and self.x_decor_takedown_by == 'us'),
+            'setup': self.x_setup_by == 'us',
+            'takedown': self.x_takedown_by == 'us',
+            # Clean-up always applies — every event needs cleanup assigned.
+            'cleanup': True,
+            'food_us': self.x_food_by_us or self.x_food_request,
+            'food_catered': bool(self.x_caterer_id),
+            'rooms': bool(self.x_room_booking_ids),
+            'extras': bool(self.x_extras),
+        }
+
+    def _generate_checklist_subtasks(self, raise_if_missing=False):
+        """Create subtasks for the applicable checklist items.
+
+        Idempotent: an item already represented by a child task (matched on
+        ``x_checklist_code``) is skipped, so re-running only adds new ones.
+        """
+        self.ensure_one()
+        template = self.env['elks.event.checklist.template'].get_default_template()
+        if not template:
+            if raise_if_missing:
+                raise UserError(_(
+                    "No active checklist template found. Configure one under "
+                    "Events → Configuration → Checklist Templates."
+                ))
+            return self.env['project.task']
+
+        applicability = self._checklist_applicability()
+        existing_codes = set(
+            c for c in self.child_ids.mapped('x_checklist_code') if c
+        )
+        Task = self.env['project.task']
+        created = Task
+        has_alloc = 'allocated_hours' in Task._fields
+        # Default deadline for generated subtasks = the event date, so they're
+        # scheduled out of the box (the coordinator can adjust per task).
+        deadline = False
+        if self.x_event_date and 'date_deadline' in Task._fields:
+            if Task._fields['date_deadline'].type == 'datetime':
+                from datetime import datetime, time as _dtime
+                deadline = datetime.combine(self.x_event_date, _dtime(12, 0))
+            else:
+                deadline = self.x_event_date
+        item_labels = dict(
+            self.env['elks.event.checklist.template.line']
+            ._fields['item_code'].selection
+        )
+        for line in template.line_ids.filtered('create_subtask'):
+            code = line.item_code
+            if not applicability.get(code) or code in existing_codes:
+                continue
+            vals = {
+                'name': line.name or item_labels.get(code, code),
+                'parent_id': self.id,
+                'project_id': self.project_id.id,
+                'x_checklist_code': code,
+            }
+            if line.default_user_id:
+                vals['user_ids'] = [(6, 0, [line.default_user_id.id])]
+            if has_alloc and line.planned_hours:
+                vals['allocated_hours'] = line.planned_hours
+            if deadline:
+                vals['date_deadline'] = deadline
+            created |= Task.create(vals)
+            existing_codes.add(code)
+
+        if created:
+            self.message_post(
+                body=_("Generated %s checklist subtask(s).", len(created)),
+                subtype_xmlid='mail.mt_note',
+            )
+        return created
+
+    def action_generate_checklist_tasks(self):
+        """Button: generate the checklist subtasks for this event."""
+        self.ensure_one()
+        created = self._generate_checklist_subtasks(raise_if_missing=True)
+        if not created:
+            self.message_post(
+                body=_(
+                    "No new checklist subtasks to add — either none apply yet "
+                    "or they already exist."
                 ),
-            ),
+                subtype_xmlid='mail.mt_note',
+            )
+        return True
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Quote engine (sale.order) — staff-only itemized quote
+    # HUMAN: Builds the behind-the-scenes quote: a line per room, plus
+    #        bartenders (one per N guests), catering (per plate), and the
+    #        lodge's default products. Member discount shows as a % on each
+    #        line. The coordinator-fee button adds that line and nudges staff
+    #        if labor hours are missing. The customer never sees this quote.
+    # AI: _sync_quote_lines clears x_event_source lines then rebuilds them,
+    #     preserving manual lines. Uses _event_settings() for products/ratios.
+    #     x_quote_total = SO.amount_untaxed; invoices read from it.
+    # ──────────────────────────────────────────────────────────────────
+    def _event_settings(self):
+        return self.env['elks.lodge.settings'].sudo().search([], limit=1)
+
+    @api.depends('x_sale_order_id.amount_untaxed')
+    def _compute_quote_total(self):
+        for rec in self:
+            rec.x_quote_total = (
+                rec.x_sale_order_id.amount_untaxed
+                if rec.x_sale_order_id else 0.0
+            )
+
+    def action_open_quote(self):
+        """Create the quote if needed, then open it (staff-only)."""
+        self.ensure_one()
+        if self.x_is_elks_event:
+            raise UserError(_(
+                "Elks Events are not billed, so they have no quote."))
+        if not self.x_sale_order_id:
+            self._create_event_quote()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _("Event Quote"),
+            'res_model': 'sale.order',
+            'res_id': self.x_sale_order_id.id,
+            'view_mode': 'form',
+        }
+
+    def _create_event_quote(self):
+        self.ensure_one()
+        partner = self._get_event_partner()
+        so = self.env['sale.order'].create({
+            'partner_id': partner.id,
+            'x_event_task_id': self.id,
+            'origin': self.name,
+        })
+        self.x_sale_order_id = so
+        self._sync_quote_lines()
+        return so
+
+    def action_build_quote(self):
+        """Create the quote if needed and (re)build the automatic lines."""
+        self.ensure_one()
+        if self.x_is_elks_event:
+            raise UserError(_(
+                "Elks Events are not billed, so they have no quote."))
+        if not self.x_sale_order_id:
+            self._create_event_quote()
+        else:
+            self._sync_quote_lines()
+        return self.action_open_quote()
+
+    def _sync_quote_lines(self):
+        """Rebuild the auto-generated quote lines; preserve manual lines.
+
+        Auto lines are tagged with ``x_event_source`` so a rebuild only
+        replaces them, leaving any hand-added lines untouched.
+        """
+        self.ensure_one()
+        so = self.x_sale_order_id
+        if not so:
+            return
+        settings = self._event_settings()
+        so.order_line.filtered('x_event_source').unlink()
+        SOL = self.env['sale.order.line']
+
+        # Rooms (one line per booking, mapped product, overridden price)
+        for rb in self.x_room_booking_ids:
+            prod = rb.room_id.x_product_id
+            if not prod:
+                continue
+            SOL.create({
+                'order_id': so.id,
+                'product_id': prod.id,
+                'name': _("Room: %s", rb.room_id.name),
+                'product_uom_qty': 1,
+                'price_unit': rb.subtotal,
+                'x_event_source': 'room:%s' % rb.id,
+            })
+
+        if settings:
+            # Bartenders — guest-driven
+            if (settings.x_bartender_product_id
+                    and settings.x_guests_per_bartender
+                    and self.x_guest_count):
+                bartenders = math.ceil(
+                    self.x_guest_count / settings.x_guests_per_bartender)
+                if bartenders > 0:
+                    SOL.create({
+                        'order_id': so.id,
+                        'product_id': settings.x_bartender_product_id.id,
+                        'product_uom_qty': bartenders,
+                        'x_event_source': 'bartender',
+                    })
+            # Catering — per plate, guest-driven (all food is lodge-catered)
+            if ((self.x_food_request or self.x_food_by_us)
+                    and settings.x_catering_product_id and self.x_guest_count):
+                SOL.create({
+                    'order_id': so.id,
+                    'product_id': settings.x_catering_product_id.id,
+                    'product_uom_qty': self.x_guest_count,
+                    'price_unit': settings.x_per_plate_charge or 0.0,
+                    'x_event_source': 'catering',
+                })
+            # Default products added to every event quote
+            for prod in settings.x_default_quote_product_ids:
+                SOL.create({
+                    'order_id': so.id,
+                    'product_id': prod.id,
+                    'product_uom_qty': 1,
+                    'x_event_source': 'default:%s' % prod.id,
+                })
+
+            # Seed estimated labor hours from settings. Labor is NOT a customer
+            # charge line (the customer sees the event rental price); it's a
+            # back-end estimate that feeds the event's P&L cost side.
+            if not self.x_est_event_hours and settings.x_default_event_hours:
+                self.x_est_event_hours = settings.x_default_event_hours
+            if not self.x_est_cleaning_hours and settings.x_default_cleaning_hours:
+                self.x_est_cleaning_hours = settings.x_default_cleaning_hours
+
+            # Member discount — shown as a discount % on every auto line so the
+            # quote reflects the same net the customer's invoice will charge.
+            # Celebration of Life (memorial) with a member number entered also
+            # gets the member rate (covers the member's family).
+            is_col = (
+                self.x_event_type == 'memorial'
+                and self.x_member_number
+                and self.x_member_number != '000000000'
+            )
+            apply_member_rate = self.x_is_member or is_col
+            if apply_member_rate and settings.x_member_discount_pct:
+                so.order_line.filtered('x_event_source').write({
+                    'discount': settings.x_member_discount_pct,
+                })
+            # COL: facility/room is no charge for a departed member (food, bar
+            # and other services are still billed at the member rate above).
+            if is_col:
+                so.order_line.filtered(
+                    lambda l: (l.x_event_source or '').startswith('room')
+                ).write({'discount': 100.0})
+
+            # Lodge-provided insurance (when the renter can't supply their own).
+            # Added AFTER the discount write so it bills at full price.
+            if self.x_insurance_by == 'lodge' and settings.x_insurance_product_id:
+                SOL.create({
+                    'order_id': so.id,
+                    'product_id': settings.x_insurance_product_id.id,
+                    'product_uom_qty': 1,
+                    'x_event_source': 'insurance',
+                })
+
+    def action_add_coordinator_fee(self):
+        """Add/refresh the coordinator fee line and check labor is included."""
+        self.ensure_one()
+        so = self.x_sale_order_id
+        if not so:
+            raise UserError(_(
+                "Build the quote first, then add the coordinator fee."))
+        settings = self._event_settings()
+        if not settings or not settings.x_coordinator_product_id:
+            raise UserError(_(
+                "Set a Coordinator Fee Product in Lodge Settings first."))
+        room_total = sum(self.x_room_booking_ids.mapped('subtotal'))
+        if settings.x_coordinator_fee_type == 'fixed':
+            fee = settings.x_coordinator_fixed_rate or 0.0
+        else:
+            fee = room_total * ((settings.x_coordinator_percentage or 0.0) / 100.0)
+        so.order_line.filtered(
+            lambda l: l.x_event_source == 'coordinator').unlink()
+        self.env['sale.order.line'].create({
+            'order_id': so.id,
+            'product_id': settings.x_coordinator_product_id.id,
+            'name': _("Event Coordinator Fee"),
+            'product_uom_qty': 1,
+            'price_unit': fee,
+            'x_event_source': 'coordinator',
+        })
+        # Nudge if labor isn't captured when the lodge does setup/takedown
+        if self.x_setup_by == 'us' or self.x_takedown_by == 'us':
+            labor = self.x_cost_line_ids.filtered(
+                lambda c: c.cost_type in (
+                    'setup_labor', 'event_labor', 'cleanup_labor'))
+            if not labor:
+                self.message_post(
+                    body=_(
+                        "<b>Reminder:</b> the lodge is doing setup/takedown "
+                        "but no event-staff labor lines are entered. Add them "
+                        "so labor is included in costs."),
+                    subtype_xmlid='mail.mt_note',
+                )
+        self.message_post(
+            body=_("Coordinator fee set: $%(fee).2f", fee=fee),
             subtype_xmlid='mail.mt_note',
         )
+        return True
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Labor hours — actuals from the timeclock + true-up
+    # HUMAN: Pull the hours actually worked (from the timeclock, tagged to
+    #        this event) and compare them to what we charged, so the final
+    #        bill can be brought down (or up) to match reality.
+    # AI: _compute_actual_hours is non-stored — it re-reads hr.attendance on
+    #     access, grouped by x_event_role. action_trueup_labor_hours copies
+    #     actuals into the est fields and rebuilds the quote.
+    # ──────────────────────────────────────────────────────────────────
+    @api.depends('x_est_event_hours', 'x_est_cleaning_hours')
+    def _compute_actual_hours(self):
+        Att = self.env['hr.attendance']
+        settings = self.env['elks.lodge.settings'].sudo().search([], limit=1)
+        ev_rate = (settings.x_event_labor_product_id.list_price
+                   if settings and settings.x_event_labor_product_id else 0.0)
+        cl_rate = (settings.x_cleaning_product_id.list_price
+                   if settings and settings.x_cleaning_product_id else 0.0)
+        for rec in self:
+            atts = Att.search([('x_event_id', '=', rec.id)]) if rec.id else Att
+            ev = sum(atts.filtered(
+                lambda a: a.x_event_role == 'event').mapped('worked_hours'))
+            cl = sum(atts.filtered(
+                lambda a: a.x_event_role == 'custodial').mapped('worked_hours'))
+            rec.x_actual_event_hours = ev
+            rec.x_actual_cleaning_hours = cl
+            rec.x_event_hours_variance = (rec.x_est_event_hours or 0.0) - ev
+            rec.x_cleaning_hours_variance = (rec.x_est_cleaning_hours or 0.0) - cl
+            rec.x_est_labor_cost = (
+                (rec.x_est_event_hours or 0.0) * ev_rate
+                + (rec.x_est_cleaning_hours or 0.0) * cl_rate)
+            rec.x_actual_labor_cost = ev * ev_rate + cl * cl_rate
+
+    def action_trueup_labor_hours(self):
+        """Set the estimated hours to the actual worked hours (for the P&L)."""
+        self.ensure_one()
+        self.x_est_event_hours = self.x_actual_event_hours
+        self.x_est_cleaning_hours = self.x_actual_cleaning_hours
+        self.message_post(
+            body=_(
+                "Labor trued-up to actual hours: event %(ev).1f h, "
+                "cleaning %(cl).1f h.",
+                ev=self.x_actual_event_hours,
+                cl=self.x_actual_cleaning_hours),
+            subtype_xmlid='mail.mt_note',
+        )
+        return True
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Calendar booking (placeholder until approved)
+    # HUMAN: Puts a tentative (greyed) hold on the lodge calendar when the
+    #        event is submitted, then makes it a real booking once approved.
+    # AI: _ensure_placeholder_calendar (show_as='free', 'TENTATIVE:' name) ->
+    #     _promote_calendar (show_as='busy'). Window from x_event_date or
+    #     date_deadline + start/end float times. All sudo, wrapped so calendar
+    #     failures never block the workflow. Link: x_calendar_event_id.
+    # ──────────────────────────────────────────────────────────────────
+    def _event_calendar_window(self):
+        """Return (start_dt, stop_dt) for the booking, or (None, None)."""
+        self.ensure_one()
+        from datetime import datetime, time as dtime, timedelta
+        d = self.x_event_date
+        if not d and self.date_deadline:
+            dl = self.date_deadline
+            d = dl.date() if hasattr(dl, 'date') else dl
+        if not d:
+            return None, None
+
+        def _to_time(val, default_h):
+            if not val:
+                return dtime(default_h, 0)
+            h = int(val)
+            m = int(round((val - h) * 60))
+            return dtime(min(h, 23), min(m, 59))
+
+        start = datetime.combine(d, _to_time(self.x_event_start_time, 9))
+        if self.x_event_end_time and self.x_event_end_time > (
+                self.x_event_start_time or 0):
+            stop = datetime.combine(d, _to_time(self.x_event_end_time, 17))
+        else:
+            stop = start + timedelta(hours=2)
+        return start, stop
+
+    def _ensure_placeholder_calendar(self):
+        """Create a greyed (tentative) calendar entry if none exists yet."""
+        self.ensure_one()
+        if self.x_calendar_event_id or not self.x_is_event:
+            return
+        start, stop = self._event_calendar_window()
+        if not start:
+            return
+        try:
+            ev = self.env['calendar.event'].sudo().create({
+                'name': _("TENTATIVE: %s", self.name or 'Event'),
+                'start': start,
+                'stop': stop,
+                'show_as': 'free',
+                'x_event_task_id': self.id,
+            })
+            self.x_calendar_event_id = ev.id
+        except Exception as e:  # noqa: BLE001 - never block the workflow
+            _logger.warning("Event calendar placeholder failed: %s", e)
+
+    def _promote_calendar(self):
+        """Promote the placeholder to a confirmed booking on approval."""
+        self.ensure_one()
+        if not self.x_calendar_event_id:
+            self._ensure_placeholder_calendar()
+        if self.x_calendar_event_id:
+            start, stop = self._event_calendar_window()
+            vals = {'name': self.name or 'Event', 'show_as': 'busy'}
+            if start:
+                vals.update({'start': start, 'stop': stop})
+            self.x_calendar_event_id.sudo().write(vals)
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Customer emails
+    # HUMAN: Sends the customer the right note at each step (received,
+    #        approved, denied, deposit received) and a balance-due reminder
+    #        a few weeks before the event.
+    # AI: _send_event_mail(xmlid) is a best-effort send (no email = no-op).
+    #     The reminder cron _cron_event_balance_due_reminders fires on events
+    #     dated exactly settings.x_balance_due_days_before from today.
+    # ──────────────────────────────────────────────────────────────────
+    def _send_event_mail(self, xmlid):
+        """Send a mail template to the event customer (best-effort)."""
+        self.ensure_one()
+        if not self.x_customer_email:
+            return
+        tmpl = self.env.ref(xmlid, raise_if_not_found=False)
+        if tmpl:
+            tmpl.send_mail(self.id, force_send=False)
+
+    @api.model
+    def _cron_event_balance_due_reminders(self):
+        """Email the balance-due reminder N days before each approved event."""
+        settings = self.env['elks.lodge.settings'].sudo().search([], limit=1)
+        days = (settings.x_balance_due_days_before if settings else 21) or 21
+        target = fields.Date.context_today(self) + timedelta(days=days)
+        events = self.search([
+            ('x_is_event', '=', True),
+            ('x_is_elks_event', '=', False),
+            ('x_approval_state', '=', 'approved'),
+            ('x_event_date', '=', target),
+        ])
+        for e in events:
+            e._send_event_mail('elksevent.tmpl_event_balance_reminder')
 
     def action_receive_deposit(self):
         """Record deposit as received."""
@@ -522,79 +1502,172 @@ class ProjectTask(models.Model):
             ),
             subtype_xmlid='mail.mt_note',
         )
+        self._send_event_mail('elksevent.tmpl_event_deposit_received')
 
-    # ------------------------------------------------------------------
-    # Invoice generation
-    # ------------------------------------------------------------------
-    def action_create_invoice(self):
-        """Create a customer invoice from this event's billing."""
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Invoice generation — two single-line invoices (deposit + final)
+    # HUMAN: Bills the customer in two clean charges: a deposit (e.g. 50%) to
+    #        hold the date, then the balance. Each is ONE line so the customer
+    #        sees a simple total; the member discount and Terms link still show.
+    #        "Refresh from Quote" updates a still-draft invoice if the quote
+    #        changed; a posted invoice must be cancelled and recreated.
+    # AI: Base = x_quote_total (fallback x_total_billed). Portion split by
+    #     settings.x_deposit_pct; member discount applied as line discount;
+    #     tax from settings.x_event_tax_id (else none). x_event_invoice_kind
+    #     enforces one-per-kind. These amounts are what payment_clover charges.
+    # ──────────────────────────────────────────────────────────────────
+    def _event_invoice_base(self):
+        """Return (base, discount_pct, deposit_pct) for invoice math.
+
+        ``base`` is the quote total, which is ALREADY net of the member
+        discount and any COL waiver (those are line discounts on the quote),
+        so the invoice does NOT discount again — disc is 0.
+        """
         self.ensure_one()
-        if not self.x_total_billed or self.x_total_billed <= 0:
-            raise UserError(_(
-                "There is nothing to invoice. Add room bookings first."
-            ))
+        settings = self._event_settings()
+        base = self.x_quote_total or self.x_total_billed or 0.0
+        disc = 0.0
+        deposit_pct = (settings.x_deposit_pct if settings else 50.0) or 0.0
+        return base, disc, deposit_pct
 
+    def _event_invoice_terms(self):
+        settings = self._event_settings()
+        if settings and settings.x_event_terms_url:
+            label = settings.x_event_terms_label or _("Rental Use Agreement")
+            return '<a href="%s">%s</a>' % (settings.x_event_terms_url, label)
+        return self.x_contract_notes or ''
+
+    def _event_invoice_tax_cmd(self):
+        settings = self._event_settings()
+        if settings and settings.x_event_tax_id:
+            return [(6, 0, settings.x_event_tax_id.ids)]
+        return [(5, 0, 0)]
+
+    def _event_invoice_line_name(self, label):
+        parts = [label, self.name]
+        if self.x_event_date:
+            parts.append(str(self.x_event_date))
+        if self.x_is_member and self.x_member_number:
+            parts.append(_("Member #%s", self.x_member_number))
+        return " — ".join(p for p in parts if p)
+
+    def _event_invoice_portion(self, kind):
+        """Gross amount and product/label for a deposit or final invoice."""
+        base, disc, deposit_pct = self._event_invoice_base()
+        settings = self._event_settings()
+        if kind == 'deposit':
+            gross = base * deposit_pct / 100.0
+            product = settings.x_deposit_product_id if settings else False
+            label = _("Reservation Fee")
+        else:
+            gross = base * (1.0 - deposit_pct / 100.0)
+            product = settings.x_facility_product_id if settings else False
+            label = _("Facility Usage and Rental")
+        return gross, disc, product, label
+
+    def _build_event_invoice(self, kind):
+        self.ensure_one()
+        if self.x_is_elks_event:
+            raise UserError(_(
+                "This is an Elks Event — it is not billed."))
+        base = self.x_quote_total or self.x_total_billed or 0.0
+        if base <= 0:
+            raise UserError(_(
+                "Nothing to invoice. Build the event quote first."))
+        existing = self.x_invoice_ids.filtered(
+            lambda m: m.state != 'cancel' and m.x_event_invoice_kind == kind)
+        if existing:
+            raise UserError(_(
+                "A %(kind)s invoice already exists. Refresh it while draft, "
+                "or cancel it before creating a new one.", kind=kind))
+
+        gross, disc, product, label = self._event_invoice_portion(kind)
         partner = self._get_event_partner()
-        move_vals = {
+        line = {
+            'name': self._event_invoice_line_name(label),
+            'quantity': 1,
+            'price_unit': gross,
+            'discount': disc,
+            'tax_ids': self._event_invoice_tax_cmd(),
+        }
+        if product:
+            line['product_id'] = product.id
+        # Ensure the line has an income account. If the product (or no product)
+        # doesn't resolve one, fall back to any income account so the invoice
+        # can be created instead of failing with "missing required account".
+        account = self._event_income_account(product)
+        if account:
+            line['account_id'] = account.id
+        move = self.env['account.move'].create({
             'move_type': 'out_invoice',
             'partner_id': partner.id,
             'x_event_id': self.id,
-            'narration': self.x_contract_notes or '',
-            'invoice_origin': f"Event: {self.name}",
-        }
-
-        lines = []
-        if self.x_invoice_style == 'itemized' and self.x_room_booking_ids:
-            # One line per room
-            for booking in self.x_room_booking_ids:
-                lines.append((0, 0, {
-                    'name': f"Room: {booking.room_id.name}",
-                    'quantity': 1,
-                    'price_unit': booking.subtotal,
-                }))
-            # Coordinator fee as separate line
-            if self.x_coordinator_fee:
-                lines.append((0, 0, {
-                    'name': "Event Coordinator Fee",
-                    'quantity': 1,
-                    'price_unit': self.x_coordinator_fee,
-                }))
-        else:
-            # Single line with total
-            desc = f"Event: {self.name}"
-            if self.x_event_date:
-                desc += f" ({self.x_event_date})"
-            if self.x_contract_notes:
-                desc += f"\n{self.x_contract_notes}"
-            lines.append((0, 0, {
-                'name': desc,
-                'quantity': 1,
-                'price_unit': self.x_total_billed,
-            }))
-
-        move_vals['invoice_line_ids'] = lines
-        invoice = self.env['account.move'].create(move_vals)
-
+            'x_event_invoice_kind': kind,
+            'invoice_origin': (
+                self.x_sale_order_id.name if self.x_sale_order_id
+                else self.name),
+            'narration': self._event_invoice_terms(),
+            'invoice_line_ids': [(0, 0, line)],
+        })
         self.message_post(
-            body=_(
-                "<b>Invoice Created</b>: "
-                "<a href='#' data-oe-model='account.move' "
-                "data-oe-id='%(inv_id)s'>%(inv_name)s</a> "
-                "for $%(amount).2f",
-                inv_id=invoice.id,
-                inv_name=invoice.name,
-                amount=self.x_total_billed,
-            ),
+            body=_("<b>%(label)s invoice created</b>: %(link)s",
+                   label=label, link=move._get_html_link()),
             subtype_xmlid='mail.mt_note',
         )
-
         return {
             'type': 'ir.actions.act_window',
             'name': _("Event Invoice"),
             'res_model': 'account.move',
-            'res_id': invoice.id,
+            'res_id': move.id,
             'view_mode': 'form',
         }
+
+    def _event_income_account(self, product):
+        """Resolve an income account for an invoice line (with fallback)."""
+        self.ensure_one()
+        acc = False
+        if product:
+            tmpl = product.product_tmpl_id
+            acc = (tmpl.property_account_income_id
+                   or tmpl.categ_id.property_account_income_categ_id)
+        if not acc:
+            acc = self.env['account.account'].search([
+                ('account_type', '=', 'income'),
+                ('deprecated', '=', False),
+            ], limit=1)
+        return acc
+
+    def action_create_deposit_invoice(self):
+        return self._build_event_invoice('deposit')
+
+    def action_create_final_invoice(self):
+        return self._build_event_invoice('final')
+
+    def action_refresh_invoice_from_quote(self):
+        """Rewrite the single line on any DRAFT event invoice to current amounts."""
+        self.ensure_one()
+        drafts = self.x_invoice_ids.filtered(lambda m: m.state == 'draft')
+        if not drafts:
+            raise UserError(_(
+                "No draft invoice to refresh. Posted invoices must be "
+                "cancelled and recreated."))
+        for mv in drafts:
+            kind = mv.x_event_invoice_kind or 'final'
+            gross, disc, product, label = self._event_invoice_portion(kind)
+            line = mv.invoice_line_ids.filtered(
+                lambda l: l.display_type == 'product')[:1]
+            if line:
+                line.write({
+                    'price_unit': gross,
+                    'discount': disc,
+                    'name': self._event_invoice_line_name(label),
+                })
+            mv.narration = self._event_invoice_terms()
+        self.message_post(
+            body=_("Refreshed %s draft invoice(s) from the quote.", len(drafts)),
+            subtype_xmlid='mail.mt_note',
+        )
+        return True
 
     def _get_event_partner(self):
         """Get or create a partner for the event customer."""
@@ -703,6 +1776,7 @@ class ProjectTask(models.Model):
             'description': f"Event bookings for Elk Year {year_label}.",
             'privacy_visibility': 'portal',
             'allow_task_dependencies': True,
+            'x_is_event_project': True,
         })
         # Link stages to new project
         for stage_id in stage_ids:

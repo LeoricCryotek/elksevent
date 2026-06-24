@@ -1,8 +1,20 @@
 # -*- coding: utf-8 -*-
 """Through model linking an event to one or more rentable lodge rooms.
 
-Each booking line copies defaults from the room's maintenance.location
-record but allows per-event overrides for rate, cleaning, and service fees.
+HUMAN
+-----
+One row per room a customer is renting for their event. It starts from the
+room's default rate, cleaning and service fees, but a staffer can override
+any of them for this particular event. The three add up to the room subtotal.
+
+AI
+--
+- Model `elks.event.room.booking`; m2o `event_id` -> project.task (cascade),
+  `room_id` -> maintenance.location (rentable only).
+- `subtotal` = rate + cleaning_fee + service_fee (stored compute).
+- `_onchange_room_id` seeds the three fees from the location defaults.
+- The quote builder maps each booking to a sale line via room_id.x_product_id
+  and is also what the double-booking constraint scans.
 """
 from odoo import api, fields, models
 
