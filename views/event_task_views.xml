@@ -140,10 +140,8 @@
                                    required="x_is_elks_event"/>
                             <field name="x_event_type"/>
                             <field name="x_event_date"/>
-                            <field name="x_event_start_time_text"
-                                   placeholder="e.g. 10:30 am"/>
-                            <field name="x_event_end_time_text"
-                                   placeholder="e.g. 12:00 pm"/>
+                            <field name="x_event_start_sel"/>
+                            <field name="x_event_end_sel"/>
                             <field name="x_event_duration" widget="float_time"
                                    readonly="1"/>
                             <field name="x_guest_count"/>
@@ -151,6 +149,8 @@
                                    groups="elksevent.group_event_officer"/>
                         </group>
                         <group string="Customer Contact">
+                            <field name="partner_id" string="Contact"
+                                   placeholder="Pick a customer or business..."/>
                             <field name="x_customer_name"/>
                             <field name="x_customer_phone" widget="phone"/>
                             <field name="x_customer_email" widget="email"/>

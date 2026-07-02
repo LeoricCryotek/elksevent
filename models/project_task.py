@@ -152,6 +152,20 @@ class ProjectTask(models.Model):
         inverse='_inverse_event_time_text', store=True,
         help="Type a time like '12:00 pm' or '11 pm'.",
     )
+    # Selectable (dropdown) mirrors in 15-minute steps for the BACKEND form.
+    # Keys are minutes-since-midnight; the canonical value still lives in the
+    # Float fields (which feed the calendar), so picking here updates them and
+    # the calendar booking follows. See _event_time_options / _float_to_minkey.
+    x_event_start_sel = fields.Selection(
+        selection='_event_time_options', string="Start Time",
+        compute='_compute_event_time_sel',
+        inverse='_inverse_event_time_sel', store=True,
+    )
+    x_event_end_sel = fields.Selection(
+        selection='_event_time_options', string="End Time",
+        compute='_compute_event_time_sel',
+        inverse='_inverse_event_time_sel', store=True,
+    )
     x_event_duration = fields.Float(
         "Duration (hrs)", compute='_compute_event_duration', store=True,
     )
@@ -639,6 +653,59 @@ class ProjectTask(models.Model):
             end = rec._parse_time_text(rec.x_event_end_time_text)
             if end is not None:
                 rec.x_event_end_time = end
+
+    # ── Selectable 15-minute time dropdowns (backend form) ──────────────
+    @api.model
+    def _event_time_options(self):
+        """Return [(minutes_str, '10:30 AM'), ...] in 15-minute steps."""
+        opts = []
+        for slot in range(96):  # 24h * 4 quarter-hours
+            mins = slot * 15
+            h, m = divmod(mins, 60)
+            ap = 'AM' if h < 12 else 'PM'
+            h12 = h % 12 or 12
+            opts.append((str(mins), f"{h12}:{m:02d} {ap}"))
+        return opts
+
+    @staticmethod
+    def _float_to_minkey(val):
+        """Decimal hours -> nearest-15-min key ('630' for 10:30), or False."""
+        if not val:
+            return False
+        mins = int(round((val * 60) / 15.0)) * 15
+        if mins >= 1440:
+            mins = 1425
+        return str(mins)
+
+    @api.depends('x_event_start_time', 'x_event_end_time')
+    def _compute_event_time_sel(self):
+        for rec in self:
+            rec.x_event_start_sel = rec._float_to_minkey(rec.x_event_start_time)
+            rec.x_event_end_sel = rec._float_to_minkey(rec.x_event_end_time)
+
+    def _inverse_event_time_sel(self):
+        for rec in self:
+            if rec.x_event_start_sel:
+                rec.x_event_start_time = int(rec.x_event_start_sel) / 60.0
+            if rec.x_event_end_sel:
+                rec.x_event_end_time = int(rec.x_event_end_sel) / 60.0
+
+    @api.onchange('partner_id')
+    def _onchange_partner_fill_host(self):
+        """Auto-fill the Host name/phone/email from the chosen Contact.
+
+        Only fills blanks so a manually typed host detail is never clobbered.
+        The Contact may be a person or a company (any res.partner).
+        """
+        p = self.partner_id
+        if not p:
+            return
+        if not self.x_customer_name:
+            self.x_customer_name = p.name
+        if not self.x_customer_phone:
+            self.x_customer_phone = p.phone or p.mobile
+        if not self.x_customer_email:
+            self.x_customer_email = p.email
 
     # ------------------------------------------------------------------
     # Computed: staff totals (legacy fields)
