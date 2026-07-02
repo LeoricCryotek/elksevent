@@ -11,14 +11,17 @@ Key features
 ============
 - Public website form for event requests
 - Kanban pipeline: New → Contacted → Submitted to Board → Booked → After Action → Completed / Cancelled
-- Board approval workflow with secretary notification
+- Board + membership-floor approval workflow (Event Officer group) with secretary notification
 - Room / venue selection from rentable lodge locations
-- Event cost tracking (setup, event, cleanup hours, supplies, bar services, coordinator fee)
+- Staff-only itemized quote engine (sale.order); customer sees a single event rental price
+- Labor hours tracked from the timeclock (hr.attendance) as an internal P&L cost
 - Coordinator fee — fixed rate or percentage of room income (configurable)
-- Single-line or itemized-by-room customer invoicing
-- Budget control — costs cannot exceed billed amount without authorised override
+- Two-invoice billing: reservation deposit + final balance (Clover-ready)
+- Member and Celebration-of-Life pricing rules
+- Approved events auto-publish to the lodge calendar
+- Assessor / UBI reporting and AP GL breakout by FRS account
 - Per-event and date-range P&L reports with Elks lodge header
-- Auto-creation of Elk Year parent project (April – March)
+- All events file into one global "Events" project
     """,
     'author': 'Lewiston Clarkston Elks Lodge #896',
     'website': 'https://lcvalleyelks.org',
