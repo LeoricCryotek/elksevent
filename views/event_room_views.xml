@@ -96,6 +96,7 @@
                         <field name="x_event_terms_label"/>
                         <field name="x_event_checklist_template_id"/>
                         <field name="x_event_project_id"/>
+                        <field name="x_event_calendar_user_id"/>
                         <field name="x_event_floor_plan" widget="image"
                                class="oe_avatar"/>
                     </group>

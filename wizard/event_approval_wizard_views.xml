@@ -10,20 +10,23 @@
                 <field name="event_id" invisible="1"/>
                 <group>
                     <field name="vote_result"/>
+                    <field name="all_in_favor"/>
                     <field name="motion_number"/>
                     <field name="vote_date"/>
                 </group>
-                <group string="Vote Tally">
+                <group string="Vote Tally" invisible="all_in_favor">
                     <field name="vote_for"/>
                     <field name="vote_against"/>
                 </group>
-                <group string="Notes">
-                    <field name="notes" nolabel="1"
-                           placeholder="Conditions, amendments, or context from the vote..."/>
-                </group>
+                <separator string="Notes"/>
+                <field name="notes" nolabel="1"
+                       placeholder="Conditions, amendments, or context from the vote..."/>
                 <footer>
-                    <button name="action_record_vote" string="Record Vote"
+                    <button name="action_record_all_in_favor"
+                            string="Record — All in Favor"
                             type="object" class="btn-primary"/>
+                    <button name="action_record_vote" string="Record Vote"
+                            type="object" class="btn-secondary"/>
                     <button string="Cancel" special="cancel"/>
                 </footer>
             </form>

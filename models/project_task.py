@@ -1441,7 +1441,15 @@ class ProjectTask(models.Model):
             _logger.warning("Event calendar placeholder failed: %s", e)
 
     def _promote_calendar(self):
-        """Promote the placeholder to a confirmed booking on approval."""
+        """Promote the placeholder to a confirmed booking on approval.
+
+        On approval we also reassign the calendar.event's organizer
+        (``user_id``) to the settings 'Events Calendar User'. The Elks
+        Calendar publisher gathers calendar.event where
+        ``user_id == publication.calendar_id``, so this is what makes an
+        approved event populate the printed calendar automatically. The
+        tentative placeholder stays off that user's calendar until now.
+        """
         self.ensure_one()
         if not self.x_calendar_event_id:
             self._ensure_placeholder_calendar()
@@ -1450,6 +1458,11 @@ class ProjectTask(models.Model):
             vals = {'name': self.name or 'Event', 'show_as': 'busy'}
             if start:
                 vals.update({'start': start, 'stop': stop})
+            settings = self._event_settings()
+            cal_user = settings.x_event_calendar_user_id if settings else False
+            if cal_user:
+                vals['user_id'] = cal_user.id
+                vals['partner_ids'] = [(4, cal_user.partner_id.id)]
             self.x_calendar_event_id.sudo().write(vals)
 
     # ──────────────────────────────────────────────────────────────────

@@ -16,7 +16,7 @@ AI
   event.action_record_floor_approved / _floor_rejected.
 - Mirrors elkspurchase.floor.vote.wizard by design.
 """
-from odoo import _, fields, models
+from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 
 
@@ -42,6 +42,9 @@ class EventFloorVoteWizard(models.TransientModel):
         "Motion Number",
         help="The motion number from the Lodge meeting minutes.",
     )
+    all_in_favor = fields.Boolean(
+        "All in Favor (unanimous)",
+        help="Motion passed unanimously — no counted tally needed.")
     vote_for = fields.Integer("Votes For")
     vote_against = fields.Integer("Votes Against")
     vote_date = fields.Date(
@@ -50,6 +53,18 @@ class EventFloorVoteWizard(models.TransientModel):
     notes = fields.Text(
         "Notes", help="Any conditions, amendments, or additional context.",
     )
+
+    @api.onchange('all_in_favor')
+    def _onchange_all_in_favor(self):
+        if self.all_in_favor:
+            self.vote_result = 'approved'
+
+    def action_record_all_in_favor(self):
+        """One-click: record the motion as passed unanimously (all in favor)."""
+        self.ensure_one()
+        self.all_in_favor = True
+        self.vote_result = 'approved'
+        return self.action_record_vote()
 
     def action_record_vote(self):
         """Record the floor vote and advance the event."""
@@ -61,7 +76,9 @@ class EventFloorVoteWizard(models.TransientModel):
         parts = []
         if self.motion_number:
             parts.append(f"Motion: {self.motion_number}")
-        if self.vote_for or self.vote_against:
+        if self.all_in_favor:
+            parts.append("Passed unanimously — all in favor.")
+        elif self.vote_for or self.vote_against:
             parts.append(
                 f"Vote: {self.vote_for} for / {self.vote_against} against")
         parts.append(f"Meeting date: {self.vote_date}")

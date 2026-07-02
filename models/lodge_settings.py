@@ -122,6 +122,12 @@ class ElksLodgeSettings(models.Model):
         help="A picture/map of the lodge shown on the public booking form "
              "above the room choices. Upload a PNG/JPG.",
     )
+    x_event_calendar_user_id = fields.Many2one(
+        'res.users', string="Events Calendar User",
+        help="Approved events publish onto THIS user's calendar. Set the Elks "
+             "Calendar publication's 'Source User Calendar' to the same user "
+             "so approved events populate the printed calendar automatically.",
+    )
 
     # ------------------------------------------------------------------
     # Default products (the items added to event quotes / invoices)
