@@ -368,7 +368,7 @@
                             <field name="x_taxable_subtotal" readonly="1"
                                    string="↳ Taxable (goods)"/>
                             <field name="x_nontaxable_subtotal" readonly="1"
-                                   string="↳ Non-Taxable (services)"/>
+                                   string="↳ Non-Taxable Services"/>
                             <field name="x_event_tax_amount" readonly="1"
                                    string="Tax (on taxable only)"/>
                             <field name="x_event_grand_total" readonly="1"
@@ -385,13 +385,18 @@
                         </group>
                     </group>
                     <group>
-                        <group string="Cost Summary">
-                            <field name="x_total_costs" readonly="1"/>
+                        <group string="Cost Summary (P&amp;L)">
+                            <field name="x_cogs"/>
                             <field name="x_po_total" readonly="1"
                                    string="Total from POs"/>
-                            <field name="x_budget_remaining" readonly="1"
-                                   decoration-danger="x_budget_remaining &lt; 0"
-                                   decoration-success="x_budget_remaining &gt;= 0"/>
+                            <field name="x_est_labor_cost" readonly="1"
+                                   string="Labor (est.)"/>
+                            <field name="x_total_costs" readonly="1"
+                                   class="oe_subtotal_footer_separator"/>
+                            <field name="x_net_income" readonly="1"
+                                   string="Net (Revenue − Costs)"
+                                   decoration-danger="x_net_income &lt; 0"
+                                   decoration-success="x_net_income &gt;= 0"/>
                         </group>
                         <group string="Quote &amp; Invoice">
                             <field name="x_sale_order_id" readonly="1"/>
@@ -408,6 +413,10 @@
                                    decoration-danger="x_event_hours_variance &lt; 0"
                                    decoration-success="x_event_hours_variance &gt;= 0"/>
                         </group>
+                        <group string="Bartender">
+                            <field name="x_est_bartender_hours"/>
+                            <field name="x_actual_bartender_hours"/>
+                        </group>
                         <group string="Cleaning / Custodial">
                             <field name="x_est_cleaning_hours"/>
                             <field name="x_actual_cleaning_hours"/>
@@ -421,7 +430,19 @@
                         </group>
                         <button name="action_trueup_labor_hours" type="object"
                                 string="True-up to Actual Hours" class="btn-secondary"
-                                help="Set the estimated hours to the hours actually worked (updates the P&amp;L)."/>
+                                help="Sets estimated hours to the actual timeclock hours per role and rolls the actual labor cost into the P&amp;L."/>
+                    </group>
+                    <group string="Timeclock — assign a role to each shift (pulled from Attendance)">
+                        <field name="x_attendance_ids" nolabel="1" colspan="2">
+                            <list editable="bottom">
+                                <field name="employee_id"/>
+                                <field name="check_in"/>
+                                <field name="check_out"/>
+                                <field name="worked_hours" widget="float_time"
+                                       string="Hours" sum="Total Hours"/>
+                                <field name="x_event_role"/>
+                            </list>
+                        </field>
                     </group>
                     <group string="Contract / Agreement Notes">
                         <field name="x_contract_notes" nolabel="1" colspan="2"

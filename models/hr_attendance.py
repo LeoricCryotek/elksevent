@@ -33,8 +33,10 @@ class HrAttendance(models.Model):
         help="The event this shift was worked for.",
     )
     x_event_role = fields.Selection([
-        ('event', 'Event Staff'),
-        ('custodial', 'Custodial / Cleanup'),
-    ], string="Event Work Type", default='event',
-        help="Whether this shift counts as event-staff or custodial labor.",
+        ('event', 'Event Worker'),
+        ('bartender', 'Bartender'),
+        ('custodial', 'Cleaning / Custodial'),
+    ], string="Event Role", default='event',
+        help="Which kind of labor this shift counts as. Drives the actual "
+             "labor cost rolled into the event's P&L on true-up.",
     )

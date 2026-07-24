@@ -313,9 +313,20 @@ class ProjectTask(models.Model):
     x_cost_line_ids = fields.One2many(
         'elks.event.cost.line', 'event_id', string="Event Costs",
     )
+    x_cogs = fields.Monetary(
+        "COGS (Cost of Goods)", currency_field='x_currency_id', tracking=True,
+        help="Direct cost to the lodge of the goods/services sold for this "
+             "event (bar stock, food, rentals, etc.) not already captured by a "
+             "Purchase Order. Feeds Total Costs for the P&L.",
+    )
     x_total_costs = fields.Monetary(
         "Total Costs", currency_field='x_currency_id',
         compute='_compute_financials', store=True,
+    )
+    x_net_income = fields.Monetary(
+        "Net (P&L)", currency_field='x_currency_id',
+        compute='_compute_financials', store=True,
+        help="Revenue (pre-tax billed) minus Total Costs (COGS + POs + labor).",
     )
 
     # ------------------------------------------------------------------
@@ -450,12 +461,21 @@ class ProjectTask(models.Model):
     x_est_cleaning_hours = fields.Float(
         "Est. Cleaning Hours",
         help="Custodial/cleaning hours charged on the quote.")
+    x_est_bartender_hours = fields.Float(
+        "Est. Bartender Hours",
+        help="Bartender hours estimated for the P&L.")
     x_actual_event_hours = fields.Float(
         "Actual Event-Staff Hours", compute='_compute_actual_hours',
         help="Event-staff hours actually worked (from the timeclock).")
     x_actual_cleaning_hours = fields.Float(
         "Actual Cleaning Hours", compute='_compute_actual_hours',
         help="Custodial hours actually worked (from the timeclock).")
+    x_actual_bartender_hours = fields.Float(
+        "Actual Bartender Hours", compute='_compute_actual_hours',
+        help="Bartender hours actually worked (from the timeclock).")
+    # The event's timeclock punches (assign a role per shift here).
+    x_attendance_ids = fields.One2many(
+        'hr.attendance', 'x_event_id', string="Event Attendance")
     x_event_hours_variance = fields.Float(
         "Event Hours Variance", compute='_compute_actual_hours',
         help="Charged minus actual event-staff hours.")
@@ -905,7 +925,7 @@ class ProjectTask(models.Model):
         'x_cost_line_ids.x_taxable',
         'x_coordinator_fee',
         'x_room_rental_rate',
-        'x_est_labor_cost',
+        'x_est_labor_cost', 'x_cogs',
         'x_deposit_amount', 'x_deposit_received',
         'x_purchase_order_ids.amount_total',
         'x_purchase_order_ids.state',
@@ -967,7 +987,9 @@ class ProjectTask(models.Model):
                     lambda p: p.state != 'cancel'
                 ).mapped('amount_total')
             )
-            rec.x_total_costs = po_total + (rec.x_est_labor_cost or 0.0)
+            rec.x_total_costs = (
+                (rec.x_cogs or 0.0) + po_total + (rec.x_est_labor_cost or 0.0))
+            rec.x_net_income = rec.x_total_billed - rec.x_total_costs
 
             # Balance due
             deposit = rec.x_deposit_amount if rec.x_deposit_received else 0.0
@@ -1528,7 +1550,7 @@ class ProjectTask(models.Model):
             SOL.create({
                 'order_id': so.id,
                 'product_id': rental_product.id,
-                'name': _("Event Rental — non-taxable items"),
+                'name': _("Event Rental — non-taxable services"),
                 'product_uom_qty': 1,
                 'price_unit': nontax_total,
                 'tax_ids': [(6, 0, [])],
@@ -1588,40 +1610,54 @@ class ProjectTask(models.Model):
     #     access, grouped by x_event_role. action_trueup_labor_hours copies
     #     actuals into the est fields and rebuilds the quote.
     # ──────────────────────────────────────────────────────────────────
-    @api.depends('x_est_event_hours', 'x_est_cleaning_hours')
+    @api.depends('x_est_event_hours', 'x_est_cleaning_hours',
+                 'x_est_bartender_hours',
+                 'x_attendance_ids.worked_hours', 'x_attendance_ids.x_event_role')
     def _compute_actual_hours(self):
-        Att = self.env['hr.attendance']
         settings = self.env['elks.lodge.settings'].sudo().search([], limit=1)
         ev_rate = (settings.x_event_labor_product_id.list_price
                    if settings and settings.x_event_labor_product_id else 0.0)
         cl_rate = (settings.x_cleaning_product_id.list_price
                    if settings and settings.x_cleaning_product_id else 0.0)
+        bt_rate = (settings.x_bartender_product_id.list_price
+                   if settings and settings.x_bartender_product_id else 0.0)
         for rec in self:
-            atts = Att.search([('x_event_id', '=', rec.id)]) if rec.id else Att
+            atts = rec.x_attendance_ids
             ev = sum(atts.filtered(
                 lambda a: a.x_event_role == 'event').mapped('worked_hours'))
             cl = sum(atts.filtered(
                 lambda a: a.x_event_role == 'custodial').mapped('worked_hours'))
+            bt = sum(atts.filtered(
+                lambda a: a.x_event_role == 'bartender').mapped('worked_hours'))
             rec.x_actual_event_hours = ev
             rec.x_actual_cleaning_hours = cl
+            rec.x_actual_bartender_hours = bt
             rec.x_event_hours_variance = (rec.x_est_event_hours or 0.0) - ev
             rec.x_cleaning_hours_variance = (rec.x_est_cleaning_hours or 0.0) - cl
             rec.x_est_labor_cost = (
                 (rec.x_est_event_hours or 0.0) * ev_rate
-                + (rec.x_est_cleaning_hours or 0.0) * cl_rate)
-            rec.x_actual_labor_cost = ev * ev_rate + cl * cl_rate
+                + (rec.x_est_cleaning_hours or 0.0) * cl_rate
+                + (rec.x_est_bartender_hours or 0.0) * bt_rate)
+            rec.x_actual_labor_cost = (
+                ev * ev_rate + cl * cl_rate + bt * bt_rate)
 
     def action_trueup_labor_hours(self):
-        """Set the estimated hours to the actual worked hours (for the P&L)."""
+        """True-up: set estimated hours to what the timeclock actually shows
+        (per role), so the actual labor cost flows into the event's P&L costs.
+        """
         self.ensure_one()
         self.x_est_event_hours = self.x_actual_event_hours
         self.x_est_cleaning_hours = self.x_actual_cleaning_hours
+        self.x_est_bartender_hours = self.x_actual_bartender_hours
         self.message_post(
             body=_(
-                "Labor trued-up to actual hours: event %(ev).1f h, "
-                "cleaning %(cl).1f h.",
+                "Labor trued-up to actual hours — event %(ev).1f h, "
+                "bartender %(bt).1f h, cleaning %(cl).1f h "
+                "(labor cost $%(cost).2f rolled into the P&L).",
                 ev=self.x_actual_event_hours,
-                cl=self.x_actual_cleaning_hours),
+                bt=self.x_actual_bartender_hours,
+                cl=self.x_actual_cleaning_hours,
+                cost=self.x_actual_labor_cost),
             subtype_xmlid='mail.mt_note',
         )
         return True
