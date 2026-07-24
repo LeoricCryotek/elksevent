@@ -1469,7 +1469,7 @@ class ProjectTask(models.Model):
             'name': _("Event Rental"),
             'product_uom_qty': 1,
             'price_unit': taxable_total,
-            'tax_id': [(6, 0, tax_ids)],
+            'tax_ids': [(6, 0, tax_ids)],
             'x_event_source': 'event_rental',
         })
         # Non-taxable portion, only when there is one.
@@ -1480,7 +1480,7 @@ class ProjectTask(models.Model):
                 'name': _("Event Rental — non-taxable items"),
                 'product_uom_qty': 1,
                 'price_unit': nontax_total,
-                'tax_id': [(6, 0, [])],
+                'tax_ids': [(6, 0, [])],
                 'x_event_source': 'event_rental_nt',
             })
         # Disclaimer note under the totals.
