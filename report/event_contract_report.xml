@@ -160,9 +160,22 @@
                         </ul>
 
                         <strong>TERMS &amp; CONDITIONS</strong>
-                        <!-- Coordinator-editable wording (FRS Settings ->
-                             Contract Terms Note); falls back to the default. -->
-                        <t t-if="settings and settings.x_event_contract_terms">
+                        <!-- Live body pulled from the editable /event-terms
+                             website page; falls back to the settings note or a
+                             reference link if the page is unavailable. -->
+                        <t t-set="terms_body" t-value="o._event_terms_body_html()"/>
+                        <t t-if="terms_body">
+                            <div style="font-size:11px; line-height:1.35;" t-out="terms_body"/>
+                            <p style="margin:6px 0 0 0; font-size:11px;">
+                                By signing below, the Host acknowledges having read,
+                                understood, and agreed to the Terms &amp; Conditions
+                                above (also published at
+                                <a t-att-href="terms_url" style="color:#46166a;"><t t-esc="terms_label"/></a>),
+                                in effect as of the signing date. These terms may be
+                                updated from time to time.
+                            </p>
+                        </t>
+                        <t t-elif="settings and settings.x_event_contract_terms">
                             <div style="margin:4px 0 0 0;" t-out="settings.x_event_contract_terms"/>
                             <p style="margin:4px 0 0 0;">
                                 Full Terms &amp; Conditions:

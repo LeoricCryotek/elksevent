@@ -33,6 +33,9 @@ import math
 import re
 from datetime import date, timedelta
 
+from lxml import etree
+from markupsafe import Markup
+
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError, ValidationError
 
@@ -2687,6 +2690,41 @@ class ProjectTask(models.Model):
         disc = 0.0
         deposit_pct = (settings.x_deposit_pct if settings else 50.0) or 0.0
         return base, disc, deposit_pct
+
+    def _event_terms_body_html(self):
+        """Return the CURRENT body of the /event-terms website page so the
+        Facility Usage Agreement prints the live Terms & Conditions (the page
+        is editable in the Website builder). ASCII-normalized so the PDF engine
+        does not mojibake curly punctuation. Returns Markup or False."""
+        self.ensure_one()
+        page = self.env['website.page'].sudo().search(
+            [('url', '=', '/event-terms')], limit=1)
+        view = page.view_id if page else False
+        if not view:
+            return False
+        try:
+            root = view.sudo()._get_combined_arch()
+        except Exception:
+            try:
+                root = etree.fromstring(view.sudo().arch or '')
+            except Exception:
+                return False
+        # The terms live inside the page body (#wrap); fall back to the root.
+        wrap = root.find(".//*[@id='wrap']")
+        node = wrap if wrap is not None else root
+        inner = ''.join(
+            etree.tostring(c, encoding='unicode') for c in node)
+        if not inner.strip():
+            return False
+        repl = {
+            '—': '-', '–': '-', '‒': '-', '―': '-',
+            ' ': ' ', ' ': ' ', '·': '-',
+            '‘': "'", '’': "'", '“': '"', '”': '"',
+            '…': '...',
+        }
+        for k, v in repl.items():
+            inner = inner.replace(k, v)
+        return Markup(inner)
 
     def _event_invoice_terms(self):
         """Link the invoice to the Rental Terms & Conditions page.
