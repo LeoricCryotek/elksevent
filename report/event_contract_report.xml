@@ -20,9 +20,11 @@
                    t-value="o.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
                 <t t-set="so" t-value="o.x_sale_order_id"/>
                 <t t-set="net" t-value="o.x_total_billed or 0.0"/>
+                <t t-set="tax" t-value="o.x_event_tax_amount or 0.0"/>
+                <t t-set="grand" t-value="o.x_event_grand_total or (net + tax)"/>
                 <t t-set="dep_pct"
                    t-value="(settings.x_deposit_pct if settings else 50.0) or 0.0"/>
-                <t t-set="deposit" t-value="net * dep_pct / 100.0"/>
+                <t t-set="deposit" t-value="grand * dep_pct / 100.0"/>
                 <!-- Terms &amp; Conditions live on the editable T&amp;C page; the
                      agreement links to it (settings URL or the /event-terms page)
                      so the printed terms are never a hardcoded duplicate. -->
@@ -109,9 +111,17 @@
                                     </tr>
                                 </t>
                             </t>
+                            <tr>
+                                <td style="padding:6px; text-align:right;">Subtotal (pre-tax):</td>
+                                <td style="padding:6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(net)"/></td>
+                            </tr>
+                            <tr t-if="tax">
+                                <td style="padding:6px; text-align:right;">Tax:</td>
+                                <td style="padding:6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(tax)"/></td>
+                            </tr>
                             <tr style="background:#e8e0f0; font-weight:bold;">
                                 <td style="padding:6px; text-align:right;">Total:</td>
-                                <td style="padding:6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(net)"/></td>
+                                <td style="padding:6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(grand)"/></td>
                             </tr>
                             <tr>
                                 <td style="padding:6px; text-align:right;">Reservation Fee due at signing (<t t-esc="'{:g}'.format(dep_pct)"/>%):</td>
@@ -119,7 +129,7 @@
                             </tr>
                             <tr>
                                 <td style="padding:6px; text-align:right;">Balance due before event:</td>
-                                <td style="padding:6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(net - deposit)"/></td>
+                                <td style="padding:6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(grand - deposit)"/></td>
                             </tr>
                         </tbody>
                     </table>

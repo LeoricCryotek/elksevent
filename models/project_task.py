@@ -2865,10 +2865,11 @@ class ProjectTask(models.Model):
             acc = (tmpl.property_account_income_id
                    or tmpl.categ_id.property_account_income_categ_id)
         if not acc:
-            acc = self.env['account.account'].search([
-                ('account_type', '=', 'income'),
-                ('deprecated', '=', False),
-            ], limit=1)
+            # Odoo 19 dropped account.account.deprecated; guard for it.
+            domain = [('account_type', '=', 'income')]
+            if 'deprecated' in self.env['account.account']._fields:
+                domain.append(('deprecated', '=', False))
+            acc = self.env['account.account'].search(domain, limit=1)
         return acc
 
     def action_create_deposit_invoice(self):
