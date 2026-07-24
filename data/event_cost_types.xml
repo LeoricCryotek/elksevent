@@ -34,11 +34,13 @@
         <record id="cost_type_supplies" model="elks.event.cost.type">
             <field name="name">Supplies</field>
             <field name="code">supplies</field>
+            <field name="taxable">True</field>
             <field name="sequence">50</field>
         </record>
         <record id="cost_type_linens" model="elks.event.cost.type">
             <field name="name">Linens</field>
             <field name="code">linens</field>
+            <field name="taxable">True</field>
             <field name="sequence">60</field>
         </record>
         <record id="cost_type_bar_service" model="elks.event.cost.type">

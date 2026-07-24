@@ -208,6 +208,12 @@ class ProjectTask(models.Model):
         "Garbage Handling", default=True,
         help="The lodge handles garbage for every event.")
     x_num_bars = fields.Integer("Number of Bars")
+    x_bartender_count = fields.Integer(
+        "Bartenders", compute='_compute_bartenders',
+        store=True, readonly=False,
+        help="Auto: one bartender per N guests (N = 'Guests per Bartender' in "
+             "Settings, e.g. 75). Editable — change it and it sticks until the "
+             "guest count changes.")
     x_need_beer_tub = fields.Boolean("Beer Tub")
     x_has_decorations = fields.Boolean("Decorations")
     x_decoration_notes = fields.Text("Decoration Notes")
@@ -347,6 +353,18 @@ class ProjectTask(models.Model):
         "Event Costs Total", currency_field='x_currency_id',
         compute='_compute_financials', store=True,
         help="Sum of the Event Costs lines (customer charges).",
+    )
+    x_taxable_subtotal = fields.Monetary(
+        "Taxable Subtotal (goods)", currency_field='x_currency_id',
+        compute='_compute_financials', store=True,
+        help="Amount tax is charged on: rooms + Event Costs items flagged "
+             "Taxable. Services (coordinator fee, non-taxable items) are "
+             "excluded.",
+    )
+    x_nontaxable_subtotal = fields.Monetary(
+        "Non-Taxable Subtotal (services)", currency_field='x_currency_id',
+        compute='_compute_financials', store=True,
+        help="Services and anything not flagged taxable — not taxed.",
     )
     x_event_tax_amount = fields.Monetary(
         "Tax", currency_field='x_currency_id',
@@ -856,6 +874,16 @@ class ProjectTask(models.Model):
     #     / coordinator config changes don't retro-recompute existing events.
     #     x_total_billed feeds the PO budget guard and the assessor net income.
     # ──────────────────────────────────────────────────────────────────
+    @api.depends('x_guest_count')
+    def _compute_bartenders(self):
+        """One bartender per N guests (N from Settings, default 75)."""
+        settings = self._event_settings()
+        per = (settings.x_guests_per_bartender
+               if settings and settings.x_guests_per_bartender else 75) or 75
+        for rec in self:
+            g = rec.x_guest_count or 0
+            rec.x_bartender_count = math.ceil(g / per) if g else 0
+
     @api.depends('x_room_income', 'x_coordinator_fee_pct', 'x_coordinator_fee')
     def _compute_coordinator_auto(self):
         """Suggested coordinator fee from the configured rate + the variance."""
@@ -874,6 +902,7 @@ class ProjectTask(models.Model):
     @api.depends(
         'x_room_booking_ids.subtotal',
         'x_cost_line_ids.total',
+        'x_cost_line_ids.x_taxable',
         'x_coordinator_fee',
         'x_room_rental_rate',
         'x_est_labor_cost',
@@ -894,6 +923,16 @@ class ProjectTask(models.Model):
 
             # Event Costs are now customer CHARGES (roll into the price).
             rec.x_eventcosts_total = sum(rec.x_cost_line_ids.mapped('total'))
+
+            # Taxable base = GOODS: rooms + Event-Cost items flagged Taxable.
+            # Everything else (services: coordinator fee + non-taxable items)
+            # is exempt. Shown on the Financials tab so staff can see exactly
+            # what's being taxed.
+            ec_taxable = sum(
+                c.total for c in rec.x_cost_line_ids if c.x_taxable)
+            ec_nontax = rec.x_eventcosts_total - ec_taxable
+            rec.x_taxable_subtotal = room_income + ec_taxable
+            rec.x_nontaxable_subtotal = ec_nontax + (rec.x_coordinator_fee or 0.0)
 
             # Customer-facing pre-tax total — the single Event Rental line
             # (rooms + event costs + coordinator, net of member/COL discount)
@@ -1457,8 +1496,10 @@ class ProjectTask(models.Model):
 
         coord = (self.x_coordinator_fee or 0.0) * (1.0 - disc)
 
-        taxable_total = rooms_net + ec_taxable + coord
-        nontax_total = ec_nontax
+        # Taxable = GOODS only: rooms + Event-Cost items flagged taxable.
+        # Services (coordinator fee + anything marked non-taxable) are exempt.
+        taxable_total = rooms_net + ec_taxable
+        nontax_total = ec_nontax + coord
         tax_ids = (settings.x_event_tax_id.ids
                    if settings and settings.x_event_tax_id else [])
 
@@ -1784,23 +1825,45 @@ class ProjectTask(models.Model):
                 "A %(kind)s invoice already exists. Refresh it while draft, "
                 "or cancel it before creating a new one.", kind=kind))
 
-        gross, disc, product, label = self._event_invoice_portion(kind)
+        settings = self._event_settings()
+        tax_cmd = self._event_invoice_tax_cmd()
         partner = self._get_event_partner()
-        line = {
-            'name': self._event_invoice_line_name(label),
-            'quantity': 1,
-            'price_unit': gross,
-            'discount': disc,
-            'tax_ids': self._event_invoice_tax_cmd(),
-        }
-        if product:
-            line['product_id'] = product.id
-        # Ensure the line has an income account. If the product (or no product)
-        # doesn't resolve one, fall back to any income account so the invoice
-        # can be created instead of failing with "missing required account".
-        account = self._event_income_account(product)
-        if account:
-            line['account_id'] = account.id
+
+        def _line(label, amount, product):
+            vals = {
+                'name': self._event_invoice_line_name(label),
+                'quantity': 1,
+                'price_unit': amount,
+                'discount': 0.0,
+                'tax_ids': tax_cmd,
+            }
+            if product:
+                vals['product_id'] = product.id
+            acc = self._event_income_account(product)
+            if acc:
+                vals['account_id'] = acc.id
+            return (0, 0, vals)
+
+        base, _disc, deposit_pct = self._event_invoice_base()
+        deposit_gross = base * deposit_pct / 100.0
+        lines = []
+        if kind == 'final' and self.x_deposit_received:
+            # Show the FULL rental, then credit the deposit already paid so the
+            # customer sees: total − deposit = balance. (Net revenue = balance;
+            # the deposit invoice carries the deposit portion, no double count.)
+            facility = settings.x_facility_product_id if settings else False
+            lines.append(_line(_("Facility Usage and Rental"), base, facility))
+            dep_label = _("Less: Reservation Fee / Deposit paid")
+            if self.x_deposit_date:
+                dep_label = _("Less: Reservation Fee / Deposit paid %s",
+                              self.x_deposit_date)
+            dep_product = settings.x_deposit_product_id if settings else False
+            lines.append(_line(dep_label, -deposit_gross, dep_product))
+            label = _("Final")
+        else:
+            gross, _d, product, label = self._event_invoice_portion(kind)
+            lines.append(_line(label, gross, product))
+
         move = self.env['account.move'].create({
             'move_type': 'out_invoice',
             'partner_id': partner.id,
@@ -1810,7 +1873,7 @@ class ProjectTask(models.Model):
                 self.x_sale_order_id.name if self.x_sale_order_id
                 else self.name),
             'narration': self._event_invoice_terms(),
-            'invoice_line_ids': [(0, 0, line)],
+            'invoice_line_ids': lines,
         })
         self.message_post(
             body=_("<b>%(label)s invoice created</b>: %(link)s",

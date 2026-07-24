@@ -38,5 +38,11 @@ class EventCostType(models.Model):
         help="Tick for staff-hour types (setup/event/cleanup). Their hours "
              "feed the base used to compute the Event Coordinator fee.",
     )
+    taxable = fields.Boolean(
+        "Taxable", default=False,
+        help="Default taxable state for new lines of this type. Tick for "
+             "GOODS (e.g. supplies, linens); leave off for SERVICES (labor, "
+             "bar service, coordinator). Staff can still override per line.",
+    )
     sequence = fields.Integer(default=10)
     active = fields.Boolean(default=True)

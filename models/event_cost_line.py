@@ -64,11 +64,17 @@ class EventCostLine(models.Model):
              "amount used to calculate the Event Coordinator's fee.",
     )
     x_taxable = fields.Boolean(
-        "Taxable", default=True,
-        help="If checked, this charge is part of the taxable subtotal on the "
-             "customer's single 'Event Rental' line. Untick items that are "
-             "not taxed (e.g. insurance).",
+        "Taxable", default=False,
+        help="If checked, this charge is part of the taxable subtotal (goods) "
+             "on the customer's 'Event Rental' line. Defaults from the Cost "
+             "Type; services stay untaxed.",
     )
+
+    @api.onchange('cost_type_id')
+    def _onchange_cost_type_taxable(self):
+        """Seed the taxable flag from the chosen type's default."""
+        if self.cost_type_id:
+            self.x_taxable = self.cost_type_id.taxable
     purchase_order_id = fields.Many2one(
         'purchase.order', string="Linked PO",
         help="Optional link to an actual vendor purchase order.",

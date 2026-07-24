@@ -195,6 +195,7 @@
                             <field name="x_need_linen"/>
                             <field name="x_linen_qty" invisible="not x_need_linen"/>
                             <field name="x_linen_color" invisible="not x_need_linen"/>
+                            <field name="x_need_garbage" string="Services"/>
                         </group>
                         <group string="Setup &amp; Service">
                             <field name="x_setup_by"/>
@@ -207,10 +208,10 @@
                         </group>
                     </group>
                     <group>
-                        <group string="Bar &amp; Garbage">
+                        <group string="Bar">
                             <field name="x_num_bars"/>
+                            <field name="x_bartender_count"/>
                             <field name="x_need_beer_tub"/>
-                            <field name="x_need_garbage"/>
                         </group>
                         <group string="Insurance (required for all events)"
                                invisible="x_is_elks_event">
@@ -364,8 +365,12 @@
                             </div>
                             <field name="x_total_billed" readonly="1"
                                    string="Event Rental (pre-tax)"/>
+                            <field name="x_taxable_subtotal" readonly="1"
+                                   string="↳ Taxable (goods)"/>
+                            <field name="x_nontaxable_subtotal" readonly="1"
+                                   string="↳ Non-Taxable (services)"/>
                             <field name="x_event_tax_amount" readonly="1"
-                                   string="Tax (taxable items only)"/>
+                                   string="Tax (on taxable only)"/>
                             <field name="x_event_grand_total" readonly="1"
                                    string="Grand Total"
                                    class="oe_subtotal_footer_separator"/>

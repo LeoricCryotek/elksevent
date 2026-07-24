@@ -58,9 +58,9 @@ class ElksLodgeSettings(models.Model):
     # Guest-driven defaults
     # ------------------------------------------------------------------
     x_guests_per_bartender = fields.Integer(
-        "Guests per Bartender", default=100,
-        help="One bartender is added per this many guests "
-             "(contract: extra bartender for parties over 100).",
+        "Guests per Bartender", default=75,
+        help="One bartender per this many guests. Drives the Bartenders "
+             "field on the event (editable).",
     )
     x_max_bars = fields.Integer(
         "Bar Locations Available", default=2,
