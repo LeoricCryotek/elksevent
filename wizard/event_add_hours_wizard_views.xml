@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <record id="view_event_add_hours_wizard_form" model="ir.ui.view">
+        <field name="name">elks.event.add.hours.wizard.form</field>
+        <field name="model">elks.event.add.hours.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Add Timeclock Hours">
+                <field name="event_id" invisible="1"/>
+                <group>
+                    <field name="employee_id"/>
+                    <field name="role"/>
+                </group>
+                <separator string="Recorded Shifts (tick the ones for this event)"/>
+                <field name="attendance_ids"
+                       invisible="not employee_id">
+                    <list>
+                        <field name="check_in"/>
+                        <field name="check_out"/>
+                        <field name="worked_hours" widget="float_time"
+                               string="Hours"/>
+                    </list>
+                </field>
+                <p class="text-muted" invisible="employee_id">
+                    Pick an employee to see their recorded timeclock shifts.
+                </p>
+                <footer>
+                    <button name="action_apply" string="Add Hours"
+                            type="object" class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+</odoo>

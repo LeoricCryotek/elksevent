@@ -19,7 +19,8 @@ AI
   ('setup_labor','event_labor','cleanup_labor') tuple.
 - Referenced by elks.event.cost.line.cost_type_id.
 """
-from odoo import fields, models
+from odoo import _, api, fields, models
+from odoo.exceptions import UserError
 
 
 class EventCostType(models.Model):
@@ -28,6 +29,26 @@ class EventCostType(models.Model):
     _order = "sequence, name"
 
     name = fields.Char("Type", required=True, translate=True)
+    category = fields.Selection([
+        ('catering', 'Catering'),
+        ('bar', 'Bar'),
+        ('event', 'Event Services'),
+        ('cleaning', 'Cleaning'),
+        ('coordinator', 'Coordinator'),
+        ('other', 'Other'),
+    ], string="P&L Category", default='other', required=True,
+        help="Which P&L bucket this type tallies into (the event totals "
+             "Event Costs lines by category).")
+    protected = fields.Boolean(
+        "Built-in", default=False,
+        help="Built-in type used by the P&L totals — cannot be deleted.")
+
+    def unlink(self):
+        if any(t.protected for t in self):
+            raise UserError(_(
+                "Built-in cost types feed the P&L category totals and can't be "
+                "deleted. You can archive one you don't use instead."))
+        return super().unlink()
     code = fields.Char(
         "Code",
         help="Stable internal key for built-in types the app logic relies on "

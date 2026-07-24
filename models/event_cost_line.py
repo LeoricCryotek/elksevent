@@ -53,6 +53,11 @@ class EventCostLine(models.Model):
         "Total", currency_field='currency_id',
         compute='_compute_total', store=True,
     )
+    x_line_cogs = fields.Monetary(
+        "COGS", currency_field='currency_id',
+        help="What this item COSTS the lodge (vs Amount = what the customer "
+             "is charged). Sums into the event's COGS for the P&L.",
+    )
     currency_id = fields.Many2one(
         'res.currency', string="Currency",
         default=lambda self: self.env.company.currency_id,

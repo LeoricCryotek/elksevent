@@ -13,3 +13,4 @@ access_event_checklist_template_line_coord,elks.event.checklist.template.line.co
 access_event_checklist_template_user,elks.event.checklist.template.user,model_elks_event_checklist_template,project.group_project_user,1,0,0,0
 access_event_checklist_template_line_user,elks.event.checklist.template.line.user,model_elks_event_checklist_template_line,project.group_project_user,1,0,0,0
 access_event_assessor_wizard,elks.event.assessor.wizard,model_elks_event_assessor_wizard,elksevent.group_event_coordinator,1,1,1,1
+access_event_add_hours_wizard,elks.event.add.hours.wizard,model_elks_event_add_hours_wizard,elksevent.group_event_coordinator,1,1,1,1

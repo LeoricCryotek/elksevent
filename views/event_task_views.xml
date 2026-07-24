@@ -18,6 +18,38 @@
                 <attribute name="string">Event Date</attribute>
             </xpath>
 
+            <!-- Trim unused standard tabs for events: the task Description
+                 (we use "Event Description") and Blocked By dependencies. -->
+            <xpath expr="//page[@name='description_page']" position="attributes">
+                <attribute name="invisible">x_is_event</attribute>
+            </xpath>
+            <xpath expr="//field[@name='depend_on_ids']/ancestor::page[1]"
+                   position="attributes">
+                <attribute name="invisible">x_is_event</attribute>
+            </xpath>
+
+            <!-- Timesheets tab: pull the event's timeclock hours in. The
+                 "Add Timeclock Hours" button opens a picker to attach a
+                 worker's recorded shifts (with a role) — no manual entry. -->
+            <xpath expr="//field[@name='timesheet_ids']" position="after">
+                <separator string="Event Timeclock Hours"/>
+                <button name="action_open_add_hours" type="object"
+                        string="Add Timeclock Hours" class="btn-primary"
+                        icon="fa-clock-o"
+                        invisible="not x_is_event"/>
+                <field name="x_attendance_ids"
+                       invisible="not x_is_event">
+                    <list editable="bottom" create="false">
+                        <field name="employee_id" readonly="1"/>
+                        <field name="check_in" readonly="1"/>
+                        <field name="check_out" readonly="1"/>
+                        <field name="worked_hours" widget="float_time"
+                               string="Hours" sum="Total Hours" readonly="1"/>
+                        <field name="x_event_role"/>
+                    </list>
+                </field>
+            </xpath>
+
             <!-- Smart / action buttons -->
             <xpath expr="//div[hasclass('oe_button_box')]" position="inside">
                 <button name="action_submit"
@@ -285,7 +317,8 @@
                             <field name="unit_cost" string="Amount"/>
                             <field name="total" sum="Event Costs Total"/>
                             <field name="x_taxable"/>
-                            <field name="counts_for_coordinator"/>
+                            <field name="x_line_cogs" string="COGS"
+                                   sum="Total COGS"/>
                             <field name="purchase_order_id" optional="hide"/>
                             <field name="currency_id" column_invisible="1"/>
                         </list>
@@ -386,7 +419,8 @@
                     </group>
                     <group>
                         <group string="Cost Summary (P&amp;L)">
-                            <field name="x_cogs"/>
+                            <field name="x_cogs" readonly="1"
+                                   string="COGS (from Event Costs)"/>
                             <field name="x_po_total" readonly="1"
                                    string="Total from POs"/>
                             <field name="x_est_labor_cost" readonly="1"
@@ -403,6 +437,15 @@
                             <field name="x_quote_total" readonly="1"/>
                             <field name="x_balance_due" readonly="1"
                                    class="oe_subtotal_footer_separator"/>
+                        </group>
+                        <group string="COGS by P&amp;L Category">
+                            <field name="x_cat_catering" readonly="1"
+                                   string="Catering"/>
+                            <field name="x_cat_bar" readonly="1" string="Bar"/>
+                            <field name="x_cat_event" readonly="1"
+                                   string="Event Services"/>
+                            <field name="x_cat_cleaning" readonly="1"
+                                   string="Cleaning"/>
                         </group>
                     </group>
                     <group string="Labor (internal estimate for P&amp;L — not charged to the customer)">
@@ -431,18 +474,6 @@
                         <button name="action_trueup_labor_hours" type="object"
                                 string="True-up to Actual Hours" class="btn-secondary"
                                 help="Sets estimated hours to the actual timeclock hours per role and rolls the actual labor cost into the P&amp;L."/>
-                    </group>
-                    <group string="Timeclock — assign a role to each shift (pulled from Attendance)">
-                        <field name="x_attendance_ids" nolabel="1" colspan="2">
-                            <list editable="bottom">
-                                <field name="employee_id"/>
-                                <field name="check_in"/>
-                                <field name="check_out"/>
-                                <field name="worked_hours" widget="float_time"
-                                       string="Hours" sum="Total Hours"/>
-                                <field name="x_event_role"/>
-                            </list>
-                        </field>
                     </group>
                     <group string="Contract / Agreement Notes">
                         <field name="x_contract_notes" nolabel="1" colspan="2"

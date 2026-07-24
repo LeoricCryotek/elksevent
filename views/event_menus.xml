@@ -58,7 +58,7 @@
               sequence="20"/>
 
     <menuitem id="menu_event_cost_types"
-              name="Cost Types"
+              name="Event Costs"
               parent="menu_event_config"
               action="action_event_cost_types"
               sequence="30"/>

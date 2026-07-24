@@ -9,8 +9,10 @@
             <list string="Event Cost Types" editable="bottom">
                 <field name="sequence" widget="handle"/>
                 <field name="name"/>
+                <field name="category"/>
                 <field name="taxable"/>
                 <field name="is_labor"/>
+                <field name="protected" string="Built-in" readonly="1"/>
                 <field name="code" optional="hide"/>
             </list>
         </field>

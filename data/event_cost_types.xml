@@ -1,67 +1,153 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- =========================================================================
-     HUMAN: The starting "Type" options on the Event Costs tab. These are the
-     built-ins; add your own under Elks Events -> Configuration -> Cost Types.
-     AI: noupdate="1" so renames/reorders by the user survive upgrades. The
-     three labor types carry is_labor=True (coordinator-fee labor base). The
-     `code` is the stable key the migration maps old Selection values onto.
+     HUMAN: The "Type" options on the Event Costs tab, grouped into P&L
+     categories (Catering / Bar / Event Services / Cleaning). Built-in types
+     are protected (can't be deleted) so the category totals always have
+     something to tally. Add your own under Elks Events -> Configuration ->
+     Event Costs. Flags: Taxable = goods (taxed); Counts as Labor = staff hours.
+     AI: noupdate="1" so user renames/reorders survive upgrades. For EXISTING
+     databases the category/protected flags + the new records are set by
+     migrations/19.0.4.7.0/post-migration.py (noupdate records aren't updated
+     by a reload). The `code` is the stable key.
      ========================================================================= -->
 <odoo>
     <data noupdate="1">
+        <!-- ===== Catering ===== -->
+        <record id="cost_type_catering_food" model="elks.event.cost.type">
+            <field name="name">Catering Food</field>
+            <field name="code">catering_food</field>
+            <field name="category">catering</field>
+            <field name="taxable">True</field>
+            <field name="protected">True</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="cost_type_catering_service" model="elks.event.cost.type">
+            <field name="name">Catering Service</field>
+            <field name="code">catering_service</field>
+            <field name="category">catering</field>
+            <field name="protected">True</field>
+            <field name="sequence">11</field>
+        </record>
+
+        <!-- ===== Bar ===== -->
+        <record id="cost_type_bar_service" model="elks.event.cost.type">
+            <field name="name">Bar Service</field>
+            <field name="code">bar_service</field>
+            <field name="category">bar</field>
+            <field name="protected">True</field>
+            <field name="sequence">20</field>
+        </record>
+        <record id="cost_type_bar_fee" model="elks.event.cost.type">
+            <field name="name">Bar Fee</field>
+            <field name="code">bar_fee</field>
+            <field name="category">bar</field>
+            <field name="taxable">True</field>
+            <field name="protected">True</field>
+            <field name="sequence">21</field>
+        </record>
+
+        <!-- ===== Event Services (Setup + After + Event hours all tally here) ===== -->
         <record id="cost_type_setup_labor" model="elks.event.cost.type">
             <field name="name">Setup Hours</field>
             <field name="code">setup_labor</field>
+            <field name="category">event</field>
             <field name="is_labor">True</field>
-            <field name="sequence">10</field>
+            <field name="protected">True</field>
+            <field name="sequence">30</field>
         </record>
         <record id="cost_type_event_labor" model="elks.event.cost.type">
             <field name="name">Event Hours</field>
             <field name="code">event_labor</field>
+            <field name="category">event</field>
             <field name="is_labor">True</field>
-            <field name="sequence">20</field>
+            <field name="protected">True</field>
+            <field name="sequence">31</field>
         </record>
-        <record id="cost_type_cleanup_labor" model="elks.event.cost.type">
-            <field name="name">Cleanup Hours</field>
-            <field name="code">cleanup_labor</field>
+        <record id="cost_type_after_hours" model="elks.event.cost.type">
+            <field name="name">After Hours</field>
+            <field name="code">after_hours</field>
+            <field name="category">event</field>
             <field name="is_labor">True</field>
-            <field name="sequence">30</field>
+            <field name="protected">True</field>
+            <field name="sequence">32</field>
         </record>
         <record id="cost_type_event_workers" model="elks.event.cost.type">
             <field name="name">Event Workers</field>
             <field name="code">event_workers</field>
+            <field name="category">event</field>
+            <field name="is_labor">True</field>
+            <field name="protected">True</field>
+            <field name="sequence">33</field>
+        </record>
+        <record id="cost_type_event_service" model="elks.event.cost.type">
+            <field name="name">Event Service</field>
+            <field name="code">event_service</field>
+            <field name="category">event</field>
+            <field name="protected">True</field>
+            <field name="sequence">34</field>
+        </record>
+        <record id="cost_type_event_supplies" model="elks.event.cost.type">
+            <field name="name">Event Supplies</field>
+            <field name="code">event_supplies</field>
+            <field name="category">event</field>
+            <field name="taxable">True</field>
+            <field name="protected">True</field>
+            <field name="sequence">35</field>
+        </record>
+
+        <!-- ===== Cleaning ===== -->
+        <record id="cost_type_cleanup_labor" model="elks.event.cost.type">
+            <field name="name">Cleanup Hours</field>
+            <field name="code">cleanup_labor</field>
+            <field name="category">cleaning</field>
+            <field name="is_labor">True</field>
+            <field name="protected">True</field>
             <field name="sequence">40</field>
         </record>
+        <record id="cost_type_cleaning_service" model="elks.event.cost.type">
+            <field name="name">Cleaning Service</field>
+            <field name="code">cleaning_service</field>
+            <field name="category">cleaning</field>
+            <field name="protected">True</field>
+            <field name="sequence">41</field>
+        </record>
+
+        <!-- ===== Coordinator ===== -->
+        <record id="cost_type_coordinator" model="elks.event.cost.type">
+            <field name="name">Event Coordinator Fee</field>
+            <field name="code">coordinator</field>
+            <field name="category">coordinator</field>
+            <field name="protected">True</field>
+            <field name="sequence">50</field>
+        </record>
+
+        <!-- ===== Other (editable, not protected) ===== -->
         <record id="cost_type_supplies" model="elks.event.cost.type">
             <field name="name">Supplies</field>
             <field name="code">supplies</field>
+            <field name="category">other</field>
             <field name="taxable">True</field>
-            <field name="sequence">50</field>
+            <field name="sequence">60</field>
         </record>
         <record id="cost_type_linens" model="elks.event.cost.type">
             <field name="name">Linens</field>
             <field name="code">linens</field>
+            <field name="category">other</field>
             <field name="taxable">True</field>
-            <field name="sequence">60</field>
-        </record>
-        <record id="cost_type_bar_service" model="elks.event.cost.type">
-            <field name="name">Bar Services</field>
-            <field name="code">bar_service</field>
-            <field name="sequence">70</field>
+            <field name="sequence">61</field>
         </record>
         <record id="cost_type_services" model="elks.event.cost.type">
             <field name="name">Services</field>
             <field name="code">services</field>
-            <field name="sequence">80</field>
-        </record>
-        <record id="cost_type_coordinator" model="elks.event.cost.type">
-            <field name="name">Event Coordinator Fee</field>
-            <field name="code">coordinator</field>
-            <field name="sequence">90</field>
+            <field name="category">other</field>
+            <field name="sequence">62</field>
         </record>
         <record id="cost_type_other" model="elks.event.cost.type">
             <field name="name">Other</field>
             <field name="code">other</field>
-            <field name="sequence">100</field>
+            <field name="category">other</field>
+            <field name="protected">True</field>
+            <field name="sequence">99</field>
         </record>
     </data>
 </odoo>

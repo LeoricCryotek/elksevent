@@ -314,10 +314,11 @@ class ProjectTask(models.Model):
         'elks.event.cost.line', 'event_id', string="Event Costs",
     )
     x_cogs = fields.Monetary(
-        "COGS (Cost of Goods)", currency_field='x_currency_id', tracking=True,
-        help="Direct cost to the lodge of the goods/services sold for this "
-             "event (bar stock, food, rentals, etc.) not already captured by a "
-             "Purchase Order. Feeds Total Costs for the P&L.",
+        "COGS (Cost of Goods)", currency_field='x_currency_id',
+        compute='_compute_financials', store=True,
+        help="Total cost to the lodge of the goods/services sold — the sum of "
+             "the COGS column on the Event Costs lines. Feeds Total Costs "
+             "(P&L).",
     )
     x_total_costs = fields.Monetary(
         "Total Costs", currency_field='x_currency_id',
@@ -328,6 +329,20 @@ class ProjectTask(models.Model):
         compute='_compute_financials', store=True,
         help="Revenue (pre-tax billed) minus Total Costs (COGS + POs + labor).",
     )
+    # P&L spending tallies by category — sum of the COGS on Event Costs lines
+    # grouped by their type's category (the "budget for spending").
+    x_cat_catering = fields.Monetary(
+        "Catering (COGS)", currency_field='x_currency_id',
+        compute='_compute_financials', store=True)
+    x_cat_bar = fields.Monetary(
+        "Bar (COGS)", currency_field='x_currency_id',
+        compute='_compute_financials', store=True)
+    x_cat_event = fields.Monetary(
+        "Event Services (COGS)", currency_field='x_currency_id',
+        compute='_compute_financials', store=True)
+    x_cat_cleaning = fields.Monetary(
+        "Cleaning (COGS)", currency_field='x_currency_id',
+        compute='_compute_financials', store=True)
 
     # ------------------------------------------------------------------
     # Coordinator fee
@@ -925,7 +940,8 @@ class ProjectTask(models.Model):
         'x_cost_line_ids.x_taxable',
         'x_coordinator_fee',
         'x_room_rental_rate',
-        'x_est_labor_cost', 'x_cogs',
+        'x_est_labor_cost', 'x_cost_line_ids.x_line_cogs',
+        'x_cost_line_ids.cost_type_id',
         'x_deposit_amount', 'x_deposit_received',
         'x_purchase_order_ids.amount_total',
         'x_purchase_order_ids.state',
@@ -987,6 +1003,17 @@ class ProjectTask(models.Model):
                     lambda p: p.state != 'cancel'
                 ).mapped('amount_total')
             )
+            rec.x_cogs = sum(rec.x_cost_line_ids.mapped('x_line_cogs'))
+            # Tally COGS by P&L category (budget spending per area).
+            cats = {'catering': 0.0, 'bar': 0.0, 'event': 0.0, 'cleaning': 0.0}
+            for c in rec.x_cost_line_ids:
+                cat = c.cost_type_id.category
+                if cat in cats:
+                    cats[cat] += (c.x_line_cogs or 0.0)
+            rec.x_cat_catering = cats['catering']
+            rec.x_cat_bar = cats['bar']
+            rec.x_cat_event = cats['event']
+            rec.x_cat_cleaning = cats['cleaning']
             rec.x_total_costs = (
                 (rec.x_cogs or 0.0) + po_total + (rec.x_est_labor_cost or 0.0))
             rec.x_net_income = rec.x_total_billed - rec.x_total_costs
@@ -1641,6 +1668,18 @@ class ProjectTask(models.Model):
             rec.x_actual_labor_cost = (
                 ev * ev_rate + cl * cl_rate + bt * bt_rate)
 
+    def action_open_add_hours(self):
+        """Open the wizard to attach a worker's recorded timeclock shifts."""
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _("Add Timeclock Hours"),
+            'res_model': 'elks.event.add.hours.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {'default_event_id': self.id},
+        }
+
     def action_trueup_labor_hours(self):
         """True-up: set estimated hours to what the timeclock actually shows
         (per role), so the actual labor cost flows into the event's P&L costs.
@@ -1827,6 +1866,25 @@ class ProjectTask(models.Model):
             return '<a href="%s">%s</a>' % (settings.x_event_terms_url, label)
         return self.x_contract_notes or ''
 
+    def _event_deposit_receipt_note(self):
+        """A 'DEPOSIT PAID …' line for the invoice when the deposit is in —
+        so both invoices double as a receipt for the customer."""
+        self.ensure_one()
+        if not self.x_deposit_received:
+            return ''
+        method = ''
+        if self.x_deposit_method:
+            method = dict(self._fields['x_deposit_method'].selection).get(
+                self.x_deposit_method, '')
+        parts = [_("DEPOSIT PAID — $%.2f", self.x_deposit_amount or 0.0)]
+        if self.x_deposit_date:
+            parts.append(_("received %s", self.x_deposit_date))
+        if method:
+            parts.append(_("via %s", method))
+        if self.x_deposit_reference:
+            parts.append(_("(ref: %s)", self.x_deposit_reference))
+        return " ".join(parts)
+
     def _event_invoice_tax_cmd(self):
         settings = self._event_settings()
         if settings and settings.x_event_tax_id:
@@ -1910,6 +1968,10 @@ class ProjectTask(models.Model):
             gross, _d, product, label = self._event_invoice_portion(kind)
             lines.append(_line(label, gross, product))
 
+        narration = self._event_invoice_terms() or ''
+        receipt = self._event_deposit_receipt_note()
+        if receipt:
+            narration = (receipt + "\n\n" + narration) if narration else receipt
         move = self.env['account.move'].create({
             'move_type': 'out_invoice',
             'partner_id': partner.id,
@@ -1918,7 +1980,7 @@ class ProjectTask(models.Model):
             'invoice_origin': (
                 self.x_sale_order_id.name if self.x_sale_order_id
                 else self.name),
-            'narration': self._event_invoice_terms(),
+            'narration': narration,
             'invoice_line_ids': lines,
         })
         self.message_post(
