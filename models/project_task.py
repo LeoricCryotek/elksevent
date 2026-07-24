@@ -33,6 +33,7 @@ import math
 import re
 from datetime import date, timedelta
 
+import pytz
 from lxml import etree
 from markupsafe import Markup
 
@@ -866,7 +867,33 @@ class ProjectTask(models.Model):
             self.with_context(_labor_sync=True)._sync_labor_cost_lines()
         if 'stage_id' in vals:
             self._close_children_on_fold()
+        # Resync the calendar.event window whenever any of the fields
+        # that determine start/stop change. Without this the tentative
+        # entry keeps whatever times it had at creation and drifts out
+        # of sync when the coordinator later edits the schedule.
+        if vals.keys() & self._CALENDAR_SYNC_KEYS:
+            for rec in self:
+                if rec.x_calendar_event_id:
+                    try:
+                        start, stop = rec._event_calendar_window()
+                        if start and stop:
+                            rec.x_calendar_event_id.sudo().write({
+                                'start': start, 'stop': stop,
+                            })
+                    except Exception as e:  # noqa: BLE001
+                        _logger.warning(
+                            "Calendar resync failed for task %s: %s",
+                            rec.id, e)
         return res
+
+    # Fields whose change requires pushing new start/stop onto the
+    # attached calendar.event entry.
+    _CALENDAR_SYNC_KEYS = frozenset((
+        'x_event_date', 'x_event_start_time', 'x_event_end_time',
+        'x_event_start_sel', 'x_event_end_sel',
+        'x_event_start_time_text', 'x_event_end_time_text',
+        'date_deadline',
+    ))
 
     def _close_children_on_fold(self):
         """When an event reaches a folded/completed stage, mark its still-open
@@ -2541,7 +2568,16 @@ class ProjectTask(models.Model):
     #     failures never block the workflow. Link: x_calendar_event_id.
     # ──────────────────────────────────────────────────────────────────
     def _event_calendar_window(self):
-        """Return (start_dt, stop_dt) for the booking, or (None, None)."""
+        """Return (start_dt, stop_dt) as naive-UTC datetimes.
+
+        The event's start / end times on the form are LOCAL wall-clock
+        times (e.g. 9:00 PM in Idaho). calendar.event stores start/stop
+        as naive UTC. So we compose the local wall-clock datetime,
+        localize it to the user's tz, convert to UTC, and strip tzinfo.
+        Without this dance, "9:00 PM" was being written as
+        2026-08-08 21:00 naive-UTC, which then renders as 3:00 PM MDT /
+        2:00 PM MST — the wrong time by exactly the user's UTC offset.
+        """
         self.ensure_one()
         from datetime import datetime, time as dtime, timedelta
         d = self.x_event_date
@@ -2558,13 +2594,32 @@ class ProjectTask(models.Model):
             m = int(round((val - h) * 60))
             return dtime(min(h, 23), min(m, 59))
 
-        start = datetime.combine(d, _to_time(self.x_event_start_time, 9))
+        # Compose local wall-clock datetimes
+        local_start = datetime.combine(d, _to_time(self.x_event_start_time, 9))
         if self.x_event_end_time and self.x_event_end_time > (
                 self.x_event_start_time or 0):
-            stop = datetime.combine(d, _to_time(self.x_event_end_time, 17))
+            local_stop = datetime.combine(d, _to_time(self.x_event_end_time, 17))
         else:
-            stop = start + timedelta(hours=2)
-        return start, stop
+            local_stop = local_start + timedelta(hours=2)
+
+        # Convert local -> UTC via user's tz. Fall back to UTC if the
+        # user has no tz set (in which case there's nothing to shift).
+        tz_name = (
+            self.env.user.tz
+            or self.env.context.get('tz')
+            or 'UTC'
+        )
+        try:
+            local_tz = pytz.timezone(tz_name)
+        except pytz.UnknownTimeZoneError:
+            local_tz = pytz.UTC
+        utc = pytz.UTC
+
+        start_utc = local_tz.localize(local_start).astimezone(utc).replace(
+            tzinfo=None)
+        stop_utc = local_tz.localize(local_stop).astimezone(utc).replace(
+            tzinfo=None)
+        return start_utc, stop_utc
 
     def _ensure_placeholder_calendar(self):
         """Create a greyed (tentative) calendar entry if none exists yet."""
