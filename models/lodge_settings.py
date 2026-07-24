@@ -85,6 +85,54 @@ class ElksLodgeSettings(models.Model):
         "Per-Plate Charge", currency_field='x_event_currency_id',
         help="Amount billed to the customer per plate/guest.",
     )
+    # Labor rates (per hour, the lodge's COST) + flat service fees per area.
+    # These drive the auto-generated Event Costs service lines: the customer
+    # charge = hours x rate x 1.15 (15% labor markup) + the service fee, and
+    # the line COGS = hours x rate.
+    x_event_staff_rate = fields.Monetary(
+        "Event-Staff Rate / hr", currency_field='x_event_currency_id')
+    x_event_service_fee = fields.Monetary(
+        "Event Service Fee", currency_field='x_event_currency_id')
+    x_bartender_rate = fields.Monetary(
+        "Bartender Rate / hr", currency_field='x_event_currency_id')
+    x_bar_service_fee = fields.Monetary(
+        "Bar Service Fee", currency_field='x_event_currency_id')
+    x_kitchen_rate = fields.Monetary(
+        "Kitchen Rate / hr", currency_field='x_event_currency_id',
+        help="Legacy flat kitchen rate. Cooks and kitchen support now use "
+             "their own rates below.")
+    x_cook_rate = fields.Monetary(
+        "Cook Rate / hr", currency_field='x_event_currency_id')
+    x_kitchen_support_rate = fields.Monetary(
+        "Kitchen Support Rate / hr", currency_field='x_event_currency_id')
+    x_kitchen_service_fee = fields.Monetary(
+        "Kitchen Service Fee", currency_field='x_event_currency_id')
+    x_custodial_rate = fields.Monetary(
+        "Custodial Rate / hr", currency_field='x_event_currency_id')
+    x_custodial_service_fee = fields.Monetary(
+        "Custodial Service Fee", currency_field='x_event_currency_id')
+    # Department managers who receive the event Call-Out / quote request.
+    x_bar_manager_id = fields.Many2one(
+        'res.partner', string="Bar Manager",
+        help="Emailed the Bar call-out / quote request for an event.")
+    x_kitchen_manager_id = fields.Many2one(
+        'res.partner', string="Kitchen Manager",
+        help="Emailed the Kitchen call-out / quote request for an event.")
+    x_custodial_manager_id = fields.Many2one(
+        'res.partner', string="Custodial Lead",
+        help="Emailed the Custodial call-out for an event.")
+    x_labor_markup_pct = fields.Float(
+        "Labor Markup %", default=15.0,
+        help="Markup added to labor lines (charge = cost x (1 + this%)).")
+
+    x_marketing_signage_fee = fields.Monetary(
+        "Marketing Signage Use Fee", currency_field='x_event_currency_id',
+        help="Default fee for the 'Marketing Signage Use' Event Cost.",
+    )
+    x_exclusive_use_fee = fields.Monetary(
+        "Exclusive Use Fee", currency_field='x_event_currency_id',
+        help="Default fee for the 'Exclusive Use' Event Cost.",
+    )
 
     # ------------------------------------------------------------------
     # Pricing policy
@@ -105,6 +153,13 @@ class ElksLodgeSettings(models.Model):
         domain="[('type_tax_use', '=', 'sale')]",
         help="Tax shown on event documents (may be 0%; UBI may change this).",
     )
+    x_ubi_tax_pct = fields.Float(
+        "UBI / Property Tax %",
+        help="Percent reserved for property tax on NON-member room rental "
+             "income (Unrelated Business Income). Assessed on the room rental "
+             "profit of non-member events and shown on the internal P&L so the "
+             "lodge can set the money aside. Not charged to the customer.",
+    )
 
     # ------------------------------------------------------------------
     # Terms & documents
@@ -116,6 +171,13 @@ class ElksLodgeSettings(models.Model):
     x_event_terms_label = fields.Char(
         "Terms Link Label",
         default="Rental Use Agreement (Terms & Conditions)",
+    )
+    x_event_contract_terms = fields.Html(
+        "Contract Terms Note",
+        help="The TERMS & CONDITIONS wording printed on the Facility Usage "
+             "Agreement, above the signatures. Edit here to change what the "
+             "contract says (the full rules still live on the Terms page the "
+             "link points to). Leave blank to use the default wording.",
     )
     x_event_floor_plan = fields.Binary(
         "Lodge Floor Plan",

@@ -12,7 +12,7 @@
             'Event_PL_%s_%s' % (object.date_from, object.date_to)
         </field>
         <field name="binding_type">report</field>
-        <field name="paperformat_id" ref="base.paperformat_us"/>
+        <field name="paperformat_id" ref="paperformat_event_sheet"/>
     </record>
 
     <!-- Companion PDF report -->
@@ -25,7 +25,20 @@
         <field name="print_report_name">
             'Event_PL_%s_%s' % (object.date_from, object.date_to)
         </field>
-        <field name="paperformat_id" ref="base.paperformat_us"/>
+        <field name="paperformat_id" ref="paperformat_event_sheet"/>
+    </record>
+
+    <!-- Per-event P&L, bound to the event's Print (gear) menu -->
+    <record id="action_report_event_pl_single" model="ir.actions.report">
+        <field name="name">Event P&amp;L</field>
+        <field name="model">project.task</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_event_pl_single</field>
+        <field name="report_file">elksevent.report_event_pl_single</field>
+        <field name="binding_model_id" ref="project.model_project_task"/>
+        <field name="binding_type">report</field>
+        <field name="paperformat_id" ref="paperformat_event_sheet"/>
+        <field name="print_report_name">'Event PL - %s' % (object.name or 'Event')</field>
     </record>
 
     <!-- P&L Wizard form view -->
@@ -64,16 +77,45 @@
     </record>
 
     <!-- ================================================================
-         QWeb Template
+         QWeb Templates
+         report_event_pl_body  = shared page body (cards + per-event detail),
+                                 expects `data`, `settings`, `subtitle` in ctx.
+         report_event_pl        = date-range wizard wrapper.
+         report_event_pl_single = per-event wrapper (Print gear menu).
          ================================================================ -->
     <template id="report_event_pl">
         <t t-call="web.html_container">
             <t t-foreach="docs" t-as="wizard">
                 <t t-set="data" t-value="wizard._get_report_data()"/>
                 <t t-set="settings"
-                   t-value="wizard.env['elks.lodge.settings'].sudo().search([], limit=1)"
-                   t-if="wizard.env['ir.module.module'].sudo().search([('name','=','elksfrs'),('state','=','installed')], limit=1)"/>
+                   t-value="wizard.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
+                <t t-set="subtitle">Period:
+                    <t t-esc="wizard.date_from" t-options="{'widget': 'date'}"/>
+                    through <t t-esc="wizard.date_to" t-options="{'widget': 'date'}"/>
+                    <t t-if="wizard.event_id"> - Event: <t t-esc="wizard.event_id.name"/></t>
+                </t>
+                <t t-set="empty_msg">No events found in the selected date range.</t>
+                <t t-call="elksevent.report_event_pl_body"/>
+            </t>
+        </t>
+    </template>
 
+    <template id="report_event_pl_single">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="doc">
+                <t t-set="data" t-value="doc._get_pl_report_data()"/>
+                <t t-set="settings"
+                   t-value="doc.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
+                <t t-set="subtitle">Event: <t t-esc="doc.name"/>
+                    <t t-if="doc.x_event_date"> - <t t-esc="doc.x_event_date" t-options="{'widget': 'date'}"/></t>
+                </t>
+                <t t-set="empty_msg">No financial data for this event yet.</t>
+                <t t-call="elksevent.report_event_pl_body"/>
+            </t>
+        </t>
+    </template>
+
+    <template id="report_event_pl_body">
                 <div class="page" style="font-size: 11px;">
 
                     <!-- ===== LODGE HEADER WITH LOGOS ===== -->
@@ -97,11 +139,7 @@
                                     Event Profit &amp; Loss Report
                                 </div>
                                 <div style="font-size: 11px; color: #666; margin-top: 2px;">
-                                    Period: <t t-esc="wizard.date_from" t-options="{'widget': 'date'}"/>
-                                    through <t t-esc="wizard.date_to" t-options="{'widget': 'date'}"/>
-                                    <t t-if="wizard.event_id">
-                                        — Event: <t t-esc="wizard.event_id.name"/>
-                                    </t>
+                                    <t t-out="subtitle"/>
                                 </div>
                             </td>
                             <td style="width: 15%; text-align: center; vertical-align: middle; border: none; padding: 0;">
@@ -114,7 +152,16 @@
                         </tr>
                     </table>
 
-                    <hr style="border-top: 2px solid #46166a; margin: 8px 0 15px 0;"/>
+                    <hr style="border-top: 2px solid #46166a; margin: 8px 0 10px 0;"/>
+
+                    <!-- ===== INTERNAL-USE BANNER ===== -->
+                    <div style="background: #fff3cd; border: 1px solid #d39e00;
+                                border-radius: 4px; padding: 6px 10px;
+                                margin-bottom: 14px; text-align: center;
+                                font-weight: bold; color: #7a5b00;
+                                letter-spacing: 0.5px;">
+                        CONFIDENTIAL - INTERNAL USE ONLY - NOT FOR DISTRIBUTION
+                    </div>
 
                     <!-- ===== GRAND SUMMARY CARDS ===== -->
                     <table style="width: 100%; margin-bottom: 20px; border: none;">
@@ -172,18 +219,18 @@
                             <t t-esc="ed['event'].name"/>
                             <span style="font-size: 11px; color: #666; margin-left: 10px;">
                                 <t t-esc="ed['event'].x_event_date" t-options="{'widget': 'date'}"/>
-                                — <t t-esc="dict(ed['event']._fields['x_event_type'].selection).get(ed['event'].x_event_type, '')"/>
-                                — <t t-esc="ed['event'].x_guest_count"/> guests
+                                - <t t-esc="dict(ed['event']._fields['x_event_type'].selection).get(ed['event'].x_event_type, '')"/>
+                                - <t t-esc="ed['event'].x_guest_count"/> guests
                             </span>
                         </h4>
 
                         <!-- Income section -->
-                        <t t-if="ed['room_lines']">
+                        <t t-if="ed['room_lines'] or ed['charge_lines']">
                             <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10px;">
                                 <thead>
                                     <tr style="background: #28a745; color: white;">
                                         <th style="padding: 5px 8px; text-align: left;" colspan="5">
-                                            INCOME — Room Bookings
+                                            INCOME - Rooms, Event Charges &amp; Coordinator
                                         </th>
                                     </tr>
                                     <tr style="background: #e8f5e9;">
@@ -222,12 +269,47 @@
                                             $<t t-esc="'{:,.2f}'.format(ed['room_income'])"/>
                                         </td>
                                     </tr>
+                                    <!-- Event cost line CHARGES (every line the customer is billed) -->
+                                    <t t-foreach="ed['charge_lines']" t-as="chl">
+                                        <tr>
+                                            <td colspan="4" style="padding: 4px 8px; border-bottom: 1px solid #dee2e6;">
+                                                <t t-esc="chl['name']"/>
+                                            </td>
+                                            <td style="padding: 4px 8px; text-align: right; border-bottom: 1px solid #dee2e6;">
+                                                $<t t-esc="'{:,.2f}'.format(chl['total'] or 0)"/>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                    <tr t-if="ed['charge_lines']" style="background: #e8f5e9;">
+                                        <td colspan="4" style="padding: 4px 8px; text-align: right; font-weight: bold;">
+                                            Event Charges:
+                                        </td>
+                                        <td style="padding: 4px 8px; text-align: right; font-weight: bold;">
+                                            $<t t-esc="'{:,.2f}'.format(ed['eventcosts_total'])"/>
+                                        </td>
+                                    </tr>
                                     <tr style="background: #e8f5e9;">
                                         <td colspan="4" style="padding: 4px 8px; text-align: right;">
                                             Coordinator Fee:
                                         </td>
                                         <td style="padding: 4px 8px; text-align: right;">
                                             $<t t-esc="'{:,.2f}'.format(ed['coordinator_fee'])"/>
+                                        </td>
+                                    </tr>
+                                    <tr t-if="ed['discount']">
+                                        <td colspan="4" style="padding: 4px 8px; text-align: right;">
+                                            Subtotal:
+                                        </td>
+                                        <td style="padding: 4px 8px; text-align: right;">
+                                            $<t t-esc="'{:,.2f}'.format(ed['gross_income'])"/>
+                                        </td>
+                                    </tr>
+                                    <tr t-if="ed['discount']">
+                                        <td colspan="4" style="padding: 4px 8px; text-align: right; color:#b00;">
+                                            <t t-esc="ed['discount_label']"/>:
+                                        </td>
+                                        <td style="padding: 4px 8px; text-align: right; color:#b00;">
+                                            -$<t t-esc="'{:,.2f}'.format(ed['discount'])"/>
                                         </td>
                                     </tr>
                                     <tr style="background: #c8e6c9; font-weight: bold;">
@@ -242,62 +324,46 @@
                             </table>
                         </t>
 
-                        <!-- Expense section: Cost lines -->
-                        <t t-if="ed['cost_lines'] or ed['po_lines']">
+                        <!-- Expense section: itemized validated COGS (goods +
+                             actual PAID labor) + POs -->
+                        <t t-if="ed['cost_items'] or ed['po_lines']">
                             <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10px;">
                                 <thead>
                                     <tr style="background: #dc3545; color: white;">
-                                        <th style="padding: 5px 8px; text-align: left;" colspan="5">
-                                            EXPENSES — Event Costs
+                                        <th style="padding: 5px 8px; text-align: left;" colspan="2">
+                                            EXPENSES - Cost of Goods Sold (validated: supplies + paid labor) &amp; Purchase Orders
                                         </th>
                                     </tr>
                                     <tr style="background: #fce4ec;">
-                                        <th style="padding: 4px 8px; text-align: left;">Type</th>
-                                        <th style="padding: 4px 8px; text-align: left;">Description</th>
-                                        <th style="padding: 4px 8px; text-align: right;">Qty</th>
-                                        <th style="padding: 4px 8px; text-align: right;">Unit Cost</th>
-                                        <th style="padding: 4px 8px; text-align: right;">Total</th>
+                                        <th style="padding: 4px 8px; text-align: left;">Item</th>
+                                        <th style="padding: 4px 8px; text-align: right;">COGS</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <t t-foreach="ed['cost_lines']" t-as="cl">
-                                        <tr t-att-style="'background: %s;' % ('#f8f9fa' if cl_index % 2 else '#ffffff')">
+                                    <t t-foreach="ed['cost_items']" t-as="ci">
+                                        <tr t-att-style="'background: %s;' % ('#f8f9fa' if ci_index % 2 else '#ffffff')">
                                             <td style="padding: 4px 8px; border-bottom: 1px solid #dee2e6;">
-                                                <t t-esc="cl['type']"/>
-                                            </td>
-                                            <td style="padding: 4px 8px; border-bottom: 1px solid #dee2e6;">
-                                                <t t-esc="cl['name']"/>
+                                                <t t-esc="ci['name']"/>
                                             </td>
                                             <td style="padding: 4px 8px; text-align: right; border-bottom: 1px solid #dee2e6;">
-                                                <t t-esc="'{:.1f}'.format(cl['quantity'])"/>
-                                            </td>
-                                            <td style="padding: 4px 8px; text-align: right; border-bottom: 1px solid #dee2e6;">
-                                                $<t t-esc="'{:,.2f}'.format(cl['unit_cost'] or 0)"/>
-                                            </td>
-                                            <td style="padding: 4px 8px; text-align: right; border-bottom: 1px solid #dee2e6; font-weight: bold;">
-                                                $<t t-esc="'{:,.2f}'.format(cl['total'] or 0)"/>
+                                                $<t t-esc="'{:,.2f}'.format(ci['cogs'] or 0)"/>
                                             </td>
                                         </tr>
                                     </t>
-                                    <t t-if="ed['cost_lines']">
-                                        <tr style="background: #fce4ec;">
-                                            <td colspan="4" style="padding: 4px 8px; text-align: right; font-weight: bold;">
-                                                Cost Lines Subtotal:
-                                            </td>
-                                            <td style="padding: 4px 8px; text-align: right; font-weight: bold;">
-                                                $<t t-esc="'{:,.2f}'.format(ed['total_costs'])"/>
-                                            </td>
-                                        </tr>
-                                    </t>
+                                    <tr t-if="ed['cost_items']" style="background: #fce4ec;">
+                                        <td style="padding: 4px 8px; text-align: right; font-weight: bold;">
+                                            COGS Subtotal:
+                                        </td>
+                                        <td style="padding: 4px 8px; text-align: right; font-weight: bold;">
+                                            $<t t-esc="'{:,.2f}'.format(ed['cogs_total'])"/>
+                                        </td>
+                                    </tr>
                                     <!-- PO costs -->
                                     <t t-foreach="ed['po_lines']" t-as="pl">
                                         <tr style="background: #fff3cd;">
                                             <td style="padding: 4px 8px; border-bottom: 1px solid #dee2e6;">
-                                                PO
-                                            </td>
-                                            <td colspan="3" style="padding: 4px 8px; border-bottom: 1px solid #dee2e6;">
-                                                <t t-esc="pl['name']"/>
-                                                <t t-if="pl['origin']"> — <t t-esc="pl['origin']"/></t>
+                                                PO - <t t-esc="pl['name']"/>
+                                                <t t-if="pl['origin']"> (<t t-esc="pl['origin']"/>)</t>
                                             </td>
                                             <td style="padding: 4px 8px; text-align: right; border-bottom: 1px solid #dee2e6; font-weight: bold;">
                                                 $<t t-esc="'{:,.2f}'.format(pl['total'] or 0)"/>
@@ -305,7 +371,7 @@
                                         </tr>
                                     </t>
                                     <tr style="background: #e57373; color: white; font-weight: bold;">
-                                        <td colspan="4" style="padding: 4px 8px; text-align: right;">
+                                        <td style="padding: 4px 8px; text-align: right;">
                                             TOTAL EXPENSES:
                                         </td>
                                         <td style="padding: 4px 8px; text-align: right;">
@@ -325,12 +391,43 @@
                                 </td>
                             </tr>
                         </table>
+
+                        <!-- UBI / property-tax reserve (non-member rentals) -->
+                        <t t-if="not ed['is_member'] and ed['ubi_room_income']">
+                            <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 10px;">
+                                <thead>
+                                    <tr style="background: #6c5099; color: white;">
+                                        <th style="padding: 5px 8px; text-align: left;" colspan="2">
+                                            UNRELATED BUSINESS INCOME (UBI) - Non-Member Room Rental
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td style="padding: 4px 8px; border-bottom: 1px solid #dee2e6;">
+                                            Room rental income counted as UBI (profit)
+                                        </td>
+                                        <td style="padding: 4px 8px; text-align: right; border-bottom: 1px solid #dee2e6; font-weight: bold;">
+                                            $<t t-esc="'{:,.2f}'.format(ed['ubi_room_income'])"/>
+                                        </td>
+                                    </tr>
+                                    <tr style="background: #efe9f5; font-weight: bold;">
+                                        <td style="padding: 4px 8px;">
+                                            Property tax reserve to set aside
+                                        </td>
+                                        <td style="padding: 4px 8px; text-align: right;">
+                                            $<t t-esc="'{:,.2f}'.format(ed['ubi_tax_reserve'])"/>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </t>
                     </t>
 
                     <!-- Empty state -->
                     <t t-if="not data['events']">
                         <p style="color: #666; font-style: italic; text-align: center; padding: 40px;">
-                            No events found in the selected date range.
+                            <t t-out="empty_msg"/>
                         </p>
                     </t>
 
@@ -338,13 +435,12 @@
                     <div style="margin-top: 20px; padding-top: 8px;
                                 border-top: 1px solid #ccc; font-size: 9px;
                                 color: #999; text-align: center;">
+                        Confidential - Internal use only - not for distribution.
                         Generated from Odoo Elks Events on
                         <t t-esc="context_timestamp(datetime.datetime.now()).strftime('%B %d, %Y at %I:%M %p')"/>
                     </div>
 
                 </div>
-            </t>
-        </t>
     </template>
 
 </odoo>

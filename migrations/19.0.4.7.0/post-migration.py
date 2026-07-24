@@ -20,6 +20,8 @@ BUILTINS = [
     ('event_workers', 'Event Workers', 'event', False, True),
     ('event_service', 'Event Service', 'event', False, False),
     ('event_supplies', 'Event Supplies', 'event', True, False),
+    ('marketing_signage', 'Marketing Signage Use', 'event', False, False),
+    ('exclusive_use', 'Exclusive Use', 'event', False, False),
     ('cleanup_labor', 'Cleanup Hours', 'cleaning', False, True),
     ('cleaning_service', 'Cleaning Service', 'cleaning', False, False),
     ('coordinator', 'Event Coordinator Fee', 'coordinator', False, False),

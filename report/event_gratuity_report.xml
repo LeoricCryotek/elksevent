@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- =========================================================================
+     HUMAN: A printable Gratuity Distribution slip per event - employee, date,
+     role, hours worked, and gratuity share - to hand to payroll / attach to a
+     check for staff who don't normally receive gratuity.
+     AI: qweb-pdf on project.task. Self-contained inline-style layout with its
+     own lodge header (NOT web.external_layout, which imposed the default
+     "Your logo / My Company" header and a font that clipped bold glyphs).
+     ASCII-only text so no engine mojibakes it. Print from the event's Print
+     menu.
+     ========================================================================= -->
+<odoo>
+    <record id="action_report_event_gratuity" model="ir.actions.report">
+        <field name="name">Gratuity Distribution</field>
+        <field name="model">project.task</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_event_gratuity</field>
+        <field name="report_file">elksevent.report_event_gratuity</field>
+        <field name="binding_model_id" ref="project.model_project_task"/>
+        <field name="binding_type">report</field>
+        <field name="paperformat_id" ref="base.paperformat_us"/>
+        <field name="print_report_name">'Gratuity - %s' % (object.name or 'Event')</field>
+    </record>
+
+    <template id="report_event_gratuity">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="doc">
+                <t t-set="settings"
+                   t-value="doc.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
+                <div class="page" style="font-size:11px; color:#222;">
+
+                    <!-- Lodge header -->
+                    <table style="width:100%; border:none; margin-bottom:4px;">
+                        <tr>
+                            <td style="border:none; padding:0;">
+                                <div style="font-size:15px; font-weight:bold;">
+                                    <t t-if="settings"><t t-esc="settings.name"/></t>
+                                    <t t-else="">Elks Lodge</t>
+                                    <t t-if="settings and settings.lodge_number">#<t t-esc="settings.lodge_number"/></t>
+                                </div>
+                                <div style="font-size:13px; font-weight:bold; color:#46166a;">
+                                    Gratuity Distribution
+                                </div>
+                            </td>
+                            <td style="border:none; padding:0; text-align:right; font-size:9px; color:#666;">
+                                Printed <span t-esc="time.strftime('%m/%d/%Y')"/>
+                            </td>
+                        </tr>
+                    </table>
+                    <hr style="border-top:2px solid #46166a; margin:2px 0 10px 0;"/>
+
+                    <table style="width:100%; font-size:10px; margin-bottom:10px;">
+                        <tr>
+                            <td style="padding:2px 4px;"><strong>Event:</strong> <t t-esc="doc.name or ''"/></td>
+                            <td style="padding:2px 4px;"><strong>Event Date:</strong>
+                                <t t-if="doc.x_event_date"><span t-field="doc.x_event_date"/></t>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <table style="width:100%; border-collapse:collapse; font-size:10px;">
+                        <thead>
+                            <tr style="background:#46166a; color:#fff;">
+                                <th style="padding:5px 8px; text-align:left;">Employee</th>
+                                <th style="padding:5px 8px; text-align:left;">Shift Date</th>
+                                <th style="padding:5px 8px; text-align:left;">Role</th>
+                                <th style="padding:5px 8px; text-align:right;">Hours</th>
+                                <th style="padding:5px 8px; text-align:right;">Gratuity</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-foreach="doc.x_attendance_ids.filtered(lambda a: a.x_gratuity_share)"
+                               t-as="att">
+                                <tr>
+                                    <td style="padding:4px 8px; border-bottom:1px solid #ddd;"><t t-esc="att.employee_id.name"/></td>
+                                    <td style="padding:4px 8px; border-bottom:1px solid #ddd;">
+                                        <span t-field="att.check_in" t-options='{"widget": "date"}'/>
+                                    </td>
+                                    <td style="padding:4px 8px; border-bottom:1px solid #ddd;"><t t-esc="att.x_event_role or ''"/></td>
+                                    <td style="padding:4px 8px; text-align:right; border-bottom:1px solid #ddd;">
+                                        <span t-field="att.worked_hours" t-options='{"widget": "float_time"}'/>
+                                    </td>
+                                    <td style="padding:4px 8px; text-align:right; border-bottom:1px solid #ddd;">
+                                        $<t t-esc="'{:,.2f}'.format(att.x_gratuity_share or 0.0)"/>
+                                    </td>
+                                </tr>
+                            </t>
+                            <tr style="background:#efe9f5; font-weight:bold;">
+                                <td colspan="4" style="padding:5px 8px; text-align:right;">Total Gratuity</td>
+                                <td style="padding:5px 8px; text-align:right;">
+                                    $<t t-esc="'{:,.2f}'.format(sum(doc.x_attendance_ids.mapped('x_gratuity_share')))"/>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <p style="font-size:9px; color:#888; margin-top:10px;">
+                        Gratuity is split from the bar and kitchen pools by hours
+                        worked. For staff who do not normally receive gratuity,
+                        this slip documents the amount for the selected day's pay.
+                    </p>
+                </div>
+            </t>
+        </t>
+    </template>
+</odoo>

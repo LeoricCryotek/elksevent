@@ -10,7 +10,7 @@
         <field name="report_file">elksevent.report_event_contract</field>
         <field name="binding_model_id" ref="project.model_project_task"/>
         <field name="binding_type">report</field>
-        <field name="paperformat_id" ref="base.paperformat_us"/>
+        <field name="paperformat_id" ref="paperformat_event_sheet"/>
     </record>
 
     <template id="report_event_contract">
@@ -23,126 +23,162 @@
                 <t t-set="dep_pct"
                    t-value="(settings.x_deposit_pct if settings else 50.0) or 0.0"/>
                 <t t-set="deposit" t-value="net * dep_pct / 100.0"/>
-                <div class="page" style="font-size:11px;">
+                <!-- Terms &amp; Conditions live on the editable T&amp;C page; the
+                     agreement links to it (settings URL or the /event-terms page)
+                     so the printed terms are never a hardcoded duplicate. -->
+                <t t-set="terms_url"
+                   t-value="settings.x_event_terms_url if settings and settings.x_event_terms_url else ((o.env['ir.config_parameter'].sudo().get_param('web.base.url') or '').rstrip('/') + '/event-terms')"/>
+                <t t-set="terms_label"
+                   t-value="settings.x_event_terms_label if settings and settings.x_event_terms_label else 'Rental Terms &amp; Conditions'"/>
+                <div class="page" style="font-size:13px;">
 
-                    <!-- Header -->
-                    <div style="text-align:center; margin-bottom:6px;">
-                        <div t-if="settings" style="font-size:16px; font-weight:bold;">
-                            <t t-esc="settings.name"/>
-                            <t t-if="settings.lodge_number">#<t t-esc="settings.lodge_number"/></t>
-                        </div>
-                        <div style="font-size:14px; font-weight:bold;">Facility Usage Agreement</div>
-                        <div t-if="settings" style="font-size:10px; color:#555;">
-                            <t t-esc="settings.lodge_address or ''"/>,
-                            <t t-esc="settings.lodge_city or ''"/>
-                            <t t-esc="settings.lodge_state or ''"/>
-                        </div>
-                    </div>
-                    <hr style="border-top:2px solid #46166a; margin:4px 0 10px 0;"/>
+                    <!-- ===== LODGE HEADER WITH LOGOS (P&amp;L style) ===== -->
+                    <table style="width:100%; margin-bottom:6px; border:none;">
+                        <tr>
+                            <td style="width:15%; text-align:center; vertical-align:middle; border:none; padding:0;">
+                                <t t-if="settings and settings.logo_primary">
+                                    <img t-att-src="image_data_uri(settings.logo_primary)"
+                                         style="max-height:80px; max-width:100px;" alt="Elks USA"/>
+                                </t>
+                            </td>
+                            <td style="text-align:center; vertical-align:middle; border:none;">
+                                <div t-if="settings" style="font-size:19px; font-weight:bold;">
+                                    <t t-esc="settings.name"/>
+                                    <t t-if="settings.lodge_number">#<t t-esc="settings.lodge_number"/></t>
+                                </div>
+                                <div style="font-size:16px; font-weight:bold; margin-top:2px;">Facility Usage Agreement</div>
+                                <div t-if="settings" style="font-size:12px; color:#555; margin-top:2px;">
+                                    <t t-esc="settings.lodge_address or ''"/>,
+                                    <t t-esc="settings.lodge_city or ''"/>
+                                    <t t-esc="settings.lodge_state or ''"/>
+                                </div>
+                            </td>
+                            <td style="width:15%; text-align:center; vertical-align:middle; border:none; padding:0;">
+                                <t t-if="settings and settings.logo_lodge">
+                                    <img t-att-src="image_data_uri(settings.logo_lodge)"
+                                         style="max-height:80px; max-width:100px;" alt="Lodge Logo"/>
+                                </t>
+                            </td>
+                        </tr>
+                    </table>
+                    <hr style="border-top:2px solid #46166a; margin:4px 0 12px 0;"/>
 
                     <!-- Event particulars -->
-                    <table style="width:100%; font-size:10px; margin-bottom:10px;">
+                    <table style="width:100%; font-size:12px; margin-bottom:12px;">
                         <tr>
-                            <td style="padding:2px;"><strong>Host:</strong> <t t-esc="o.x_customer_name or ''"/></td>
-                            <td style="padding:2px;"><strong>Type:</strong> <t t-esc="o.x_event_type or ''"/></td>
+                            <td style="padding:3px;"><strong>Host:</strong> <t t-esc="o.x_customer_name or ''"/></td>
+                            <td style="padding:3px;"><strong>Type:</strong> <t t-esc="o.x_event_type or ''"/></td>
                         </tr>
                         <tr>
-                            <td style="padding:2px;"><strong>Date:</strong> <t t-esc="o.x_event_date or ''"/></td>
-                            <td style="padding:2px;"><strong>Guests:</strong> <t t-esc="o.x_guest_count or 0"/></td>
+                            <td style="padding:3px;"><strong>Date:</strong> <t t-esc="o.x_event_date or ''"/></td>
+                            <td style="padding:3px;"><strong>Guests:</strong> <t t-esc="o.x_guest_count or 0"/></td>
                         </tr>
                         <tr>
-                            <td style="padding:2px;"><strong>Phone:</strong> <t t-esc="o.x_customer_phone or ''"/></td>
-                            <td style="padding:2px;"><strong>Email:</strong> <t t-esc="o.x_customer_email or ''"/></td>
+                            <td style="padding:3px;"><strong>Phone:</strong> <t t-esc="o.x_customer_phone or ''"/></td>
+                            <td style="padding:3px;"><strong>Email:</strong> <t t-esc="o.x_customer_email or ''"/></td>
                         </tr>
                         <tr t-if="o.x_is_member">
-                            <td style="padding:2px;" colspan="2">
+                            <td style="padding:3px;" colspan="2">
                                 <strong>Member #:</strong> <t t-esc="o.x_member_number or ''"/>
                             </td>
                         </tr>
                     </table>
 
                     <!-- Charges -->
-                    <table style="width:100%; border-collapse:collapse; font-size:10px; margin-bottom:8px;">
+                    <table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:12px;">
                         <thead>
                             <tr style="background:#46166a; color:white;">
-                                <th style="padding:4px; text-align:left;">Item</th>
-                                <th style="padding:4px; text-align:right;">Amount</th>
+                                <th style="padding:6px; text-align:left;">Item</th>
+                                <th style="padding:6px; text-align:right;">Amount</th>
                             </tr>
                         </thead>
                         <tbody>
                             <t t-if="so">
                                 <t t-foreach="so.order_line.filtered(lambda l: not l.display_type)" t-as="line">
                                     <tr>
-                                        <td style="padding:4px; border-bottom:1px solid #ddd;"><t t-esc="line.name"/></td>
-                                        <td style="padding:4px; text-align:right; border-bottom:1px solid #ddd;">$<t t-esc="'{:,.2f}'.format(line.price_subtotal)"/></td>
+                                        <td style="padding:6px; border-bottom:1px solid #ddd;"><t t-esc="line.name"/></td>
+                                        <td style="padding:6px; text-align:right; border-bottom:1px solid #ddd;">$<t t-esc="'{:,.2f}'.format(line.price_subtotal)"/></td>
                                     </tr>
                                 </t>
                             </t>
                             <t t-else="">
                                 <t t-foreach="o.x_room_booking_ids" t-as="rb">
                                     <tr>
-                                        <td style="padding:4px; border-bottom:1px solid #ddd;">Room: <t t-esc="rb.room_id.name"/></td>
-                                        <td style="padding:4px; text-align:right; border-bottom:1px solid #ddd;">$<t t-esc="'{:,.2f}'.format(rb.subtotal)"/></td>
+                                        <td style="padding:6px; border-bottom:1px solid #ddd;">Room: <t t-esc="rb.room_id.name"/></td>
+                                        <td style="padding:6px; text-align:right; border-bottom:1px solid #ddd;">$<t t-esc="'{:,.2f}'.format(rb.subtotal)"/></td>
                                     </tr>
                                 </t>
                             </t>
                             <tr style="background:#e8e0f0; font-weight:bold;">
-                                <td style="padding:4px; text-align:right;">Total:</td>
-                                <td style="padding:4px; text-align:right;">$<t t-esc="'{:,.2f}'.format(net)"/></td>
+                                <td style="padding:6px; text-align:right;">Total:</td>
+                                <td style="padding:6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(net)"/></td>
                             </tr>
                             <tr>
-                                <td style="padding:4px; text-align:right;">Reservation Fee due at signing (<t t-esc="'{:g}'.format(dep_pct)"/>%):</td>
-                                <td style="padding:4px; text-align:right;">$<t t-esc="'{:,.2f}'.format(deposit)"/></td>
+                                <td style="padding:6px; text-align:right;">Reservation Fee due at signing (<t t-esc="'{:g}'.format(dep_pct)"/>%):</td>
+                                <td style="padding:6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(deposit)"/></td>
                             </tr>
                             <tr>
-                                <td style="padding:4px; text-align:right;">Balance due before event:</td>
-                                <td style="padding:4px; text-align:right;">$<t t-esc="'{:,.2f}'.format(net - deposit)"/></td>
+                                <td style="padding:6px; text-align:right;">Balance due before event:</td>
+                                <td style="padding:6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(net - deposit)"/></td>
                             </tr>
                         </tbody>
                     </table>
 
-                    <!-- Payment & cancellation terms -->
-                    <div style="font-size:9px; line-height:1.3;">
+                    <!-- Payment &amp; cancellation + Terms reference -->
+                    <div style="font-size:12px; line-height:1.4;">
                         <strong>PAYMENT &amp; CANCELLATION</strong>
-                        <ul style="margin:4px 0 6px 14px; padding:0;">
+                        <ul style="margin:4px 0 8px 18px; padding:0;">
                             <li>A non-refundable cleaning fee of $100.00 is due and payable at the time of signing.</li>
                             <li>All other fees: 50% due at signing, with the remaining balance due the day prior to the scheduled event.</li>
                             <li>Cancellation of the event within seven (7) days will forfeit 100% of the reservation fees.</li>
                         </ul>
 
-                        <strong>RULES OF USAGE</strong>
-                        <ol style="margin:4px 0 0 14px; padding:0;">
-                            <li>The Lodge has total authority to oversee and maintain order of the event. Use of the premises is at your own risk; all local, state, and federal laws apply.</li>
-                            <li>No alcohol may be brought onto the premises at any time (Idaho state law) — includes the building, patio, and parking lot.</li>
-                            <li>All beverages must be purchased from the Lounge Bar. Wine may be brought in as governed by Lodge bylaws; a corkage fee will be assessed.</li>
-                            <li>A certificate of liability insurance must be on file prior to the event date.</li>
-                            <li>All Elk members have access to the Lodge during normal business hours.</li>
-                            <li>All damage to the building or premises will be billed at full replacement cost.</li>
-                            <li>Rice, seeds, sparklers, confetti, glitter, or foreign materials are strictly prohibited.</li>
-                            <li>No animals are permitted on the premises.</li>
-                            <li>The Elks are not responsible for lost or unclaimed property.</li>
-                            <li>Any changes to the contract must be made in writing no less than 14 days prior to the event.</li>
-                            <li>Premises must be left in the same condition as at the beginning of the event.</li>
-                            <li>Garbage must be removed from the facility. For parties over 50 guests, garbage removal and disposal are the renter's responsibility; a $75.00 overage fee applies for use of the lodge dumpster.</li>
-                            <li>An extra bartender fee of $150.00 applies for parties over 100 guests.</li>
-                            <li>Special liquor order / corkage fees may apply.</li>
-                            <li>Rental fees are based on a one-day event. Additional setup/takedown time is assessed at 25% of the rental fee per each day (a day being all or part of the hours 12:00&#8239;PM–6:00&#8239;PM the day before, or 9:00&#8239;AM–12:00&#8239;PM the day after). Any time exceeding these windows is charged at $100.00 per hour. The event must be finished by 12:00&#8239;A.M. (no exceptions).</li>
-                            <li>Only approved caterers are allowed entry; the lodge must have a copy of all caterer licenses and insurance on file (no exceptions). The lodge is released of responsibility for any food brought onto the premises.</li>
-                            <li>Kitchen facilities are not available to parties or caterers (refrigerator/counters for serving with prior approval).</li>
-                            <li>Not to exceed the recommended capacity by room of the facility.</li>
-                        </ol>
-                        <p style="margin-top:6px;">The Renter agrees to indemnify, defend, and hold harmless the Lewiston Elks Lodge #896, its officers, members, employees, and agents from any and all claims, damages, losses, liabilities, costs, and expenses (including reasonable attorney's fees) arising out of or in connection with the Renter's use of the facility.</p>
+                        <strong>TERMS &amp; CONDITIONS</strong>
+                        <!-- Coordinator-editable wording (FRS Settings ->
+                             Contract Terms Note); falls back to the default. -->
+                        <t t-if="settings and settings.x_event_contract_terms">
+                            <div style="margin:4px 0 0 0;" t-out="settings.x_event_contract_terms"/>
+                            <p style="margin:4px 0 0 0;">
+                                Full Terms &amp; Conditions:
+                                <a t-att-href="terms_url" style="color:#46166a;"><t t-esc="terms_label"/></a>
+                            </p>
+                        </t>
+                        <t t-else="">
+                            <p style="margin:4px 0 0 0;">
+                                The full Rental Terms &amp; Conditions - rules of usage,
+                                insurance, alcohol and catering policy, setup/takedown
+                                charges, indemnification, and capacity - are published at
+                                <a t-att-href="terms_url" style="color:#46166a;"><t t-esc="terms_label"/></a>
+                                and are incorporated into this agreement by reference. They
+                                may be updated from time to time. By signing below, the Host
+                                acknowledges having read, understood, and agreed to those
+                                Terms &amp; Conditions in effect as of the signing date.
+                            </p>
+                        </t>
                     </div>
 
                     <!-- Signatures -->
-                    <table style="width:100%; margin-top:24px; font-size:10px;">
+                    <table style="width:100%; margin-top:48px; font-size:13px;">
                         <tr>
-                            <td style="padding:4px;">Host Signature: ______________________________</td>
-                            <td style="padding:4px;">Date: ____________</td>
+                            <td style="width:62%; border-bottom:1px solid #000; padding:0 8px 2px 0;"> </td>
+                            <td style="width:3%;"> </td>
+                            <td style="width:35%; border-bottom:1px solid #000; padding:0 0 2px 8px;"> </td>
                         </tr>
                         <tr>
-                            <td style="padding:14px 4px;">Club Manager: ______________________________</td>
-                            <td style="padding:14px 4px;">Date: ____________</td>
+                            <td style="padding:2px 0;">Host</td>
+                            <td> </td>
+                            <td style="padding:2px 0 0 8px;">Date</td>
+                        </tr>
+                        <tr><td colspan="3" style="height:34px;"> </td></tr>
+                        <tr>
+                            <td style="width:62%; border-bottom:1px solid #000; padding:0 8px 2px 0;"> </td>
+                            <td style="width:3%;"> </td>
+                            <td style="width:35%; border-bottom:1px solid #000; padding:0 0 2px 8px;"> </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:2px 0;">Elks Representative</td>
+                            <td> </td>
+                            <td style="padding:2px 0 0 8px;">Date</td>
                         </tr>
                     </table>
                 </div>

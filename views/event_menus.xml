@@ -63,4 +63,12 @@
               action="action_event_cost_types"
               sequence="30"/>
 
+    <!-- Shortcut to the FRS Lodge Settings (event fees, rates, tax, etc.),
+         which also live under Elks Charity > Configuration > Lodge Settings. -->
+    <menuitem id="menu_event_lodge_settings"
+              name="Lodge Settings (FRS)"
+              parent="menu_event_config"
+              action="elksfrs.action_lodge_settings_singleton"
+              sequence="40"/>
+
 </odoo>

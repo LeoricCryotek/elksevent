@@ -18,9 +18,21 @@
                 <attribute name="string">Event Date</attribute>
             </xpath>
 
-            <!-- Trim unused standard tabs for events: the task Description
-                 (we use "Event Description") and Blocked By dependencies. -->
+            <!-- Calendar Description: the task description feeds the lodge
+                 calendar / newsletter, so surface it at the top (under
+                 Assignees) with a note, and hide the standard Description tab. -->
+            <xpath expr="//field[@name='user_ids']" position="after">
+                <label for="description" string="Calendar Description"
+                       invisible="not x_is_event"/>
+                <div invisible="not x_is_event">
+                    <field name="description"
+                           placeholder="Shown on the lodge calendar and in the newsletter — keep it short and public-facing."/>
+                </div>
+            </xpath>
             <xpath expr="//page[@name='description_page']" position="attributes">
+                <attribute name="invisible">x_is_event</attribute>
+            </xpath>
+            <xpath expr="//page[@name='extra_info']" position="attributes">
                 <attribute name="invisible">x_is_event</attribute>
             </xpath>
             <xpath expr="//field[@name='depend_on_ids']/ancestor::page[1]"
@@ -31,12 +43,83 @@
             <!-- Timesheets tab: pull the event's timeclock hours in. The
                  "Add Timeclock Hours" button opens a picker to attach a
                  worker's recorded shifts (with a role) — no manual entry. -->
+            <xpath expr="//field[@name='timesheet_ids']" position="attributes">
+                <attribute name="invisible">x_is_event</attribute>
+            </xpath>
+
             <xpath expr="//field[@name='timesheet_ids']" position="after">
+                <separator string="Planned Staff Assignments"
+                           invisible="not x_is_event"/>
+                <div class="text-muted" invisible="not x_is_event">
+                    Assign who is scheduled to work and their role. When an
+                    assigned person clocks in during the event window, their
+                    timeclock punch is auto-tagged to this event below.
+                </div>
+                <field name="x_staff_assignment_ids"
+                       invisible="not x_is_event">
+                    <list editable="bottom">
+                        <field name="employee_id"/>
+                        <field name="role"/>
+                        <field name="note" optional="show"/>
+                    </list>
+                </field>
+                <group invisible="not x_is_event"
+                       string="Positions — Requested / Assigned / To Fill">
+                    <group>
+                        <label for="x_bartender_count" string="Bartenders"
+                               invisible="not x_bar_use"/>
+                        <div invisible="not x_bar_use">
+                            <field name="x_bartender_count" class="oe_inline" readonly="1"/> req /
+                            <field name="x_assigned_bartenders" class="oe_inline"/> asgn /
+                            <field name="x_tofill_bartenders" class="oe_inline"/> to fill
+                        </div>
+                        <label for="x_event_worker_count" string="Event Workers"
+                               invisible="not x_event_workers_use"/>
+                        <div invisible="not x_event_workers_use">
+                            <field name="x_event_worker_count" class="oe_inline" readonly="1"/> req /
+                            <field name="x_assigned_event_workers" class="oe_inline"/> asgn /
+                            <field name="x_tofill_event_workers" class="oe_inline"/> to fill
+                        </div>
+                    </group>
+                    <group>
+                        <label for="x_cook_count" string="Cooks"
+                               invisible="not x_food_request"/>
+                        <div invisible="not x_food_request">
+                            <field name="x_cook_count" class="oe_inline" readonly="1"/> req /
+                            <field name="x_assigned_cooks" class="oe_inline"/> asgn /
+                            <field name="x_tofill_cooks" class="oe_inline"/> to fill
+                        </div>
+                        <label for="x_kitchen_support_count" string="Kitchen Support"
+                               invisible="not x_food_request"/>
+                        <div invisible="not x_food_request">
+                            <field name="x_kitchen_support_count" class="oe_inline" readonly="1"/> req /
+                            <field name="x_assigned_support" class="oe_inline"/> asgn /
+                            <field name="x_tofill_support" class="oe_inline"/> to fill
+                        </div>
+                        <label for="x_cleaner_count" string="Cleaners"
+                               invisible="not x_cleaning_use"/>
+                        <div invisible="not x_cleaning_use">
+                            <field name="x_cleaner_count" class="oe_inline" readonly="1"/> req /
+                            <field name="x_assigned_cleaning" class="oe_inline"/> asgn /
+                            <field name="x_tofill_cleaning" class="oe_inline"/> to fill
+                        </div>
+                    </group>
+                </group>
                 <separator string="Event Timeclock Hours"/>
                 <button name="action_open_add_hours" type="object"
                         string="Add Timeclock Hours" class="btn-primary"
                         icon="fa-clock-o"
                         invisible="not x_is_event"/>
+                <button name="action_distribute_gratuity" type="object"
+                        string="Distribute Gratuity" class="btn-secondary"
+                        icon="fa-money"
+                        invisible="not x_is_event"
+                        help="Split the bar and kitchen gratuity pools across the matching shifts, by hours, for payroll."/>
+                <button name="action_pay_coordinator" type="object"
+                        string="Pay Coordinator" class="btn-secondary"
+                        icon="fa-user"
+                        invisible="not x_is_event or not x_coordinator_employee_id"
+                        help="Post the coordinator fee to the tagged coordinator's timecard as a flat payout (no clocked hours needed)."/>
                 <field name="x_attendance_ids"
                        invisible="not x_is_event">
                     <list editable="bottom" create="false">
@@ -46,8 +129,28 @@
                         <field name="worked_hours" widget="float_time"
                                string="Hours" sum="Total Hours" readonly="1"/>
                         <field name="x_event_role"/>
+                        <field name="x_gratuity_share" sum="Total Gratuity"/>
+                        <field name="x_coordinator_fee_share"
+                               sum="Total Coordinator Fee" optional="show"/>
+                        <field name="currency_id" column_invisible="1"/>
                     </list>
                 </field>
+                <group class="oe_subtotal_footer" invisible="not x_is_event">
+                    <field name="x_actual_total_hours" widget="float_time"
+                           string="Total Event Hours"/>
+                    <field name="x_gratuity_amount" string="Gratuity Pool"/>
+                    <field name="x_gratuity_distributed"
+                           string="Distributed"/>
+                    <field name="x_gratuity_remaining"
+                           string="Left to Distribute"
+                           class="oe_subtotal_footer_separator"/>
+                    <field name="x_bar_gratuity_remaining"
+                           string="Bar Left" invisible="not x_bar_gratuity"/>
+                    <field name="x_kitchen_gratuity_remaining"
+                           string="Kitchen Left"
+                           invisible="not x_kitchen_gratuity"/>
+                    <field name="x_currency_id" column_invisible="1"/>
+                </group>
             </xpath>
 
             <!-- Smart / action buttons -->
@@ -195,6 +298,18 @@
                         </group>
                     </group>
                     <group>
+                        <group string="Access &amp; Setup">
+                            <field name="x_requested_setup"/>
+                            <field name="x_requested_entry"/>
+                        </group>
+                        <group string="Cleanup">
+                            <field name="x_cleanup_scheduled"/>
+                            <field name="x_cleanup_datetime"
+                                   invisible="not x_cleanup_scheduled"
+                                   required="x_cleanup_scheduled"/>
+                        </group>
+                    </group>
+                    <group>
                         <group string="Event Description">
                             <field name="x_event_description" nolabel="1"
                                    colspan="2"
@@ -217,6 +332,21 @@
                                 type="object" class="btn-primary"
                                 icon="fa-tasks"/>
                     </div>
+                    <separator string="Department Call-Outs (print or email a quote request)"/>
+                    <div>
+                        <button name="action_email_bar_callout" type="object"
+                                string="Email Bar Call-Out" class="btn-secondary"
+                                icon="fa-envelope" invisible="not x_bar_use"/>
+                        <button name="action_email_kitchen_callout" type="object"
+                                string="Email Kitchen Call-Out" class="btn-secondary"
+                                icon="fa-envelope" invisible="not x_food_request"/>
+                        <button name="action_email_custodial_callout" type="object"
+                                string="Email Custodial Call-Out" class="btn-secondary"
+                                icon="fa-envelope" invisible="not x_cleaning_use"/>
+                        <span class="text-muted" style="margin-left:8px;">
+                            Or use Print &gt; Department Call-Out for a printable copy.
+                        </span>
+                    </div>
                     <group>
                         <group string="Equipment">
                             <field name="x_need_tables"/>
@@ -224,6 +354,7 @@
                             <field name="x_need_podium"/>
                             <field name="x_need_sound"/>
                             <field name="x_need_microphone"/>
+                            <field name="x_need_projector"/>
                             <field name="x_need_linen"/>
                             <field name="x_linen_qty" invisible="not x_need_linen"/>
                             <field name="x_linen_color" invisible="not x_need_linen"/>
@@ -232,18 +363,52 @@
                         <group string="Setup &amp; Service">
                             <field name="x_setup_by"/>
                             <field name="x_takedown_by"/>
+                            <field name="x_marketing_signage"/>
+                            <field name="x_exclusive_use"/>
                             <field name="x_has_decorations"/>
                             <field name="x_decor_takedown_by"
                                    invisible="not x_has_decorations"/>
                             <field name="x_decoration_notes"
                                    invisible="not x_has_decorations"/>
                         </group>
+                        <group string="Event Workers">
+                            <field name="x_event_workers_use"/>
+                            <field name="x_event_worker_count"
+                                   string="Number of Workers"
+                                   invisible="not x_event_workers_use"/>
+                            <field name="x_event_worker_hours"
+                                   string="Hours per Worker"
+                                   invisible="not x_event_workers_use"/>
+                        </group>
+                        <group string="Cleaning">
+                            <field name="x_cleaning_use"/>
+                            <field name="x_cleaner_count"
+                                   string="Number of Cleaners"
+                                   invisible="not x_cleaning_use"/>
+                            <field name="x_cleaner_hours"
+                                   string="Hours per Cleaner"
+                                   invisible="not x_cleaning_use"/>
+                            <field name="x_custodial_ready_datetime"
+                                   string="Building Clean &amp; Restocked By"
+                                   invisible="not x_cleaning_use"/>
+                        </group>
                     </group>
                     <group>
                         <group string="Bar">
-                            <field name="x_num_bars"/>
-                            <field name="x_bartender_count"/>
-                            <field name="x_need_beer_tub"/>
+                            <field name="x_bar_use"/>
+                            <field name="x_num_bars" invisible="not x_bar_use"/>
+                            <field name="x_bartender_count"
+                                   invisible="not x_bar_use"/>
+                            <field name="x_plan_bar_hours"
+                                   string="Hours per Bartender"
+                                   invisible="not x_bar_use"/>
+                            <field name="x_need_beer_tub"
+                                   invisible="not x_bar_use"/>
+                            <field name="x_bar_drink_requests"
+                                   invisible="not x_bar_use"
+                                   placeholder="Signature cocktails, wine, kegs, specific requests..."/>
+                            <field name="x_bar_gratuity"
+                                   invisible="not x_bar_use"/>
                         </group>
                         <group string="Insurance (required for all events)"
                                invisible="x_is_elks_event">
@@ -258,16 +423,30 @@
                             <field name="x_food_request"/>
                             <field name="x_catering_details"
                                    invisible="not x_food_request"/>
-                            <field name="x_food_by_us"/>
-                            <field name="x_food_menu" invisible="not x_food_by_us"/>
-                            <field name="x_caterer_id"/>
+                            <field name="x_cook_count"
+                                   invisible="not x_food_request"/>
+                            <field name="x_cook_hours"
+                                   invisible="not x_food_request or not x_cook_count"/>
+                            <field name="x_kitchen_support_count"
+                                   invisible="not x_food_request"/>
+                            <field name="x_kitchen_support_hours"
+                                   invisible="not x_food_request or not x_kitchen_support_count"/>
+                            <field name="x_food_by_us"
+                                   invisible="not x_food_request"/>
+                            <field name="x_food_menu"
+                                   invisible="not x_food_request or not x_food_by_us"/>
+                            <field name="x_caterer_id"
+                                   invisible="not x_food_request"/>
                             <field name="x_caterer_license_on_file"
-                                   invisible="not x_caterer_id"/>
+                                   invisible="not x_food_request or not x_caterer_id"/>
                             <field name="x_caterer_insurance_on_file"
-                                   invisible="not x_caterer_id"/>
+                                   invisible="not x_food_request or not x_caterer_id"/>
+                            <field name="x_kitchen_gratuity"
+                                   invisible="not x_food_request"/>
                         </group>
                         <group string="Other">
-                            <field name="x_gratuity_amount"/>
+                            <field name="x_gratuity_amount" readonly="1"
+                                   string="Gratuity (total)"/>
                             <field name="x_extras"/>
                         </group>
                     </group>
@@ -396,6 +575,26 @@
                                                decoration-warning="x_coordinator_fee_variance != 0"/>)
                                 </span>
                             </div>
+                            <field name="x_coordinator_employee_id"/>
+                            <label for="x_discount_reason" string="Discount"/>
+                            <div class="o_row">
+                                <field name="x_discount_reason"
+                                       placeholder="No discount"/>
+                                <field name="x_discount_pct"
+                                       invisible="not x_discount_reason"
+                                       class="oe_inline"/>
+                                <span invisible="not x_discount_reason">%</span>
+                                <field name="x_discount_note"
+                                       invisible="x_discount_reason != 'other'"
+                                       placeholder="reason details"
+                                       class="oe_inline"/>
+                            </div>
+                            <div class="alert alert-success" role="alert"
+                                 invisible="not x_discount_amount"
+                                 style="margin:2px 0; padding:4px 8px;">
+                                <strong>Discount applied: <field name="x_discount_amount" readonly="1" nolabel="1" class="oe_inline"/></strong>
+                                <span invisible="not x_discount_reason"> (<field name="x_discount_reason" readonly="1" nolabel="1" class="oe_inline"/>)</span>
+                            </div>
                             <field name="x_total_billed" readonly="1"
                                    string="Event Rental (pre-tax)"/>
                             <field name="x_taxable_subtotal" readonly="1"
@@ -416,15 +615,20 @@
                             <field name="x_deposit_method"/>
                             <field name="x_deposit_reference"/>
                         </group>
+                        <group string="UBI / Property Tax (non-member rentals)"
+                               invisible="x_is_member">
+                            <field name="x_ubi_room_income" readonly="1"
+                                   string="UBI Room Rental Income"/>
+                            <field name="x_ubi_tax_reserve" readonly="1"
+                                   string="Property Tax Reserve"/>
+                        </group>
                     </group>
                     <group>
                         <group string="Cost Summary (P&amp;L)">
                             <field name="x_cogs" readonly="1"
-                                   string="COGS (from Event Costs)"/>
+                                   string="COGS (goods + paid labor)"/>
                             <field name="x_po_total" readonly="1"
                                    string="Total from POs"/>
-                            <field name="x_est_labor_cost" readonly="1"
-                                   string="Labor (est.)"/>
                             <field name="x_total_costs" readonly="1"
                                    class="oe_subtotal_footer_separator"/>
                             <field name="x_net_income" readonly="1"
@@ -446,31 +650,77 @@
                                    string="Event Services"/>
                             <field name="x_cat_cleaning" readonly="1"
                                    string="Cleaning"/>
+                            <field name="x_cat_other" readonly="1"
+                                   string="Other / Gratuity"/>
                         </group>
                     </group>
                     <group string="Labor (internal estimate for P&amp;L — not charged to the customer)">
-                        <group string="Event Staff">
-                            <field name="x_est_event_hours"/>
+                        <group string="Event Staff — planned">
+                            <field name="x_event_workers_use"/>
+                            <field name="x_event_worker_count"
+                                   string="Number of Workers"
+                                   invisible="not x_event_workers_use"/>
+                            <field name="x_event_worker_hours"
+                                   string="Hours per Worker"
+                                   invisible="not x_event_workers_use"/>
+                            <field name="x_plan_setup_hours"
+                                   invisible="x_event_worker_count"/>
+                            <field name="x_plan_event_hours"
+                                   invisible="x_event_worker_count"/>
+                            <field name="x_plan_teardown_hours"
+                                   invisible="x_event_worker_count"/>
+                            <field name="x_est_event_hours"
+                                   string="= Est. Event-Staff Hours"/>
                             <field name="x_actual_event_hours"/>
                             <field name="x_event_hours_variance"
                                    decoration-danger="x_event_hours_variance &lt; 0"
                                    decoration-success="x_event_hours_variance &gt;= 0"/>
                         </group>
-                        <group string="Bartender">
-                            <field name="x_est_bartender_hours"/>
+                        <group string="Bartender — planned">
+                            <field name="x_num_bars"/>
+                            <field name="x_bartender_count"/>
+                            <field name="x_plan_bar_hours"/>
+                            <field name="x_est_bartender_hours"
+                                   string="= Est. Bartender Hours"/>
                             <field name="x_actual_bartender_hours"/>
                         </group>
-                        <group string="Cleaning / Custodial">
-                            <field name="x_est_cleaning_hours"/>
+                        <group string="Kitchen / Catering — planned">
+                            <field name="x_cook_count"/>
+                            <field name="x_cook_hours"/>
+                            <field name="x_est_cook_hours"
+                                   string="= Est. Cook Hours"/>
+                            <field name="x_kitchen_support_count"/>
+                            <field name="x_kitchen_support_hours"/>
+                            <field name="x_est_kitchen_support_hours"
+                                   string="= Est. Kitchen Support Hours"/>
+                            <field name="x_actual_kitchen_hours"/>
+                        </group>
+                        <group string="Cleaning / Custodial — planned">
+                            <field name="x_cleaning_use"/>
+                            <field name="x_cleaner_count"
+                                   string="Number of Cleaners"
+                                   invisible="not x_cleaning_use"/>
+                            <field name="x_cleaner_hours"
+                                   string="Hours per Cleaner"
+                                   invisible="not x_cleaning_use"/>
+                            <field name="x_plan_cleaning_hours"
+                                   invisible="x_cleaner_count"/>
+                            <field name="x_est_cleaning_hours"
+                                   string="= Est. Cleaning Hours"/>
                             <field name="x_actual_cleaning_hours"/>
                             <field name="x_cleaning_hours_variance"
                                    decoration-danger="x_cleaning_hours_variance &lt; 0"
                                    decoration-success="x_cleaning_hours_variance &gt;= 0"/>
                         </group>
                         <group string="Labor Cost (P&amp;L)">
-                            <field name="x_est_labor_cost"/>
-                            <field name="x_actual_labor_cost"/>
+                            <field name="x_est_labor_cost"
+                                   string="Billed Labor (basis)"/>
+                            <field name="x_actual_labor_cost"
+                                   string="Actual Paid Labor (in P&amp;L)"/>
                         </group>
+                        <button name="action_build_labor_costs" type="object"
+                                string="Build Cost Lines from Plan" class="btn-primary"
+                                help="Rebuild the Bar / Event / Cleaning / Catering service lines on the Event Costs tab from the planned hours x the Lodge Settings rates (charge = cost + markup + service fee; COGS = cost)."/>
                         <button name="action_trueup_labor_hours" type="object"
                                 string="True-up to Actual Hours" class="btn-secondary"
                                 help="Sets estimated hours to the actual timeclock hours per role and rolls the actual labor cost into the P&amp;L."/>
@@ -590,7 +840,9 @@
         <field name="name">Event Bookings</field>
         <field name="res_model">project.task</field>
         <field name="view_mode">list,form,kanban</field>
-        <field name="domain">[('x_is_event', '=', True)]</field>
+        <!-- parent_id=False: show only the parent event bookings, not the
+             generated checklist sub-tasks (those live under each event). -->
+        <field name="domain">[('x_is_event', '=', True), ('parent_id', '=', False)]</field>
         <!-- NOTE: Odoo 19 does NOT substitute %(xmlid)d inside an action
              context (only in view name="%(action)d" attributes), so the old
              'default_project_id': %(elksevent.project_event_bookings)d shipped
@@ -619,6 +871,7 @@
         <field name="view_mode">list,form</field>
         <field name="domain">[
             ('x_is_event', '=', True),
+            ('parent_id', '=', False),
             ('x_approval_state', 'in', ('board', 'floor')),
         ]</field>
         <!-- See note above: %(xmlid)d in an action context isn't substituted in

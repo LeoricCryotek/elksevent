@@ -27,6 +27,7 @@ AI
   in their own SECTION banners below. Settings read via _event_settings().
 - Elk-Year project auto-creation (April–March) drives x_is_event + cron.
 """
+import base64
 import logging
 import math
 import re
@@ -88,6 +89,21 @@ class ProjectTask(models.Model):
         "Member Number", copy=False,
         help="Elks membership number — shown on the quote and invoice.",
     )
+    # Manual, reason-tagged discount applied under Financials. Replaces the old
+    # automatic member discount so staff choose when/why a discount applies.
+    x_discount_reason = fields.Selection([
+        ('member', 'Member'),
+        ('nonprofit', 'Non-Profit'),
+        ('officer_board', 'Officer / Board Approved'),
+        ('other', 'Other'),
+    ], string="Discount Reason", tracking=True,
+        help="Why a discount is applied. Leave blank for no discount.")
+    x_discount_pct = fields.Float(
+        "Discount %", tracking=True,
+        help="Percent off the billable subtotal (rooms + event costs + "
+             "coordinator). Only applied when a Discount Reason is set.")
+    x_discount_note = fields.Char(
+        "Discount Note", help="Details when the reason is 'Other'.")
     # Elks (lodge's own) events — who owns it; not billed, no insurance needed.
     x_event_committee = fields.Char(
         "Committee",
@@ -166,6 +182,20 @@ class ProjectTask(models.Model):
         compute='_compute_event_time_sel',
         inverse='_inverse_event_time_sel', store=True,
     )
+    x_requested_entry = fields.Datetime(
+        "Requested Entry",
+        help="Day-of-event entry: the date & time the host requests to enter "
+             "on the day of the event.")
+    x_requested_setup = fields.Datetime(
+        "Requested Setup",
+        help="Date & time the host requests to begin setup (may be before the "
+             "event day).")
+    x_cleanup_scheduled = fields.Boolean(
+        "Cleanup Scheduled",
+        help="Tick to schedule a cleanup date & time for this event.")
+    x_cleanup_datetime = fields.Datetime(
+        "Cleanup Date & Time",
+        help="When cleanup is scheduled for this event.")
     x_event_duration = fields.Float(
         "Duration (hrs)", compute='_compute_event_duration', store=True,
     )
@@ -191,6 +221,7 @@ class ProjectTask(models.Model):
     x_need_podium = fields.Boolean("Podium")
     x_need_sound = fields.Boolean("Sound System")
     x_need_microphone = fields.Boolean("Microphone")
+    x_need_projector = fields.Boolean("Projector")
     x_need_linen = fields.Boolean("Linen")
     x_linen_qty = fields.Integer("Linen Qty")
     x_linen_color = fields.Char("Linen Color")
@@ -207,6 +238,10 @@ class ProjectTask(models.Model):
     x_need_garbage = fields.Boolean(
         "Garbage Handling", default=True,
         help="The lodge handles garbage for every event.")
+    x_bar_use = fields.Boolean(
+        "Bar Use",
+        help="Include the bar for this event — auto-adds the Bar Service cost "
+             "(bartender labor + bar fee).")
     x_num_bars = fields.Integer("Number of Bars")
     x_bartender_count = fields.Integer(
         "Bartenders", compute='_compute_bartenders',
@@ -215,6 +250,37 @@ class ProjectTask(models.Model):
              "Settings, e.g. 75). Editable — change it and it sticks until the "
              "guest count changes.")
     x_need_beer_tub = fields.Boolean("Beer Tub")
+    x_bar_drink_requests = fields.Text(
+        "Drink Requests",
+        help="Specific drinks / bar requests for the bartender (signature "
+             "cocktails, wine, kegs, etc.). Printed on the Bar call-out.")
+    # Event workers — mirrors the bar: a checkbox to include event-staff labor,
+    # a worker count and hours each, priced at the event-staff rate + event
+    # service fee (Lodge Settings). Drives the Event Service cost line.
+    x_event_workers_use = fields.Boolean(
+        "Event Workers",
+        help="Include event workers for this event — auto-adds the Event "
+             "Service cost (worker labor + event service fee).")
+    x_event_worker_count = fields.Integer(
+        "Event Workers", help="Number of event-staff workers.")
+    x_event_worker_hours = fields.Float(
+        "Hours per Worker", help="Planned hours each event worker works.")
+    # Cleaning crew — mirrors event workers: a checkbox to include cleaning
+    # labor, a cleaner count and hours each, priced at the custodial rate +
+    # custodial service fee (Lodge Settings). Drives the Cleaning Service line.
+    x_cleaning_use = fields.Boolean(
+        "Cleaning",
+        help="Include cleaning for this event — auto-adds the Cleaning "
+             "Service cost (custodial labor + custodial service fee).")
+    x_cleaner_count = fields.Integer(
+        "Cleaners", help="Number of cleaning / custodial staff.")
+    x_cleaner_hours = fields.Float(
+        "Hours per Cleaner", help="Planned hours each cleaner works.")
+    x_custodial_ready_datetime = fields.Datetime(
+        "Building Clean & Restocked By",
+        help="Deadline (typically the day after the event) for custodial to "
+             "have the building fully cleaned and the bathrooms restocked. "
+             "Printed on the custodial call-out.")
     x_has_decorations = fields.Boolean("Decorations")
     x_decoration_notes = fields.Text("Decoration Notes")
     _US_THEM = [('us', 'Us (Lodge)'), ('them', 'Them (Renter)')]
@@ -222,8 +288,78 @@ class ProjectTask(models.Model):
         _US_THEM, string="Decoration Takedown By")
     x_setup_by = fields.Selection(_US_THEM, string="Setup By")
     x_takedown_by = fields.Selection(_US_THEM, string="Takedown By")
+    x_marketing_signage = fields.Boolean(
+        "Marketing Signage Use",
+        help="Adds the Marketing Signage Use fee (from Lodge Settings) to the "
+             "Event Costs.")
+    x_exclusive_use = fields.Boolean(
+        "Exclusive Use",
+        help="Adds the Exclusive Use fee (from Lodge Settings) to the Event "
+             "Costs.")
+    x_bar_gratuity = fields.Monetary(
+        "Bar Gratuity", currency_field='x_currency_id',
+        help="Gratuity pool for the bar — split among bartender shifts.")
+    x_kitchen_gratuity = fields.Monetary(
+        "Kitchen Gratuity", currency_field='x_currency_id',
+        help="Gratuity pool for the kitchen — split among kitchen shifts.")
     x_gratuity_amount = fields.Monetary(
-        "Gratuity", currency_field='x_currency_id')
+        "Gratuity (total)", currency_field='x_currency_id',
+        compute='_compute_gratuity_total', store=True,
+        help="Bar + kitchen gratuity pools.")
+
+    @api.depends('x_bar_gratuity', 'x_kitchen_gratuity')
+    def _compute_gratuity_total(self):
+        for rec in self:
+            rec.x_gratuity_amount = (
+                (rec.x_bar_gratuity or 0.0) + (rec.x_kitchen_gratuity or 0.0))
+
+    # --- Gratuity distribution tracking (available vs. paid out) ------------
+    x_bar_gratuity_distributed = fields.Monetary(
+        "Bar Gratuity Distributed", currency_field='x_currency_id',
+        compute='_compute_gratuity_distributed', store=True,
+        help="Sum of gratuity shares already assigned to bartender shifts.")
+    x_kitchen_gratuity_distributed = fields.Monetary(
+        "Kitchen Gratuity Distributed", currency_field='x_currency_id',
+        compute='_compute_gratuity_distributed', store=True,
+        help="Sum of gratuity shares already assigned to kitchen shifts.")
+    x_gratuity_distributed = fields.Monetary(
+        "Gratuity Distributed", currency_field='x_currency_id',
+        compute='_compute_gratuity_distributed', store=True,
+        help="Total gratuity already paid out to shifts.")
+    x_bar_gratuity_remaining = fields.Monetary(
+        "Bar Gratuity Left", currency_field='x_currency_id',
+        compute='_compute_gratuity_distributed', store=True,
+        help="Bar pool minus what has been distributed to bartender shifts.")
+    x_kitchen_gratuity_remaining = fields.Monetary(
+        "Kitchen Gratuity Left", currency_field='x_currency_id',
+        compute='_compute_gratuity_distributed', store=True,
+        help="Kitchen pool minus what has been distributed to kitchen shifts.")
+    x_gratuity_remaining = fields.Monetary(
+        "Gratuity Left to Distribute", currency_field='x_currency_id',
+        compute='_compute_gratuity_distributed', store=True,
+        help="Total pool minus what has been distributed. Should be $0.00 "
+             "after Distribute Gratuity if there are shifts in every role "
+             "that has a pool.")
+
+    @api.depends('x_bar_gratuity', 'x_kitchen_gratuity',
+                 'x_attendance_ids.x_gratuity_share',
+                 'x_attendance_ids.x_event_role')
+    def _compute_gratuity_distributed(self):
+        for rec in self:
+            bar_paid = sum(rec.x_attendance_ids.filtered(
+                lambda a: a.x_event_role == 'bartender').mapped(
+                'x_gratuity_share'))
+            kit_paid = sum(rec.x_attendance_ids.filtered(
+                lambda a: a.x_event_role == 'kitchen').mapped(
+                'x_gratuity_share'))
+            rec.x_bar_gratuity_distributed = bar_paid
+            rec.x_kitchen_gratuity_distributed = kit_paid
+            rec.x_gratuity_distributed = bar_paid + kit_paid
+            rec.x_bar_gratuity_remaining = (rec.x_bar_gratuity or 0.0) - bar_paid
+            rec.x_kitchen_gratuity_remaining = (
+                (rec.x_kitchen_gratuity or 0.0) - kit_paid)
+            rec.x_gratuity_remaining = (
+                rec.x_gratuity_amount - bar_paid - kit_paid)
     x_food_by_us = fields.Boolean("Food by Us")
     x_food_menu = fields.Text("Menu")
     x_food_request = fields.Boolean(
@@ -329,6 +465,21 @@ class ProjectTask(models.Model):
         compute='_compute_financials', store=True,
         help="Revenue (pre-tax billed) minus Total Costs (COGS + POs + labor).",
     )
+    x_discount_amount = fields.Monetary(
+        "Discount Amount", currency_field='x_currency_id',
+        compute='_compute_financials', store=True,
+        help="Dollar value of the discount applied (list price minus billed).")
+    # UBI (Unrelated Business Income): non-member room rentals are UBI. Reserve
+    # a percentage of that room income for property tax (internal, not billed).
+    x_ubi_room_income = fields.Monetary(
+        "UBI Room Rental Income", currency_field='x_currency_id',
+        compute='_compute_financials', store=True,
+        help="Room rental income counted as UBI (non-member events only).")
+    x_ubi_tax_reserve = fields.Monetary(
+        "Property Tax Reserve (UBI)", currency_field='x_currency_id',
+        compute='_compute_financials', store=True,
+        help="Amount to set aside for property tax on the non-member room "
+             "rental income, at the UBI / Property Tax % in Lodge Settings.")
     # P&L spending tallies by category — sum of the COGS on Event Costs lines
     # grouped by their type's category (the "budget for spending").
     x_cat_catering = fields.Monetary(
@@ -343,6 +494,12 @@ class ProjectTask(models.Model):
     x_cat_cleaning = fields.Monetary(
         "Cleaning (COGS)", currency_field='x_currency_id',
         compute='_compute_financials', store=True)
+    x_cat_other = fields.Monetary(
+        "Other / Gratuity (COGS)", currency_field='x_currency_id',
+        compute='_compute_financials', store=True,
+        help="COGS not in the four named categories — coordinator, gratuity "
+             "pass-through, and any custom cost types. Included so the "
+             "category breakdown reconciles to total COGS.")
 
     # ------------------------------------------------------------------
     # Coordinator fee
@@ -363,6 +520,14 @@ class ProjectTask(models.Model):
         help="Auto-fills from the rate; adjust as needed. Included in the "
              "Event Rental price.",
     )
+    x_coordinator_employee_id = fields.Many2one(
+        'hr.employee', string="Event Coordinator",
+        help="The employee who coordinated this event. Use 'Pay Coordinator' "
+             "to post the coordinator fee to their timecard as a flat payout.")
+    x_coordinator_fee_paid = fields.Boolean(
+        "Coordinator Fee Paid", copy=False,
+        help="Set once the coordinator fee has been posted to the "
+             "coordinator's timecard.")
     x_coordinator_fee_auto = fields.Monetary(
         "Suggested Coordinator Fee", currency_field='x_currency_id',
         compute='_compute_coordinator_auto',
@@ -469,16 +634,59 @@ class ProjectTask(models.Model):
         'calendar.event', string="Calendar Booking", copy=False,
     )
 
-    # Labor hours — estimated/charged vs actual (from the timeclock)
+    # Labor PLANNING inputs — how long we expect each phase to take. These
+    # drive the estimated hours (below), which drive the labor cost for the
+    # P&L. Editable; the estimates auto-calc from them but can be overridden.
+    x_plan_setup_hours = fields.Float(
+        "Setup Hours (plan)", help="Planned event-staff setup hours.")
+    x_plan_event_hours = fields.Float(
+        "Event Hours (plan)", help="Planned event-staff hours during the event.")
+    x_plan_teardown_hours = fields.Float(
+        "Teardown / After Hours (plan)",
+        help="Planned event-staff teardown / after hours.")
+    x_plan_bar_hours = fields.Float(
+        "Bartender Hours each (plan)",
+        help="Planned hours per bartender (setup + service + teardown).")
+    x_plan_cleaning_hours = fields.Float(
+        "Cleaning Hours (plan)", help="Planned custodial/cleaning hours.")
+    x_plan_kitchen_hours = fields.Float(
+        "Kitchen Hours (plan)", help="Planned kitchen/catering service hours.")
+    # Kitchen staffing broken out by role (like bartenders): a count and the
+    # hours EACH, priced at the cook / kitchen-support rates in Lodge Settings.
+    x_cook_count = fields.Integer(
+        "Cooks", help="Number of cooks for this event.")
+    x_cook_hours = fields.Float(
+        "Hours per Cook", help="Planned hours each cook works.")
+    x_kitchen_support_count = fields.Integer(
+        "Kitchen Support", help="Number of kitchen-support staff (prep, "
+        "serving, dish).")
+    x_kitchen_support_hours = fields.Float(
+        "Hours per Support", help="Planned hours each kitchen-support "
+        "person works.")
+
+    # Labor hours — estimated (from the plan) vs actual (from the timeclock).
+    # Estimates are computed from the planning inputs but stay editable so
+    # staff can override, and the True-up button sets them to the actuals.
     x_est_event_hours = fields.Float(
-        "Est. Event-Staff Hours",
-        help="Event-staff hours charged on the quote.")
+        "Est. Event-Staff Hours", compute='_compute_est_hours',
+        store=True, readonly=False,
+        help="Setup + Event + Teardown planned hours (editable).")
     x_est_cleaning_hours = fields.Float(
-        "Est. Cleaning Hours",
-        help="Custodial/cleaning hours charged on the quote.")
+        "Est. Cleaning Hours", compute='_compute_est_hours',
+        store=True, readonly=False,
+        help="Planned custodial/cleaning hours (editable).")
     x_est_bartender_hours = fields.Float(
-        "Est. Bartender Hours",
-        help="Bartender hours estimated for the P&L.")
+        "Est. Bartender Hours", compute='_compute_est_hours',
+        store=True, readonly=False,
+        help="Bartenders x planned hours each (editable).")
+    x_est_cook_hours = fields.Float(
+        "Est. Cook Hours", compute='_compute_est_hours',
+        store=True, readonly=False,
+        help="Cooks x planned hours each (editable).")
+    x_est_kitchen_support_hours = fields.Float(
+        "Est. Kitchen Support Hours", compute='_compute_est_hours',
+        store=True, readonly=False,
+        help="Kitchen support x planned hours each (editable).")
     x_actual_event_hours = fields.Float(
         "Actual Event-Staff Hours", compute='_compute_actual_hours',
         help="Event-staff hours actually worked (from the timeclock).")
@@ -488,9 +696,69 @@ class ProjectTask(models.Model):
     x_actual_bartender_hours = fields.Float(
         "Actual Bartender Hours", compute='_compute_actual_hours',
         help="Bartender hours actually worked (from the timeclock).")
+    x_actual_kitchen_hours = fields.Float(
+        "Actual Kitchen Hours", compute='_compute_actual_hours',
+        help="Kitchen (cook + support) hours actually worked, from the "
+             "timeclock 'kitchen' role.")
+    x_actual_total_hours = fields.Float(
+        "Total Event Hours", compute='_compute_actual_hours',
+        help="All timeclock hours attached to this event (every role).")
     # The event's timeclock punches (assign a role per shift here).
     x_attendance_ids = fields.One2many(
         'hr.attendance', 'x_event_id', string="Event Attendance")
+    # Planned staff roster (who is assigned to work, by role). Separate from the
+    # actual timeclock punches above; an assigned person's punch auto-links to
+    # this event on clock-in (see hr_attendance).
+    x_staff_assignment_ids = fields.One2many(
+        'elks.event.staff.assignment', 'event_id',
+        string="Planned Staff Assignments")
+    x_assigned_bartenders = fields.Integer(
+        "Assigned Bartenders", compute='_compute_assigned_counts')
+    x_assigned_cooks = fields.Integer(
+        "Assigned Cooks", compute='_compute_assigned_counts')
+    x_assigned_support = fields.Integer(
+        "Assigned Kitchen Support", compute='_compute_assigned_counts')
+    x_assigned_event_workers = fields.Integer(
+        "Assigned Event Workers", compute='_compute_assigned_counts')
+    x_assigned_cleaning = fields.Integer(
+        "Assigned Cleaning", compute='_compute_assigned_counts')
+    # How many of each requested position are still unfilled (requested minus
+    # assigned, floored at zero).
+    x_tofill_bartenders = fields.Integer(
+        "Bartenders to Fill", compute='_compute_assigned_counts')
+    x_tofill_cooks = fields.Integer(
+        "Cooks to Fill", compute='_compute_assigned_counts')
+    x_tofill_support = fields.Integer(
+        "Kitchen Support to Fill", compute='_compute_assigned_counts')
+    x_tofill_event_workers = fields.Integer(
+        "Event Workers to Fill", compute='_compute_assigned_counts')
+    x_tofill_cleaning = fields.Integer(
+        "Cleaners to Fill", compute='_compute_assigned_counts')
+
+    @api.depends('x_staff_assignment_ids.role',
+                 'x_bartender_count', 'x_cook_count',
+                 'x_kitchen_support_count', 'x_event_worker_count',
+                 'x_cleaner_count')
+    def _compute_assigned_counts(self):
+        for rec in self:
+            roles = rec.x_staff_assignment_ids.mapped('role')
+            rec.x_assigned_bartenders = roles.count('bartender')
+            rec.x_assigned_cooks = roles.count('cook')
+            rec.x_assigned_support = roles.count('kitchen_support')
+            rec.x_assigned_event_workers = roles.count('event_worker')
+            rec.x_assigned_cleaning = roles.count('cleaning')
+            rec.x_tofill_bartenders = max(
+                (rec.x_bartender_count or 0) - rec.x_assigned_bartenders, 0)
+            rec.x_tofill_cooks = max(
+                (rec.x_cook_count or 0) - rec.x_assigned_cooks, 0)
+            rec.x_tofill_support = max(
+                (rec.x_kitchen_support_count or 0) - rec.x_assigned_support, 0)
+            rec.x_tofill_event_workers = max(
+                (rec.x_event_worker_count or 0)
+                - rec.x_assigned_event_workers, 0)
+            rec.x_tofill_cleaning = max(
+                (rec.x_cleaner_count or 0) - rec.x_assigned_cleaning, 0)
+
     x_event_hours_variance = fields.Float(
         "Event Hours Variance", compute='_compute_actual_hours',
         help="Charged minus actual event-staff hours.")
@@ -578,6 +846,7 @@ class ProjectTask(models.Model):
         records = super().create(vals_list)
         records._sync_requested_rooms()
         records._reconcile_event_datetime()
+        records.with_context(_labor_sync=True)._sync_labor_cost_lines()
         return records
 
     def write(self, vals):
@@ -589,7 +858,34 @@ class ProjectTask(models.Model):
             elif vals.keys() & self._EVENT_TIME_KEYS:
                 # Tab/web date or start changed -> rebuild the header.
                 self._push_event_time_to_deadline()
+        if (not self.env.context.get('_labor_sync')
+                and (vals.keys() & self._LABOR_PLAN_KEYS)):
+            self.with_context(_labor_sync=True)._sync_labor_cost_lines()
+        if 'stage_id' in vals:
+            self._close_children_on_fold()
         return res
+
+    def _close_children_on_fold(self):
+        """When an event reaches a folded/completed stage, mark its still-open
+        checklist sub-tasks as Done so nothing dangles."""
+        Task = self.env['project.task']
+        sf = Task._fields.get('state')
+        done_key = False
+        if sf and isinstance(sf.selection, (list, tuple)):
+            done_key = next(
+                (k for k, _ in sf.selection if 'done' in (k or '').lower()),
+                False)
+        if not done_key:
+            return
+        for rec in self:
+            if not rec.x_is_event or rec.parent_id:
+                continue
+            if rec.stage_id and rec.stage_id.fold:
+                kids = rec.child_ids.filtered(
+                    lambda c: (c.state or '') != done_key
+                    and 'cancel' not in (c.state or '').lower())
+                if kids:
+                    kids.write({'state': done_key})
 
     # ──────────────────────────────────────────────────────────────────
     # SECTION: Event Date <-> Start Time <-> header link
@@ -909,6 +1205,42 @@ class ProjectTask(models.Model):
     #     / coordinator config changes don't retro-recompute existing events.
     #     x_total_billed feeds the PO budget guard and the assessor net income.
     # ──────────────────────────────────────────────────────────────────
+    @api.depends('x_plan_setup_hours', 'x_plan_event_hours',
+                 'x_plan_teardown_hours', 'x_plan_bar_hours',
+                 'x_plan_cleaning_hours', 'x_bartender_count',
+                 'x_event_workers_use', 'x_event_worker_count',
+                 'x_event_worker_hours',
+                 'x_cleaning_use', 'x_cleaner_count', 'x_cleaner_hours',
+                 'x_cook_count', 'x_cook_hours',
+                 'x_kitchen_support_count', 'x_kitchen_support_hours')
+    def _compute_est_hours(self):
+        """Estimated labor hours from the planning inputs (by role)."""
+        for rec in self:
+            # Event workers (count x hours each) drive event-staff hours when
+            # entered; otherwise fall back to the setup/event/teardown plan.
+            if rec.x_event_workers_use and rec.x_event_worker_count:
+                rec.x_est_event_hours = (
+                    (rec.x_event_worker_count or 0)
+                    * (rec.x_event_worker_hours or 0.0))
+            else:
+                rec.x_est_event_hours = ((rec.x_plan_setup_hours or 0.0)
+                                         + (rec.x_plan_event_hours or 0.0)
+                                         + (rec.x_plan_teardown_hours or 0.0))
+            rec.x_est_bartender_hours = (
+                (rec.x_bartender_count or 0) * (rec.x_plan_bar_hours or 0.0))
+            # Cleaners (count x hours each) drive cleaning hours when entered;
+            # otherwise fall back to the planned cleaning hours.
+            if rec.x_cleaning_use and rec.x_cleaner_count:
+                rec.x_est_cleaning_hours = (
+                    (rec.x_cleaner_count or 0) * (rec.x_cleaner_hours or 0.0))
+            else:
+                rec.x_est_cleaning_hours = rec.x_plan_cleaning_hours or 0.0
+            rec.x_est_cook_hours = (
+                (rec.x_cook_count or 0) * (rec.x_cook_hours or 0.0))
+            rec.x_est_kitchen_support_hours = (
+                (rec.x_kitchen_support_count or 0)
+                * (rec.x_kitchen_support_hours or 0.0))
+
     @api.depends('x_guest_count')
     def _compute_bartenders(self):
         """One bartender per N guests (N from Settings, default 75)."""
@@ -934,18 +1266,69 @@ class ProjectTask(models.Model):
             rec.x_coordinator_fee_auto = auto
             rec.x_coordinator_fee_variance = (rec.x_coordinator_fee or 0.0) - auto
 
+    @api.onchange('x_discount_reason')
+    def _onchange_discount_reason(self):
+        """Member and Non-Profit default to 50% off (editable). Clearing the
+        reason clears the percent."""
+        if self.x_discount_reason in ('member', 'nonprofit'):
+            if not self.x_discount_pct:
+                self.x_discount_pct = 50.0
+        elif not self.x_discount_reason:
+            self.x_discount_pct = 0.0
+
+    # ── Paid labor helpers (volunteers cost nothing) ───────────────────
+    @staticmethod
+    def _elks_is_volunteer_att(att):
+        """Volunteer = employee in the 'Volunteers' department (the lodge-wide
+        payroll exclusion). Their event hours are not a labor cost."""
+        emp = att.employee_id
+        return bool(emp and emp.department_id
+                    and emp.department_id.name == 'Volunteers')
+
+    def _event_role_rates(self, settings):
+        """Per-hour cost rate by attendance role, from Lodge Settings."""
+        if not settings:
+            return {'event': 0.0, 'bartender': 0.0,
+                    'kitchen': 0.0, 'custodial': 0.0}
+        return {
+            'event': settings.x_event_staff_rate or 0.0,
+            'bartender': settings.x_bartender_rate or 0.0,
+            'kitchen': (settings.x_cook_rate or settings.x_kitchen_rate or 0.0),
+            'custodial': settings.x_custodial_rate or 0.0,
+        }
+
+    def _paid_labor_by_category(self):
+        """Actual PAID labor cost (non-volunteer timeclock hours x role rate)
+        grouped by P&L category. Volunteer hours are excluded (cost nothing)."""
+        self.ensure_one()
+        rates = self._event_role_rates(self._event_settings())
+        role_cat = {'event': 'event', 'bartender': 'bar',
+                    'kitchen': 'catering', 'custodial': 'cleaning'}
+        out = {'event': 0.0, 'bar': 0.0, 'catering': 0.0, 'cleaning': 0.0}
+        for att in self.x_attendance_ids:
+            if self._elks_is_volunteer_att(att):
+                continue
+            role = att.x_event_role or 'event'
+            cat = role_cat.get(role)
+            if cat:
+                out[cat] += (att.worked_hours or 0.0) * rates.get(role, 0.0)
+        return out
+
     @api.depends(
         'x_room_booking_ids.subtotal',
         'x_cost_line_ids.total',
         'x_cost_line_ids.x_taxable',
         'x_coordinator_fee',
         'x_room_rental_rate',
-        'x_est_labor_cost', 'x_cost_line_ids.x_line_cogs',
+        'x_cost_line_ids.x_line_cogs',
         'x_cost_line_ids.cost_type_id',
         'x_deposit_amount', 'x_deposit_received',
         'x_purchase_order_ids.amount_total',
         'x_purchase_order_ids.state',
+        'x_attendance_ids.worked_hours', 'x_attendance_ids.x_event_role',
+        'x_attendance_ids.employee_id',
         'x_is_member', 'x_event_type', 'x_member_number',
+        'x_discount_reason', 'x_discount_pct',
     )
     def _compute_financials(self):
         settings = self._event_settings()
@@ -969,15 +1352,15 @@ class ProjectTask(models.Model):
                 c.total for c in rec.x_cost_line_ids if c.x_taxable)
             ec_nontax = rec.x_eventcosts_total - ec_taxable
 
-            # Member / Celebration-of-Life rate: COL waives the room; both bill
-            # the rest at the member rate. Mirrors _sync_quote_lines so the
-            # Financials tab matches the quote the customer will get.
+            # Celebration-of-Life waives the room. The discount is now MANUAL:
+            # staff pick a reason + percent under Financials. Mirrors
+            # _sync_quote_lines so the Financials tab matches the quote.
             is_col = (
                 rec.x_event_type == 'memorial'
                 and rec.x_member_number
                 and rec.x_member_number != '000000000')
-            apply_member = rec.x_is_member or is_col
-            disc = (disc_pct / 100.0) if apply_member else 0.0
+            disc = ((rec.x_discount_pct or 0.0) / 100.0
+                    if rec.x_discount_reason else 0.0)
             rooms_net = 0.0 if is_col else room_income * (1.0 - disc)
             factor = 1.0 - disc
 
@@ -985,9 +1368,11 @@ class ProjectTask(models.Model):
             # member discount. Services (coordinator + non-taxable items) are
             # exempt. Computed LIVE here so tax updates the instant a Taxable
             # box changes — it no longer waits for the quote to be rebuilt.
+            # Coordinator fee is NEVER discounted (it's built on the room retail
+            # cost and is the coordinator's pay), so it is added at full value.
             rec.x_taxable_subtotal = rooms_net + ec_taxable * factor
             rec.x_nontaxable_subtotal = (
-                ec_nontax * factor + (rec.x_coordinator_fee or 0.0) * factor)
+                ec_nontax * factor + (rec.x_coordinator_fee or 0.0))
             rec.x_event_tax_amount = rec.x_taxable_subtotal * rate
 
             customer_total = rec.x_taxable_subtotal + rec.x_nontaxable_subtotal
@@ -996,27 +1381,57 @@ class ProjectTask(models.Model):
             rec.x_subtotal = customer_total
             rec.x_event_total = customer_total
 
-            # Real costs to the lodge = actual vendor POs + estimated labor.
-            # (Event-cost LINES are revenue now, so they are NOT costs here.)
+            # Real costs to the lodge = vendor POs + goods COGS + labor that is
+            # ACTUALLY PAID. Labor is only a cost once it is clocked by a
+            # non-volunteer (payroll) employee — volunteer hours cost nothing,
+            # so the billed labor stays as profit until a paid person works it.
             po_total = sum(
                 rec.x_purchase_order_ids.filtered(
                     lambda p: p.state != 'cancel'
                 ).mapped('amount_total')
             )
-            rec.x_cogs = sum(rec.x_cost_line_ids.mapped('x_line_cogs'))
-            # Tally COGS by P&L category (budget spending per area).
+            # Goods COGS = non-labor cost lines only (catering food, supplies,
+            # gratuity pass-through, ...). The auto LABOR lines are the billing
+            # basis, not a cost, so their COGS is excluded here.
             cats = {'catering': 0.0, 'bar': 0.0, 'event': 0.0, 'cleaning': 0.0}
+            goods_cogs = 0.0
             for c in rec.x_cost_line_ids:
+                if (c.x_auto_source or '').startswith('labor'):
+                    continue
+                cogs = c.x_line_cogs or 0.0
+                goods_cogs += cogs
                 cat = c.cost_type_id.category
                 if cat in cats:
-                    cats[cat] += (c.x_line_cogs or 0.0)
+                    cats[cat] += cogs
+            # Actual PAID labor (non-volunteer attendance) by category.
+            paid = rec._paid_labor_by_category()
+            for cat in cats:
+                cats[cat] += paid.get(cat, 0.0)
+            paid_labor = sum(paid.values())
+
+            rec.x_cogs = goods_cogs + paid_labor
             rec.x_cat_catering = cats['catering']
             rec.x_cat_bar = cats['bar']
             rec.x_cat_event = cats['event']
             rec.x_cat_cleaning = cats['cleaning']
-            rec.x_total_costs = (
-                (rec.x_cogs or 0.0) + po_total + (rec.x_est_labor_cost or 0.0))
+            # Everything else (coordinator, gratuity pass-through, custom types)
+            # so the category breakdown always reconciles to total COGS.
+            rec.x_cat_other = (rec.x_cogs or 0.0) - (
+                cats['catering'] + cats['bar']
+                + cats['event'] + cats['cleaning'])
+            rec.x_total_costs = (rec.x_cogs or 0.0) + po_total
             rec.x_net_income = rec.x_total_billed - rec.x_total_costs
+
+            # Discount dollar value = full list price minus what was billed.
+            rec.x_discount_amount = (
+                room_income + rec.x_eventcosts_total
+                + (rec.x_coordinator_fee or 0.0)) - rec.x_total_billed
+
+            # UBI: non-member room rentals are Unrelated Business Income.
+            # Reserve the property-tax percentage on that room income.
+            ubi_pct = ((settings.x_ubi_tax_pct or 0.0) / 100.0) if settings else 0.0
+            rec.x_ubi_room_income = 0.0 if rec.x_is_member else (room_income or 0.0)
+            rec.x_ubi_tax_reserve = rec.x_ubi_room_income * ubi_pct
 
             # Balance due
             deposit = rec.x_deposit_amount if rec.x_deposit_received else 0.0
@@ -1528,17 +1943,16 @@ class ProjectTask(models.Model):
         # only changes when staff press the "Coordinator Fee" button
         # (action_add_coordinator_fee), which sets it to the suggested amount.
 
-        # Member / Celebration-of-Life rate. COL = memorial with a valid member
-        # number: the family is billed at the member rate and the ROOM is waived.
+        # Celebration-of-Life (memorial with a valid member number) waives the
+        # ROOM. The discount is MANUAL: staff pick a reason + percent under
+        # Financials. Kept in sync with _compute_financials.
         is_col = (
             self.x_event_type == 'memorial'
             and self.x_member_number
             and self.x_member_number != '000000000'
         )
-        apply_member = self.x_is_member or is_col
-        disc = 0.0
-        if apply_member and settings and settings.x_member_discount_pct:
-            disc = settings.x_member_discount_pct / 100.0
+        disc = ((self.x_discount_pct or 0.0) / 100.0
+                if self.x_discount_reason else 0.0)
 
         rooms = sum(self.x_room_booking_ids.mapped('subtotal'))
         rooms_net = 0.0 if is_col else rooms * (1.0 - disc)
@@ -1553,7 +1967,8 @@ class ProjectTask(models.Model):
             else:
                 ec_nontax += amt
 
-        coord = (self.x_coordinator_fee or 0.0) * (1.0 - disc)
+        # Coordinator fee is NOT discounted (built on room retail cost).
+        coord = (self.x_coordinator_fee or 0.0)
 
         # Taxable = GOODS only: rooms + Event-Cost items flagged taxable.
         # Services (coordinator fee + anything marked non-taxable) are exempt.
@@ -1577,7 +1992,7 @@ class ProjectTask(models.Model):
             SOL.create({
                 'order_id': so.id,
                 'product_id': rental_product.id,
-                'name': _("Event Rental — non-taxable services"),
+                'name': _("Event Rental - non-taxable services"),
                 'product_uom_qty': 1,
                 'price_unit': nontax_total,
                 'tax_ids': [(6, 0, [])],
@@ -1591,12 +2006,8 @@ class ProjectTask(models.Model):
             'x_event_source': 'tax_note',
         })
 
-        # Seed estimated labor hours (internal P&L cost, not a customer line).
-        if settings:
-            if not self.x_est_event_hours and settings.x_default_event_hours:
-                self.x_est_event_hours = settings.x_default_event_hours
-            if not self.x_est_cleaning_hours and settings.x_default_cleaning_hours:
-                self.x_est_cleaning_hours = settings.x_default_cleaning_hours
+        # (Estimated labor hours now come from the planning inputs on the
+        # Labor section — see _compute_est_hours — not seeded here.)
 
     def action_add_coordinator_fee(self):
         """Reset the coordinator fee to the suggested (auto) amount + rebuild.
@@ -1639,15 +2050,29 @@ class ProjectTask(models.Model):
     # ──────────────────────────────────────────────────────────────────
     @api.depends('x_est_event_hours', 'x_est_cleaning_hours',
                  'x_est_bartender_hours',
-                 'x_attendance_ids.worked_hours', 'x_attendance_ids.x_event_role')
+                 'x_cost_line_ids.x_line_cogs', 'x_cost_line_ids.x_auto_source',
+                 'x_attendance_ids.worked_hours', 'x_attendance_ids.x_event_role',
+                 'x_attendance_ids.employee_id')
     def _compute_actual_hours(self):
         settings = self.env['elks.lodge.settings'].sudo().search([], limit=1)
-        ev_rate = (settings.x_event_labor_product_id.list_price
-                   if settings and settings.x_event_labor_product_id else 0.0)
-        cl_rate = (settings.x_cleaning_product_id.list_price
-                   if settings and settings.x_cleaning_product_id else 0.0)
-        bt_rate = (settings.x_bartender_product_id.list_price
-                   if settings and settings.x_bartender_product_id else 0.0)
+        # Per-hour COST rates from the Lodge Settings (fallback to the old
+        # per-hour products if a rate is left blank).
+        ev_rate = (settings.x_event_staff_rate
+                   or (settings.x_event_labor_product_id.list_price
+                       if settings.x_event_labor_product_id else 0.0)
+                   ) if settings else 0.0
+        cl_rate = (settings.x_custodial_rate
+                   or (settings.x_cleaning_product_id.list_price
+                       if settings.x_cleaning_product_id else 0.0)
+                   ) if settings else 0.0
+        bt_rate = (settings.x_bartender_rate
+                   or (settings.x_bartender_product_id.list_price
+                       if settings.x_bartender_product_id else 0.0)
+                   ) if settings else 0.0
+        # Representative kitchen cost rate for ACTUAL hours (the timeclock only
+        # carries a single 'kitchen' role, not cook vs support).
+        kt_rate = (settings.x_cook_rate or settings.x_kitchen_rate
+                   or 0.0) if settings else 0.0
         for rec in self:
             atts = rec.x_attendance_ids
             ev = sum(atts.filtered(
@@ -1656,17 +2081,419 @@ class ProjectTask(models.Model):
                 lambda a: a.x_event_role == 'custodial').mapped('worked_hours'))
             bt = sum(atts.filtered(
                 lambda a: a.x_event_role == 'bartender').mapped('worked_hours'))
+            kt = sum(atts.filtered(
+                lambda a: a.x_event_role == 'kitchen').mapped('worked_hours'))
             rec.x_actual_event_hours = ev
             rec.x_actual_cleaning_hours = cl
             rec.x_actual_bartender_hours = bt
+            rec.x_actual_kitchen_hours = kt
+            rec.x_actual_total_hours = ev + cl + bt + kt
             rec.x_event_hours_variance = (rec.x_est_event_hours or 0.0) - ev
             rec.x_cleaning_hours_variance = (rec.x_est_cleaning_hours or 0.0) - cl
-            rec.x_est_labor_cost = (
-                (rec.x_est_event_hours or 0.0) * ev_rate
-                + (rec.x_est_cleaning_hours or 0.0) * cl_rate
-                + (rec.x_est_bartender_hours or 0.0) * bt_rate)
-            rec.x_actual_labor_cost = (
-                ev * ev_rate + cl * cl_rate + bt * bt_rate)
+            # Estimated labor = the labor already itemized in COGS (event + bar
+            # + cooks + support + cleaning), so it ties to the P&L exactly.
+            rec.x_est_labor_cost = sum(rec.x_cost_line_ids.filtered(
+                lambda l: (l.x_auto_source or '').startswith('labor')
+            ).mapped('x_line_cogs'))
+            # Actual labor COST counts PAID (non-volunteer) hours only, to match
+            # the P&L — volunteers work for free.
+            rec.x_actual_labor_cost = sum(rec._paid_labor_by_category().values())
+
+    # ── Auto-build service cost lines from the plan + rates ─────────────
+    _LABOR_PLAN_KEYS = frozenset((
+        'x_plan_setup_hours', 'x_plan_event_hours', 'x_plan_teardown_hours',
+        'x_plan_bar_hours', 'x_plan_cleaning_hours', 'x_plan_kitchen_hours',
+        'x_bartender_count', 'x_num_bars',
+        'x_event_workers_use', 'x_event_worker_count', 'x_event_worker_hours',
+        'x_cleaning_use', 'x_cleaner_count', 'x_cleaner_hours',
+        'x_cook_count', 'x_cook_hours',
+        'x_kitchen_support_count', 'x_kitchen_support_hours',
+        'x_est_event_hours', 'x_est_bartender_hours', 'x_est_cleaning_hours',
+        'x_est_cook_hours', 'x_est_kitchen_support_hours',
+        'x_bar_gratuity', 'x_kitchen_gratuity',
+        'x_marketing_signage', 'x_exclusive_use',
+        'x_bar_use', 'x_food_request'))
+
+    def _sync_labor_cost_lines(self):
+        """(Re)build the auto service cost lines from the planned hours and the
+        Lodge Settings rates: charge = hours x rate x (1 + markup) + service
+        fee; COGS = hours x rate. Only lines tagged x_auto_source are touched,
+        so hand-added Event Costs lines are preserved.
+        """
+        settings = self._event_settings()
+        Line = self.env['elks.event.cost.line']
+        Type = self.env['elks.event.cost.type']
+        cache = {}
+
+        def tid(code):
+            if code not in cache:
+                t = Type.search([('code', '=', code)], limit=1)
+                cache[code] = t.id if t else False
+            return cache[code]
+
+        for rec in self:
+            if not rec.x_is_event or not settings:
+                continue
+            rec.x_cost_line_ids.filtered('x_auto_source').unlink()
+            markup = 1.0 + ((settings.x_labor_markup_pct or 0.0) / 100.0)
+            # (include, code, name, hours, rate, service_fee, source). Bar and
+            # Catering lines are gated by their checkbox (Bar Use / Food-Catering
+            # Request); Event Staff and Cleaning follow the planned hours.
+            specs = [
+                (rec.x_event_workers_use, 'event_service',
+                 _("Event Service (labor)"),
+                 rec.x_est_event_hours, settings.x_event_staff_rate,
+                 settings.x_event_service_fee, 'labor_event'),
+                (rec.x_bar_use, 'bar_service', _("Bar Service (labor)"),
+                 rec.x_est_bartender_hours, settings.x_bartender_rate,
+                 settings.x_bar_service_fee, 'labor_bar'),
+                (rec.x_cleaning_use, 'cleaning_service',
+                 _("Cleaning Service (labor)"),
+                 rec.x_est_cleaning_hours, settings.x_custodial_rate,
+                 settings.x_custodial_service_fee, 'labor_clean'),
+                # Kitchen split into cooks + support, each priced at its own
+                # rate (Lodge Settings). The one-time kitchen service fee rides
+                # the cook line (mirrors how the bar fee rides the bar line).
+                (rec.x_food_request, 'catering_service',
+                 _("Catering - Cooks (labor)"),
+                 rec.x_est_cook_hours, settings.x_cook_rate,
+                 settings.x_kitchen_service_fee, 'labor_cook'),
+                (rec.x_food_request, 'catering_service',
+                 _("Catering - Kitchen Support (labor)"),
+                 rec.x_est_kitchen_support_hours,
+                 settings.x_kitchen_support_rate, 0.0, 'labor_kitchen_support'),
+            ]
+            for include, code, name, hours, rate, fee, src in specs:
+                if not include:
+                    continue
+                type_id = tid(code)
+                if not type_id:
+                    continue
+                hours = hours or 0.0
+                rate = rate or 0.0
+                fee = fee or 0.0
+                cogs = hours * rate
+                charge = cogs * markup + fee
+                if not charge and not cogs:
+                    continue
+                Line.create({
+                    'event_id': rec.id,
+                    'cost_type_id': type_id,
+                    'name': name,
+                    'quantity': 1,
+                    'unit_cost': round(charge, 2),
+                    'x_line_cogs': round(cogs, 2),
+                    'x_taxable': False,
+                    'x_auto_source': src,
+                })
+            # Add-on fees toggled by checkbox (fee from Lodge Settings).
+            for flag, code, fee, name, src in (
+                    (rec.x_marketing_signage, 'marketing_signage',
+                     settings.x_marketing_signage_fee,
+                     _("Marketing Signage Use"), 'addon_signage'),
+                    (rec.x_exclusive_use, 'exclusive_use',
+                     settings.x_exclusive_use_fee,
+                     _("Exclusive Use"), 'addon_exclusive')):
+                type_id = tid(code)
+                if flag and type_id:
+                    Line.create({
+                        'event_id': rec.id,
+                        'cost_type_id': type_id,
+                        'name': name,
+                        'quantity': 1,
+                        'unit_cost': round(fee or 0.0, 2),
+                        'x_line_cogs': 0.0,
+                        'x_taxable': False,
+                        'x_auto_source': src,
+                    })
+
+            # Gratuity — a pass-through: charged to the customer AND paid out to
+            # staff, so Amount = COGS = the pool (net-zero to the lodge).
+            grat_type = tid('gratuity')
+            for amount, name, src in (
+                    (rec.x_bar_gratuity, _("Gratuity - Bar"), 'grat_bar'),
+                    (rec.x_kitchen_gratuity, _("Gratuity - Kitchen"),
+                     'grat_kitchen')):
+                if grat_type and amount:
+                    Line.create({
+                        'event_id': rec.id,
+                        'cost_type_id': grat_type,
+                        'name': name,
+                        'quantity': 1,
+                        'unit_cost': round(amount, 2),
+                        'x_line_cogs': round(amount, 2),
+                        'x_taxable': False,
+                        'x_auto_source': src,
+                    })
+
+    def action_distribute_gratuity(self):
+        """Split each gratuity pool across that role's timeclock shifts, by
+        hours, onto the attendance records for payroll."""
+        self.ensure_one()
+
+        def _split(pool, role):
+            atts = self.x_attendance_ids.filtered(
+                lambda a: a.x_event_role == role)
+            total = sum(atts.mapped('worked_hours'))
+            if pool and total:
+                for a in atts:
+                    a.sudo().x_gratuity_share = round(
+                        pool * (a.worked_hours / total), 2)
+            else:
+                atts.sudo().write({'x_gratuity_share': 0.0})
+
+        _split(self.x_bar_gratuity or 0.0, 'bartender')
+        _split(self.x_kitchen_gratuity or 0.0, 'kitchen')
+        self.message_post(
+            body=_("Gratuity distributed to shifts — bar $%(b).2f, "
+                   "kitchen $%(k).2f.",
+                   b=self.x_bar_gratuity or 0.0,
+                   k=self.x_kitchen_gratuity or 0.0),
+            subtype_xmlid='mail.mt_note')
+        return True
+
+    def action_pay_coordinator(self):
+        """Post the coordinator fee to the tagged coordinator's timecard as a
+        flat payout — no clocked hours required (coordinators are fee-based).
+
+        Reuses an existing event punch for that employee if there is one;
+        otherwise creates a zero-duration attendance tagged to this event so the
+        amount rides their timecard. Idempotent: re-running moves the amount, it
+        does not stack.
+        """
+        self.ensure_one()
+        emp = self.x_coordinator_employee_id
+        fee = self.x_coordinator_fee or 0.0
+        if not emp:
+            raise UserError(_("Tag an Event Coordinator (employee) first."))
+        if fee <= 0:
+            raise UserError(_("There is no coordinator fee to pay."))
+        Att = self.env['hr.attendance'].sudo()
+        atts = self.x_attendance_ids.filtered(
+            lambda a: a.employee_id == emp)
+        # Clear any prior coordinator payout on this event so we never stack.
+        self.x_attendance_ids.filtered(
+            lambda a: a.x_coordinator_fee_share).sudo().write(
+            {'x_coordinator_fee_share': 0.0})
+        if atts:
+            target = atts[0]
+        else:
+            when = self.date_deadline or fields.Datetime.now()
+            target = Att.create({
+                'employee_id': emp.id,
+                'check_in': when,
+                'check_out': when,
+                'x_event_id': self.id,
+                'x_event_role': 'event',
+            })
+        target.write({'x_coordinator_fee_share': round(fee, 2)})
+        self.x_coordinator_fee_paid = True
+        self.message_post(
+            body=_("Coordinator fee $%(f).2f posted to %(name)s's timecard.",
+                   f=fee, name=emp.name),
+            subtype_xmlid='mail.mt_note')
+        return True
+
+    # ── Department call-outs (Bar / Kitchen / Custodial) ────────────────
+    _CALLOUT_DEPTS = {
+        'bar': ('x_bar_manager_id', 'Bar'),
+        'kitchen': ('x_kitchen_manager_id', 'Kitchen'),
+        'custodial': ('x_custodial_manager_id', 'Custodial'),
+    }
+
+    def _email_callout(self, dept):
+        """Render the department call-out PDF for `dept` and email it to that
+        manager (from Lodge Settings). Also usable to just attach the PDF."""
+        self.ensure_one()
+        settings = self._event_settings()
+        field, label = self._CALLOUT_DEPTS[dept]
+        partner = settings[field] if settings else False
+        if not partner:
+            raise UserError(_(
+                "Set the %s Manager under Lodge Settings > Department Managers "
+                "first.", label))
+        if not partner.email:
+            raise UserError(_(
+                "%s has no email address on their contact.", partner.name))
+        pdf, _dummy = self.env['ir.actions.report']._render_qweb_pdf(
+            'elksevent.report_event_callout', self.ids, data={'dept': dept})
+        fname = '%s Call-Out - %s.pdf' % (label, self.name or 'Event')
+        attachment = self.env['ir.attachment'].create({
+            'name': fname,
+            'type': 'binary',
+            'datas': base64.b64encode(pdf),
+            'res_model': 'project.task',
+            'res_id': self.id,
+            'mimetype': 'application/pdf',
+        })
+        self.env['mail.mail'].sudo().create({
+            'subject': _('%(dept)s Call-Out - %(name)s',
+                         dept=label, name=self.name or 'Event'),
+            'body_html': _(
+                '<p>Hello %(mgr)s,</p><p>Please review the attached %(dept)s '
+                'call-out / quote request for <strong>%(name)s</strong> and '
+                'reply with your staff assignments and quote.</p>'
+                '<p>Thank you.</p>',
+                mgr=partner.name, dept=label, name=self.name or 'the event'),
+            'email_to': partner.email,
+            'attachment_ids': [(4, attachment.id)],
+        }).send()
+        self.message_post(
+            body=_("%(dept)s call-out emailed to %(mgr)s.",
+                   dept=label, mgr=partner.name),
+            subtype_xmlid='mail.mt_note')
+        return True
+
+    def action_email_bar_callout(self):
+        return self._email_callout('bar')
+
+    def action_email_kitchen_callout(self):
+        return self._email_callout('kitchen')
+
+    def action_email_custodial_callout(self):
+        return self._email_callout('custodial')
+
+    def action_build_labor_costs(self):
+        """Button: rebuild the auto service cost lines and refresh the quote."""
+        self.ensure_one()
+        self._sync_labor_cost_lines()
+        if self.x_sale_order_id:
+            self._sync_quote_lines()
+        self.message_post(
+            body=_("Rebuilt service cost lines from the plan and rates."),
+            subtype_xmlid='mail.mt_note')
+        return True
+
+    def _get_pl_report_data(self):
+        """Build the Event P&L data structure for `self` (a set of events).
+
+        Shared by the date-range P&L wizard report and the per-event Print
+        report so both show identical numbers. Expenses = COGS by P&L category
+        (labor already inside these) + purchase orders; income = the itemized
+        quote total; profit = the event's net income. Mirrors the Financials
+        tab and avoids double-counting labor / POs.
+        """
+        event_data = []
+        grand_income = 0.0
+        grand_costs = 0.0
+        for evt in self:
+            room_lines = [{
+                'name': rb.room_id.name,
+                'rate': rb.rate,
+                'cleaning': rb.cleaning_fee,
+                'service': rb.service_fee,
+                'subtotal': rb.subtotal,
+            } for rb in evt.x_room_booking_ids]
+
+            cogs_cats = [
+                ('Catering', evt.x_cat_catering or 0.0),
+                ('Bar', evt.x_cat_bar or 0.0),
+                ('Event Services', evt.x_cat_event or 0.0),
+                ('Cleaning', evt.x_cat_cleaning or 0.0),
+                ('Other / Gratuity', evt.x_cat_other or 0.0),
+            ]
+            cogs_cats = [(lbl, amt) for lbl, amt in cogs_cats if amt]
+
+            # Itemized COGS = each non-labor cost line's COGS (goods: linens,
+            # supplies, gratuity pass-through) + actual PAID labor per role.
+            # This mirrors the income lines so "Linens" appears on both sides.
+            cost_items = []
+            for cl in evt.x_cost_line_ids:
+                if (cl.x_auto_source or '').startswith('labor'):
+                    continue  # estimated labor is the billing basis, not a cost
+                if cl.x_line_cogs:
+                    cost_items.append({
+                        'name': cl.name or (cl.cost_type_id.name or 'Cost'),
+                        'cogs': cl.x_line_cogs,
+                    })
+            _labor_labels = {
+                'event': 'Event Service - paid labor',
+                'bar': 'Bar Service - paid labor',
+                'catering': 'Catering - paid labor',
+                'cleaning': 'Cleaning Service - paid labor',
+            }
+            for cat, amt in evt._paid_labor_by_category().items():
+                if amt:
+                    cost_items.append({'name': _labor_labels[cat], 'cogs': amt})
+
+            po_lines = [{
+                'name': po.name,
+                'origin': po.origin or '',
+                'total': po.amount_total,
+            } for po in evt.x_purchase_order_ids.filtered(
+                lambda p: p.state != 'cancel')]
+
+            # Every Event Cost line is a customer CHARGE (revenue) — show them
+            # all on the income side so the P&L reconciles to the billed total.
+            charge_lines = [{
+                'name': cl.name or (cl.cost_type_id.name or 'Event Cost'),
+                'total': cl.total or 0.0,
+            } for cl in evt.x_cost_line_ids if cl.total]
+            eventcosts_total = evt.x_eventcosts_total or 0.0
+
+            room_income = evt.x_room_income or 0.0
+            coordinator = evt.x_coordinator_fee or 0.0
+            total_income = evt.x_total_billed or (
+                room_income + eventcosts_total + coordinator)
+            # Gross of any member / Celebration-of-Life discount; the discount
+            # line is the difference so income always ties to the billed total.
+            gross_income = room_income + eventcosts_total + coordinator
+            discount = round(gross_income - total_income, 2)
+            _reason_labels = {
+                'member': 'Member', 'nonprofit': 'Non-Profit',
+                'officer_board': 'Officer / Board Approved', 'other': 'Other',
+            }
+            if evt.x_discount_reason:
+                discount_label = 'Less: %s discount%s' % (
+                    _reason_labels.get(evt.x_discount_reason, 'Discount'),
+                    ' (%.0f%%)' % (evt.x_discount_pct or 0.0),
+                )
+            elif discount:
+                discount_label = 'Less: Celebration of Life (room waived)'
+            else:
+                discount_label = 'Less: Discount'
+
+            cogs_total = evt.x_cogs or 0.0
+            po_total = sum(p['total'] for p in po_lines)
+            total_expense = evt.x_total_costs or (cogs_total + po_total)
+            profit = (evt.x_net_income if evt.x_total_billed
+                      else total_income - total_expense)
+
+            grand_income += total_income
+            grand_costs += total_expense
+
+            event_data.append({
+                'event': evt,
+                'room_lines': room_lines,
+                'charge_lines': charge_lines,
+                'eventcosts_total': eventcosts_total,
+                'cogs_cats': cogs_cats,
+                'cost_items': cost_items,
+                'cogs_total': cogs_total,
+                'po_lines': po_lines,
+                'room_income': room_income,
+                'coordinator_fee': coordinator,
+                'gross_income': gross_income,
+                'discount': discount,
+                'discount_label': discount_label,
+                'total_income': total_income,
+                'tax': evt.x_event_tax_amount or 0.0,
+                'total_costs': cogs_total,
+                'po_total': po_total,
+                'total_expense': total_expense,
+                'profit': profit,
+                'is_member': evt.x_is_member,
+                'ubi_room_income': evt.x_ubi_room_income or 0.0,
+                'ubi_tax_reserve': evt.x_ubi_tax_reserve or 0.0,
+            })
+
+        return {
+            'events': event_data,
+            'event_count': len(event_data),
+            'grand_income': grand_income,
+            'grand_costs': grand_costs,
+            'grand_profit': grand_income - grand_costs,
+        }
 
     def action_open_add_hours(self):
         """Open the wizard to attach a worker's recorded timeclock shifts."""
@@ -1750,6 +2577,7 @@ class ProjectTask(models.Model):
                 'start': start,
                 'stop': stop,
                 'show_as': 'free',
+                'description': self.description or '',
                 'x_event_task_id': self.id,
             })
             self.x_calendar_event_id = ev.id
@@ -1771,7 +2599,8 @@ class ProjectTask(models.Model):
             self._ensure_placeholder_calendar()
         if self.x_calendar_event_id:
             start, stop = self._event_calendar_window()
-            vals = {'name': self.name or 'Event', 'show_as': 'busy'}
+            vals = {'name': self.name or 'Event', 'show_as': 'busy',
+                    'description': self.description or ''}
             if start:
                 vals.update({'start': start, 'stop': stop})
             settings = self._event_settings()
@@ -1860,11 +2689,39 @@ class ProjectTask(models.Model):
         return base, disc, deposit_pct
 
     def _event_invoice_terms(self):
+        """Link the invoice to the Rental Terms & Conditions page.
+
+        Uses the Lodge Settings URL if one is set, otherwise the built-in
+        editable /event-terms website page (absolute URL so it works in the
+        PDF and the portal).
+        """
         settings = self._event_settings()
         if settings and settings.x_event_terms_url:
-            label = settings.x_event_terms_label or _("Rental Use Agreement")
-            return '<a href="%s">%s</a>' % (settings.x_event_terms_url, label)
-        return self.x_contract_notes or ''
+            label = settings.x_event_terms_label or _("Rental Terms & Conditions")
+            url = settings.x_event_terms_url
+        else:
+            base = self.env['ir.config_parameter'].sudo().get_param(
+                'web.base.url') or ''
+            url = (base.rstrip('/') + '/event-terms') if base else '/event-terms'
+            label = _("Rental Terms & Conditions")
+        note = '<a href="%s">%s</a>' % (url, label)
+        if self.x_contract_notes:
+            note += "<br/>" + self.x_contract_notes
+        return note
+
+    def _event_media_note(self):
+        """When signage/projector media is involved, the invoice reminds the
+        host to deliver the media to the office 4 days prior."""
+        self.ensure_one()
+        has_signage = any(
+            c.cost_type_id.code == 'marketing_signage'
+            for c in self.x_cost_line_ids)
+        if has_signage or self.x_need_projector:
+            return _(
+                "Any media for signage/projector display must be provided to "
+                "the Lodge office at least 4 days prior to the event to ensure "
+                "proper loading into the system.")
+        return ''
 
     def _event_deposit_receipt_note(self):
         """A 'DEPOSIT PAID …' line for the invoice when the deposit is in —
@@ -1972,6 +2829,9 @@ class ProjectTask(models.Model):
         receipt = self._event_deposit_receipt_note()
         if receipt:
             narration = (receipt + "\n\n" + narration) if narration else receipt
+        media = self._event_media_note()
+        if media:
+            narration = (narration + "<br/>" + media) if narration else media
         move = self.env['account.move'].create({
             'move_type': 'out_invoice',
             'partner_id': partner.id,

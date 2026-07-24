@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- =========================================================================
+     HUMAN: The public, editable Rental Terms & Conditions page. It is linked
+     from event invoices but is NOT added to the website menu. Edit it in the
+     Website builder like any page (Edit button, top right). General terms only
+     — nothing specific to any one booking. Prices/rules are subject to change,
+     as stated on the page.
+     AI: A website.page at /event-terms (is_published). The body sits in
+     .oe_structure blocks so it's fully editable; no menu record is created.
+     ========================================================================= -->
+<odoo>
+    <template id="event_terms_page" name="Rental Terms &amp; Conditions">
+        <t t-call="website.layout">
+            <div id="wrap" class="oe_structure oe_empty">
+                <section class="s_text_block pt32 pb32">
+                    <div class="container">
+                        <h1 class="text-center">Facility Rental — Terms &amp; Conditions</h1>
+                        <p class="text-center text-muted">
+                            Lewiston Elks Lodge #896 · 3444 Country Club Drive, Lewiston, Idaho 83501
+                        </p>
+
+                        <div class="alert alert-warning" role="alert">
+                            <strong>Please note:</strong> These Terms &amp; Conditions
+                            are subject to change from time to time, without prior
+                            notice. The terms in effect on the date your agreement is
+                            signed will govern your event.
+                        </div>
+
+                        <p>
+                            Thank you for allowing Lewiston Elks Lodge #896 to help you with
+                            your special event. Our facilities include the Riverview Room,
+                            Seaport Room, Lodge Room, Dining Area, VIP Area, Green Room,
+                            Lounge/Bar Area, and Parking Area.
+                        </p>
+
+                        <h2>Rules of Usage</h2>
+                        <ol>
+                            <li>The Lewiston Elks Lodge #896 has total authority to oversee
+                                and maintain order of the event. Guests and Elk members shall
+                                always conduct themselves in a courteous manner. Use of the
+                                Lodge or premises is at your own risk. All local, state, and
+                                federal laws are to be adhered to.</li>
+                            <li><strong>No alcoholic beverages are to be brought onto the
+                                premises at any time</strong> (this is an Idaho state law, and
+                                includes the Lodge building, patio, and parking lot). All
+                                beverages are to be purchased from the Lounge Bar.
+                                <ul>
+                                    <li>Wine may be brought in as stated and governed by
+                                        Lewiston Lodge #896 Bylaws. A corkage fee will be
+                                        assessed for wine brought in to be served at the event.</li>
+                                </ul>
+                            </li>
+                            <li>A Certificate of Liability Insurance must be on file prior to
+                                the date of the event.</li>
+                            <li>All Elk members have access to the Lodge during normal Lodge
+                                business hours.</li>
+                            <li>All damage to the building or premises will be billed at the
+                                full replacement cost.</li>
+                            <li>The use of rice, seeds, sparklers, confetti, glitter, or
+                                foreign materials is strictly prohibited.</li>
+                            <li>No animals are permitted on the premises.</li>
+                            <li>The Elks are not responsible for lost or unclaimed property.</li>
+                            <li>Any changes to the contract must be made in writing no less
+                                than 14 days prior to the event.</li>
+                            <li>Premises are to be left in the same condition at the end of the
+                                event as at the beginning.</li>
+                            <li>The event must be finished by 12:00 A.M. (no exceptions).</li>
+                            <li>Recommended capacity by room of the facility must not be
+                                exceeded.</li>
+                            <li>Failure to abide by the terms of this agreement will terminate
+                                the event and all guests will be asked to leave.</li>
+                        </ol>
+
+                        <h2>Catering &amp; Kitchen</h2>
+                        <ul>
+                            <li>Kitchen facilities are not available to parties and/or
+                                caterers. The refrigerator and countertops may be used for
+                                serving with prior approval.</li>
+                            <li>Only approved caterers are allowed entry to the facility for
+                                events. Caterer license and insurance must be on file with the
+                                Elks Lodge (no exceptions).</li>
+                            <li>Competitive and discount pricing is available when using our
+                                in-house caterer on parties of 100 or more guests.</li>
+                            <li>The Lodge is released of any responsibility for any food
+                                brought onto the premises.</li>
+                        </ul>
+
+                        <h2>Reservation, Fees &amp; Cancellation</h2>
+                        <ul>
+                            <li>A non-refundable cleaning fee of $100.00 will be charged; all
+                                cleaning fees are due and payable at the time of signing.</li>
+                            <li>50% of all other fees are due at signing, with the remaining
+                                balance due the day prior to the scheduled event.</li>
+                            <li>Cancellation of the event within seven (7) days will forfeit
+                                100% of the reservation fees.</li>
+                            <li>Garbage must be removed from the facility. Garbage removal and
+                                disposal for events with over 50 guests are the responsibility
+                                of the renter. A $75 garbage overage removal fee will be
+                                charged for use of the Lodge dumpster.</li>
+                            <li>An extra bartender fee applies for parties of over 100 guests
+                                ($150.00).</li>
+                            <li>Rental fees are based on a one-day event. Any additional time
+                                for setup and takedown will be assessed an additional 25%
+                                rental fee for each day — a "day" being all or part of the
+                                hours between 12:00 P.M. and 6:00 P.M. the day before the
+                                event, or all or part of the hours between 9:00 A.M. and
+                                12:00 P.M. the day after the event. Any time exceeding these
+                                windows will be charged at $100 per hour.</li>
+                            <li>Departed members in good standing may use the facility for
+                                Celebration of Life and/or memorial services as stated in the
+                                Bylaws of Lewiston Elks Lodge #896.</li>
+                        </ul>
+
+                        <h2>Room Rates <small class="text-muted">(per day — subject to change)</small></h2>
+                        <ul>
+                            <li>Seaport Room — $600</li>
+                            <li>Riverview Room — $600</li>
+                            <li>Combination (Seaport &amp; Riverview) — $1,000</li>
+                            <li>Dining Room — $900 (includes dance floor)</li>
+                            <li>Lodge Room — $1,500</li>
+                            <li>Green Room — $350</li>
+                            <li>VIP Room — $500 (includes dance floor)</li>
+                        </ul>
+
+                        <h2>Indemnification</h2>
+                        <p>
+                            The Renter agrees to indemnify, defend, and hold harmless the
+                            Lewiston Elks Lodge #896, its officers, members, employees, and
+                            agents from and against any and all claims, damages, losses,
+                            liabilities, costs, and expenses (including reasonable attorney's
+                            fees) arising out of or in connection with the Renter's use of the
+                            facility, including but not limited to any accident, injury,
+                            damage, or loss occurring on the premises during the term of this
+                            Agreement.
+                        </p>
+
+                        <p class="text-muted"><em>
+                            These Terms &amp; Conditions may be amended from time to time.
+                            Please confirm the current terms with the Lodge office.
+                        </em></p>
+                    </div>
+                </section>
+            </div>
+        </t>
+    </template>
+
+    <record id="event_terms_website_page" model="website.page">
+        <field name="name">Rental Terms &amp; Conditions</field>
+        <field name="view_id" ref="event_terms_page"/>
+        <field name="url">/event-terms</field>
+        <field name="is_published" eval="True"/>
+        <field name="website_indexed" eval="True"/>
+    </record>
+</odoo>

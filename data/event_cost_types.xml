@@ -121,6 +121,30 @@
             <field name="sequence">50</field>
         </record>
 
+        <!-- ===== Marketing / Exclusive Use (fee defaulted from Settings) ===== -->
+        <record id="cost_type_marketing_signage" model="elks.event.cost.type">
+            <field name="name">Marketing Signage Use</field>
+            <field name="code">marketing_signage</field>
+            <field name="category">event</field>
+            <field name="protected">True</field>
+            <field name="sequence">36</field>
+        </record>
+        <record id="cost_type_exclusive_use" model="elks.event.cost.type">
+            <field name="name">Exclusive Use</field>
+            <field name="code">exclusive_use</field>
+            <field name="category">event</field>
+            <field name="protected">True</field>
+            <field name="sequence">37</field>
+        </record>
+
+        <record id="cost_type_gratuity" model="elks.event.cost.type">
+            <field name="name">Gratuity</field>
+            <field name="code">gratuity</field>
+            <field name="category">other</field>
+            <field name="protected">True</field>
+            <field name="sequence">38</field>
+        </record>
+
         <!-- ===== Other (editable, not protected) ===== -->
         <record id="cost_type_supplies" model="elks.event.cost.type">
             <field name="name">Supplies</field>

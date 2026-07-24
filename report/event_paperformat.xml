@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tight US-Letter paper format for the self-contained event sheets
+     (coordinator, contract). They render their own header, so we don't reserve
+     the big top header band that base.paperformat_us leaves blank. Defined in
+     its own file so it loads before any report that references it. -->
+<odoo>
+    <record id="paperformat_event_sheet" model="report.paperformat">
+        <field name="name">Elks Event Sheet (US Letter, tight top)</field>
+        <field name="format">Letter</field>
+        <field name="orientation">Portrait</field>
+        <field name="margin_top">6</field>
+        <field name="margin_bottom">10</field>
+        <field name="margin_left">7</field>
+        <field name="margin_right">7</field>
+        <field name="header_spacing">2</field>
+        <field name="header_line" eval="False"/>
+        <field name="dpi">90</field>
+    </record>
+</odoo>

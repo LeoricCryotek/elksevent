@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
-    <!-- AP GL Breakout — bound to the event quote (sale.order) -->
+    <!-- AP GL Breakout - bound to the event quote (sale.order) -->
     <record id="action_report_event_ap_breakout" model="ir.actions.report">
         <field name="name">Event AP GL Breakout</field>
         <field name="model">sale.order</field>
@@ -25,7 +25,7 @@
                             <t t-if="settings.lodge_number">#<t t-esc="settings.lodge_number"/></t>
                         </div>
                         <div style="font-size:13px; font-weight:bold;">
-                            Event AP GL Breakout — <t t-esc="order.name"/>
+                            Event AP GL Breakout - <t t-esc="order.name"/>
                         </div>
                         <div style="font-size:10px; color:#666;"
                              t-if="order.x_event_task_id">

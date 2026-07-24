@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- =========================================================================
+     HUMAN: The department "Call-Out" / quote request - one printable page each
+     for the Bar Manager, Kitchen Manager, and Custodial Lead. Each page lists
+     the event details that department needs, a checklist to work through, and a
+     quote-back box so the manager can reply with staff/hours/cost. Print all
+     applicable pages from the event's Print menu, or use the Email Call-Out
+     buttons to send each manager their page.
+     AI: qweb-pdf on project.task. Renders a page for each department that
+     applies (x_bar_use / x_food_request / x_cleaning_use). When rendered with
+     data={'dept': 'bar'|'kitchen'|'custodial'} (from the email actions) it
+     shows only that one page. ASCII-only; tight top paperformat.
+     ========================================================================= -->
+<odoo>
+    <record id="action_report_event_callout" model="ir.actions.report">
+        <field name="name">Department Call-Out</field>
+        <field name="model">project.task</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_event_callout</field>
+        <field name="report_file">elksevent.report_event_callout</field>
+        <field name="binding_model_id" ref="project.model_project_task"/>
+        <field name="binding_type">report</field>
+        <field name="paperformat_id" ref="paperformat_event_sheet"/>
+        <field name="print_report_name">'Call-Out - %s' % (object.name or 'Event')</field>
+    </record>
+
+    <template id="report_event_callout">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="settings"
+                   t-value="o.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
+                <t t-set="only_dept" t-value="data and data.get('dept')"/>
+                <!-- Tracks whether a page has already been emitted so each
+                     following call-out starts on its own fresh page. -->
+                <t t-set="shown" t-value="False"/>
+
+                <!-- Shared event summary (rendered on each page) -->
+                <t t-set="summary">
+                    <table style="width:100%; font-size:10px; margin-bottom:8px;">
+                        <tr>
+                            <td style="padding:2px 4px; width:50%;"><strong>Event:</strong> <t t-esc="o.name or ''"/></td>
+                            <td style="padding:2px 4px;"><strong>Date:</strong>
+                                <t t-if="o.x_event_date"><span t-field="o.x_event_date" t-options='{"format":"EEE, MMM d, yyyy"}'/></t>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:2px 4px;"><strong>Start - End:</strong> <t t-esc="o.x_event_start_time_text or '-'"/> to <t t-esc="o.x_event_end_time_text or '-'"/></td>
+                            <td style="padding:2px 4px;"><strong>Guests:</strong> <t t-esc="o.x_guest_count or 0"/></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:2px 4px;"><strong>Entry:</strong>
+                                <t t-if="o.x_requested_entry"><span t-field="o.x_requested_entry" t-options='{"widget":"datetime","format":"MM/dd h:mm a"}'/></t>
+                                <t t-else="">-</t>
+                            </td>
+                            <td style="padding:2px 4px;"><strong>Setup:</strong>
+                                <t t-if="o.x_requested_setup"><span t-field="o.x_requested_setup" t-options='{"widget":"datetime","format":"MM/dd h:mm a"}'/></t>
+                                <t t-else="">-</t>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:2px 4px;"><strong>Type:</strong> <t t-esc="o.x_event_type or '-'"/></td>
+                            <td style="padding:2px 4px;"><strong>Host:</strong> <t t-esc="o.x_customer_name or '-'"/></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:2px 4px;" colspan="2"><strong>Rooms:</strong>
+                                <t t-if="o.x_room_booking_ids"><t t-esc="', '.join(o.x_room_booking_ids.mapped('room_id.name'))"/></t>
+                                <t t-else="">-</t>
+                            </td>
+                        </tr>
+                    </table>
+                </t>
+
+                <!-- ============ BAR ============ -->
+                <t t-if="o.x_bar_use and (not only_dept or only_dept == 'bar')">
+                    <div class="page" t-attf-style="font-size:10.5px; color:#222;{{ ' page-break-before:always;' if shown else '' }}">
+                        <div style="font-size:15px; font-weight:bold;">
+                            <t t-if="settings"><t t-esc="settings.name"/></t><t t-else="">Elks Lodge</t>
+                            <t t-if="settings and settings.lodge_number">#<t t-esc="settings.lodge_number"/></t>
+                        </div>
+                        <div style="font-size:14px; font-weight:bold; color:#46166a;">BAR CALL-OUT &amp; QUOTE REQUEST</div>
+                        <hr style="border-top:2px solid #46166a; margin:2px 0 10px 0;"/>
+                        <t t-out="summary"/>
+                        <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd;">REQUESTED</div>
+                        <table style="width:100%; font-size:10px; border:1px solid #cbb8dd; border-top:none;">
+                            <tr><td style="padding:2px 6px; width:45%;">Number of bars</td><td style="padding:2px 6px;"><t t-esc="o.x_num_bars or 0"/></td></tr>
+                            <tr><td style="padding:2px 6px;">Bartenders requested</td><td style="padding:2px 6px;"><t t-esc="o.x_bartender_count or 0"/> x <t t-esc="'%g' % (o.x_plan_bar_hours or 0)"/> hrs each</td></tr>
+                            <tr t-if="o.x_need_beer_tub"><td style="padding:2px 6px;">Beer tub</td><td style="padding:2px 6px;">Yes</td></tr>
+                            <tr t-if="o.x_bar_gratuity"><td style="padding:2px 6px;">Bar gratuity pool</td><td style="padding:2px 6px;">$<t t-esc="'{:,.2f}'.format(o.x_bar_gratuity)"/></td></tr>
+                        </table>
+                        <t t-if="o.x_bar_drink_requests">
+                            <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd; margin-top:6px;">DRINK REQUESTS</div>
+                            <div style="font-size:10px; border:1px solid #cbb8dd; border-top:none; padding:4px 6px; white-space:pre-line;"><t t-esc="o.x_bar_drink_requests"/></div>
+                        </t>
+                        <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin-top:8px;">BAR CHECKLIST</div>
+                        <table style="width:100%; font-size:10px; border:1px solid #ccc; border-top:none;">
+                            <tr t-foreach="['Confirm bartender count &amp; hours','Stock bar / beer tub','Prepare drink requests','Ice, garnish &amp; glassware','Set up bar station(s)','Cash / POS ready','Break down &amp; clean bar']" t-as="item">
+                                <td style="padding:4px 6px; width:22px; text-align:center; border-bottom:1px solid #eee;"><span style="display:inline-block; width:11px; height:11px; border:1.4px solid #333;"> </span></td>
+                                <td style="padding:4px 6px; border-bottom:1px solid #eee;"><t t-out="item"/></td>
+                            </tr>
+                        </table>
+                        <t t-set="rows" t-value="[('Bartender', o.x_plan_bar_hours)] * (o.x_bartender_count or 0)"/>
+                        <t t-call="elksevent.report_event_callout_quote"/>
+                    </div>
+                    <t t-set="shown" t-value="True"/>
+                </t>
+
+                <!-- ============ KITCHEN ============ -->
+                <t t-if="o.x_food_request and (not only_dept or only_dept == 'kitchen')">
+                    <div class="page" t-attf-style="font-size:10.5px; color:#222;{{ ' page-break-before:always;' if shown else '' }}">
+                        <div style="font-size:15px; font-weight:bold;">
+                            <t t-if="settings"><t t-esc="settings.name"/></t><t t-else="">Elks Lodge</t>
+                            <t t-if="settings and settings.lodge_number">#<t t-esc="settings.lodge_number"/></t>
+                        </div>
+                        <div style="font-size:14px; font-weight:bold; color:#46166a;">KITCHEN CALL-OUT &amp; QUOTE REQUEST</div>
+                        <hr style="border-top:2px solid #46166a; margin:2px 0 10px 0;"/>
+                        <t t-out="summary"/>
+                        <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd;">REQUESTED</div>
+                        <table style="width:100%; font-size:10px; border:1px solid #cbb8dd; border-top:none;">
+                            <tr><td style="padding:2px 6px; width:45%;">Cooks requested</td><td style="padding:2px 6px;"><t t-esc="o.x_cook_count or 0"/> x <t t-esc="'%g' % (o.x_cook_hours or 0)"/> hrs each</td></tr>
+                            <tr><td style="padding:2px 6px;">Kitchen support requested</td><td style="padding:2px 6px;"><t t-esc="o.x_kitchen_support_count or 0"/> x <t t-esc="'%g' % (o.x_kitchen_support_hours or 0)"/> hrs each</td></tr>
+                            <tr t-if="o.x_food_by_us"><td style="padding:2px 6px;">Food by lodge</td><td style="padding:2px 6px;">Yes</td></tr>
+                            <tr t-if="o.x_caterer_id"><td style="padding:2px 6px;">Catered by</td><td style="padding:2px 6px;"><t t-esc="o.x_caterer_id.name"/></td></tr>
+                            <tr t-if="o.x_kitchen_gratuity"><td style="padding:2px 6px;">Kitchen gratuity pool</td><td style="padding:2px 6px;">$<t t-esc="'{:,.2f}'.format(o.x_kitchen_gratuity)"/></td></tr>
+                        </table>
+                        <t t-if="o.x_catering_details or o.x_food_menu">
+                            <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd; margin-top:6px;">MENU / CATERING DETAILS</div>
+                            <div style="font-size:10px; border:1px solid #cbb8dd; border-top:none; padding:4px 6px; white-space:pre-line;"><t t-esc="o.x_catering_details or ''"/><t t-if="o.x_food_menu"> <t t-esc="o.x_food_menu"/></t></div>
+                        </t>
+                        <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin-top:8px;">KITCHEN CHECKLIST</div>
+                        <table style="width:100%; font-size:10px; border:1px solid #ccc; border-top:none;">
+                            <tr t-foreach="['Confirm cook &amp; support count / hours','Confirm menu','Order &amp; prep food','Kitchen &amp; serving setup','Serve','Clean kitchen &amp; store leftovers']" t-as="item">
+                                <td style="padding:4px 6px; width:22px; text-align:center; border-bottom:1px solid #eee;"><span style="display:inline-block; width:11px; height:11px; border:1.4px solid #333;"> </span></td>
+                                <td style="padding:4px 6px; border-bottom:1px solid #eee;"><t t-out="item"/></td>
+                            </tr>
+                        </table>
+                        <t t-set="rows" t-value="[('Cook', o.x_cook_hours)] * (o.x_cook_count or 0) + [('Kitchen Support', o.x_kitchen_support_hours)] * (o.x_kitchen_support_count or 0)"/>
+                        <t t-call="elksevent.report_event_callout_quote"/>
+                    </div>
+                    <t t-set="shown" t-value="True"/>
+                </t>
+
+                <!-- ============ CUSTODIAL ============ -->
+                <t t-if="o.x_cleaning_use and (not only_dept or only_dept == 'custodial')">
+                    <div class="page" t-attf-style="font-size:10.5px; color:#222;{{ ' page-break-before:always;' if shown else '' }}">
+                        <div style="font-size:15px; font-weight:bold;">
+                            <t t-if="settings"><t t-esc="settings.name"/></t><t t-else="">Elks Lodge</t>
+                            <t t-if="settings and settings.lodge_number">#<t t-esc="settings.lodge_number"/></t>
+                        </div>
+                        <div style="font-size:14px; font-weight:bold; color:#46166a;">CUSTODIAL CALL-OUT</div>
+                        <hr style="border-top:2px solid #46166a; margin:2px 0 10px 0;"/>
+                        <t t-out="summary"/>
+                        <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd;">REQUESTED</div>
+                        <table style="width:100%; font-size:10px; border:1px solid #cbb8dd; border-top:none;">
+                            <tr><td style="padding:2px 6px; width:45%;">Cleaners requested</td><td style="padding:2px 6px;"><t t-esc="o.x_cleaner_count or 0"/> x <t t-esc="'%g' % (o.x_cleaner_hours or 0)"/> hrs each</td></tr>
+                            <tr t-if="o.x_need_garbage"><td style="padding:2px 6px;">Garbage / haul-out</td><td style="padding:2px 6px;">Yes</td></tr>
+                            <tr t-if="o.x_cleanup_scheduled and o.x_cleanup_datetime"><td style="padding:2px 6px;">Cleanup scheduled</td><td style="padding:2px 6px;"><span t-field="o.x_cleanup_datetime" t-options='{"widget":"datetime","format":"MM/dd h:mm a"}'/></td></tr>
+                        </table>
+                        <div style="border:2px solid #46166a; padding:6px 8px; margin-top:8px; font-size:11px;">
+                            <strong>REQUIRED:</strong> The building must be fully cleaned and the
+                            bathrooms restocked by
+                            <strong>
+                                <t t-if="o.x_custodial_ready_datetime"><span t-field="o.x_custodial_ready_datetime" t-options='{"widget":"datetime","format":"EEE, MMM d, yyyy h:mm a"}'/></t>
+                                <t t-else="">________________ (date &amp; time)</t>
+                            </strong>
+                            (typically the day following the event).
+                        </div>
+                        <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin-top:8px;">CUSTODIAL CHECKLIST</div>
+                        <table style="width:100%; font-size:10px; border:1px solid #ccc; border-top:none;">
+                            <tr t-foreach="['Confirm cleaner count &amp; hours','Pre-event setup / room prep','Trash &amp; recycling staged','Restrooms stocked &amp; clean','Post-event cleanup','Floors / tables reset','Lock up']" t-as="item">
+                                <td style="padding:4px 6px; width:22px; text-align:center; border-bottom:1px solid #eee;"><span style="display:inline-block; width:11px; height:11px; border:1.4px solid #333;"> </span></td>
+                                <td style="padding:4px 6px; border-bottom:1px solid #eee;"><t t-out="item"/></td>
+                            </tr>
+                        </table>
+                        <t t-set="rows" t-value="[('Cleaner', o.x_cleaner_hours)] * (o.x_cleaner_count or 0)"/>
+                        <t t-call="elksevent.report_event_callout_quote"/>
+                    </div>
+                    <t t-set="shown" t-value="True"/>
+                </t>
+
+            </t>
+        </t>
+    </template>
+
+    <!-- Manager quote box: one pre-filled row per REQUESTED position (role +
+         hours from the event) so the manager just fills in the Name and prices
+         it. Plus two spare rows. Expects `rows` (list of (role, hours)). -->
+    <template id="report_event_callout_quote">
+        <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin-top:10px;">MANAGER QUOTE / RESPONSE - assign staff or volunteers by name</div>
+        <table style="width:100%; font-size:10px; border-collapse:collapse; border:1px solid #cbb8dd; border-top:none;">
+            <tr style="background:#f4f0f8;">
+                <th style="padding:3px 6px; text-align:left; width:6%;">#</th>
+                <th style="padding:3px 6px; text-align:left; width:44%;">Name (staff or volunteer)</th>
+                <th style="padding:3px 6px; text-align:left; width:22%;">Role</th>
+                <th style="padding:3px 6px; text-align:left; width:14%;">Hours</th>
+                <th style="padding:3px 6px; text-align:left; width:14%;">Volunteer?</th>
+            </tr>
+            <tr t-foreach="rows" t-as="row">
+                <td style="padding:9px 6px; border-top:1px solid #eee;"><t t-esc="row_index + 1"/></td>
+                <td style="padding:9px 6px; border-top:1px solid #eee;"></td>
+                <td style="padding:9px 6px; border-top:1px solid #eee;"><t t-esc="row[0]"/></td>
+                <td style="padding:9px 6px; border-top:1px solid #eee;"><t t-esc="'%g' % (row[1] or 0)"/></td>
+                <td style="padding:9px 6px; border-top:1px solid #eee;">Y / N</td>
+            </tr>
+            <tr t-foreach="[1, 2]" t-as="e">
+                <td style="padding:9px 6px; border-top:1px solid #eee;"><t t-esc="len(rows) + e"/></td>
+                <td style="padding:9px 6px; border-top:1px solid #eee;"></td>
+                <td style="padding:9px 6px; border-top:1px solid #eee;"></td>
+                <td style="padding:9px 6px; border-top:1px solid #eee;"></td>
+                <td style="padding:9px 6px; border-top:1px solid #eee;">Y / N</td>
+            </tr>
+        </table>
+        <table style="width:100%; font-size:10px; border:1px solid #cbb8dd; border-top:none;">
+            <tr>
+                <td style="padding:8px 6px; width:50%;">Estimated cost: $__________</td>
+                <td style="padding:8px 6px;">Can staff this event? (circle)   YES    NO</td>
+            </tr>
+        </table>
+        <div style="font-size:10px; padding:3px 6px 2px 6px; border:1px solid #cbb8dd; border-top:none;">Notes:</div>
+        <div style="border:1px solid #cbb8dd; border-top:none; height:70px;"></div>
+        <table style="width:100%; font-size:10px; border:1px solid #cbb8dd; border-top:none;">
+            <tr>
+                <td style="padding:16px 6px 6px 6px;">Manager signature: __________________</td>
+                <td style="padding:16px 6px 6px 6px;">Date: __________</td>
+            </tr>
+        </table>
+    </template>
+</odoo>

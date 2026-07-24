@@ -68,6 +68,10 @@ class EventCostLine(models.Model):
         help="When checked, this line's total is included in the base "
              "amount used to calculate the Event Coordinator's fee.",
     )
+    x_auto_source = fields.Char(
+        "Auto Source", copy=False, index=True,
+        help="Set on lines auto-built from the event plan (labor/service). A "
+             "rebuild replaces only these; hand-added lines are untouched.")
     x_taxable = fields.Boolean(
         "Taxable", default=False,
         help="If checked, this charge is part of the taxable subtotal (goods) "
@@ -77,9 +81,19 @@ class EventCostLine(models.Model):
 
     @api.onchange('cost_type_id')
     def _onchange_cost_type_taxable(self):
-        """Seed the taxable flag from the chosen type's default."""
-        if self.cost_type_id:
-            self.x_taxable = self.cost_type_id.taxable
+        """Seed the taxable flag from the type, and the fee for the fixed
+        Marketing Signage / Exclusive Use types from FRS Lodge Settings."""
+        if not self.cost_type_id:
+            return
+        self.x_taxable = self.cost_type_id.taxable
+        code = self.cost_type_id.code
+        if code in ('marketing_signage', 'exclusive_use') and not self.unit_cost:
+            settings = self.env['elks.lodge.settings'].sudo().search([], limit=1)
+            if settings:
+                self.unit_cost = (
+                    settings.x_marketing_signage_fee
+                    if code == 'marketing_signage'
+                    else settings.x_exclusive_use_fee) or 0.0
     purchase_order_id = fields.Many2one(
         'purchase.order', string="Linked PO",
         help="Optional link to an actual vendor purchase order.",

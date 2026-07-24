@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- =========================================================================
+     HUMAN: The Event Coordinator "Day-Of" one-sheet. Everything a coordinator
+     needs while running the event on the day: the schedule (entry / setup /
+     start / end / cleanup), host + guest info, rooms, the setup/bar/food plan,
+     assigned staff, notes, and the checklist to tick off. Print it from the
+     event's Print menu.
+     AI: qweb-pdf on project.task, US-Letter. Field names verified against
+     models/project_task.py. Sections render only when they carry content so
+     the sheet stays to one page. The checklist iterates child_ids (the
+     generated checklist sub-tasks); a box is filled when the sub-task state
+     contains "done". No emoji / no Font-Awesome so it renders on any engine.
+     ========================================================================= -->
+<odoo>
+
+    <record id="action_report_event_coordinator" model="ir.actions.report">
+        <field name="name">Event Coordinator Sheet</field>
+        <field name="model">project.task</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_event_coordinator</field>
+        <field name="report_file">elksevent.report_event_coordinator</field>
+        <field name="binding_model_id" ref="project.model_project_task"/>
+        <field name="binding_type">report</field>
+        <field name="paperformat_id" ref="paperformat_event_sheet"/>
+        <field name="print_report_name">'Coordinator - %s' % (object.name or 'Event')</field>
+    </record>
+
+    <template id="report_event_coordinator">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="settings"
+                   t-value="o.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
+                <!-- checklist sub-tasks (generated from the checklist answers) -->
+                <t t-set="kids"
+                   t-value="o.child_ids.sorted(key=lambda c: (c.sequence, c.id))"/>
+                <t t-set="us_them" t-value="{'us': 'Lodge', 'them': 'Renter'}"/>
+                <div class="page" style="font-size:10.5px; line-height:1.35; color:#222;">
+
+                    <!-- ===================== HEADER ===================== -->
+                    <table style="width:100%; border:none; margin-bottom:4px;">
+                        <tr>
+                            <td style="border:none; padding:0;">
+                                <div style="font-size:15px; font-weight:bold;">
+                                    <t t-if="settings"><t t-esc="settings.name"/></t>
+                                    <t t-else="">Elks Lodge</t>
+                                    <t t-if="settings and settings.lodge_number">#<t t-esc="settings.lodge_number"/></t>
+                                </div>
+                                <div style="font-size:13px; font-weight:bold; color:#46166a;">
+                                    Event Coordinator - Day-Of Sheet
+                                </div>
+                            </td>
+                            <td style="border:none; padding:0; text-align:right; font-size:9px; color:#666;">
+                                Printed <span t-esc="time.strftime('%m/%d/%Y')"/>
+                            </td>
+                        </tr>
+                    </table>
+                    <div style="font-size:17px; font-weight:bold; margin:2px 0;">
+                        <t t-esc="o.name or 'Event'"/>
+                    </div>
+                    <hr style="border-top:2px solid #46166a; margin:2px 0 8px 0;"/>
+
+                    <!-- ===================== SCHEDULE (day-of times) ===================== -->
+                    <table style="width:100%; border-collapse:collapse; margin-bottom:8px;">
+                        <tr style="background:#46166a; color:#fff;">
+                            <th style="padding:4px 6px; text-align:left; width:20%;">Requested Entry</th>
+                            <th style="padding:4px 6px; text-align:left; width:20%;">Setup</th>
+                            <th style="padding:4px 6px; text-align:left; width:20%;">Event Start</th>
+                            <th style="padding:4px 6px; text-align:left; width:20%;">Event End</th>
+                            <th style="padding:4px 6px; text-align:left; width:20%;">Cleanup</th>
+                        </tr>
+                        <tr style="font-size:12px; font-weight:bold;">
+                            <td style="padding:5px 6px; border:1px solid #ccc;">
+                                <t t-if="o.x_requested_entry"><span t-field="o.x_requested_entry" t-options='{"widget":"datetime","format":"MM/dd h:mm a"}'/></t>
+                                <t t-else="">-</t>
+                            </td>
+                            <td style="padding:5px 6px; border:1px solid #ccc;">
+                                <t t-if="o.x_requested_setup"><span t-field="o.x_requested_setup" t-options='{"widget":"datetime","format":"MM/dd h:mm a"}'/></t>
+                                <t t-else="">-</t>
+                            </td>
+                            <td style="padding:5px 6px; border:1px solid #ccc;">
+                                <t t-esc="o.x_event_start_time_text or '-'"/>
+                            </td>
+                            <td style="padding:5px 6px; border:1px solid #ccc;">
+                                <t t-esc="o.x_event_end_time_text or '-'"/>
+                            </td>
+                            <td style="padding:5px 6px; border:1px solid #ccc;">
+                                <t t-if="o.x_cleanup_scheduled and o.x_cleanup_datetime"><span t-field="o.x_cleanup_datetime" t-options='{"widget":"datetime","format":"MM/dd h:mm a"}'/></t>
+                                <t t-else="">-</t>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <!-- ===================== HOST / EVENT PARTICULARS ===================== -->
+                    <table style="width:100%; font-size:10px; margin-bottom:8px;">
+                        <tr>
+                            <td style="padding:2px 4px; width:50%;"><strong>Date:</strong>
+                                <t t-if="o.x_event_date"><span t-field="o.x_event_date" t-options='{"format":"EEE, MMM d, yyyy"}'/></t>
+                                <t t-else="">-</t>
+                            </td>
+                            <td style="padding:2px 4px; width:50%;"><strong>Coordinator:</strong>
+                                <t t-esc="', '.join(o.user_ids.mapped('name')) or '-'"/>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:2px 4px;"><strong>Host:</strong> <t t-esc="o.x_customer_name or '-'"/></td>
+                            <td style="padding:2px 4px;"><strong>Type:</strong> <t t-esc="o.x_event_type or '-'"/></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:2px 4px;"><strong>Phone:</strong> <t t-esc="o.x_customer_phone or '-'"/></td>
+                            <td style="padding:2px 4px;"><strong>Expected Guests:</strong> <t t-esc="o.x_guest_count or 0"/></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:2px 4px;"><strong>Email:</strong> <t t-esc="o.x_customer_email or '-'"/></td>
+                            <td style="padding:2px 4px;"><strong>Rooms:</strong>
+                                <t t-if="o.x_room_booking_ids"><t t-esc="', '.join(o.x_room_booking_ids.mapped('room_id.name'))"/></t>
+                                <t t-else="">-</t>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <!-- ===================== PLAN GRID ===================== -->
+                    <table style="width:100%; border-collapse:collapse; margin-bottom:8px;">
+                        <tr style="vertical-align:top;">
+                            <!-- SETUP & SERVICE -->
+                            <td style="width:50%; padding:0 8px 0 0; border:none;">
+                                <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd;">SETUP &amp; SERVICE</div>
+                                <table style="width:100%; font-size:9.5px; border:1px solid #cbb8dd; border-top:none;">
+                                    <tr><td style="padding:2px 6px; width:55%;">Setup by</td><td style="padding:2px 6px;"><strong t-esc="us_them.get(o.x_setup_by, '-')"/></td></tr>
+                                    <tr><td style="padding:2px 6px;">Takedown by</td><td style="padding:2px 6px;"><strong t-esc="us_them.get(o.x_takedown_by, '-')"/></td></tr>
+                                    <tr t-if="o.x_need_tables"><td style="padding:2px 6px;">Tables</td><td style="padding:2px 6px;"><t t-esc="o.x_need_tables"/></td></tr>
+                                    <tr t-if="o.x_need_chairs"><td style="padding:2px 6px;">Chairs</td><td style="padding:2px 6px;"><t t-esc="o.x_need_chairs"/></td></tr>
+                                    <tr t-if="o.x_need_linen"><td style="padding:2px 6px;">Linen</td><td style="padding:2px 6px;"><t t-esc="o.x_linen_qty or ''"/> <t t-esc="o.x_linen_color or ''"/></td></tr>
+                                    <tr t-if="o.x_need_podium"><td style="padding:2px 6px;">Podium</td><td style="padding:2px 6px;">Yes</td></tr>
+                                    <tr t-if="o.x_need_sound"><td style="padding:2px 6px;">Sound system</td><td style="padding:2px 6px;">Yes</td></tr>
+                                    <tr t-if="o.x_need_microphone"><td style="padding:2px 6px;">Microphone</td><td style="padding:2px 6px;">Yes</td></tr>
+                                    <tr t-if="o.x_need_projector"><td style="padding:2px 6px;">Projector</td><td style="padding:2px 6px;">Yes</td></tr>
+                                    <tr t-if="o.x_need_garbage"><td style="padding:2px 6px;">Garbage/haul-out</td><td style="padding:2px 6px;">Yes</td></tr>
+                                    <tr t-if="o.x_marketing_signage"><td style="padding:2px 6px;">Marketing signage</td><td style="padding:2px 6px;">Yes</td></tr>
+                                    <tr t-if="o.x_exclusive_use"><td style="padding:2px 6px;">Exclusive use</td><td style="padding:2px 6px;">Yes</td></tr>
+                                    <tr t-if="o.x_has_decorations"><td style="padding:2px 6px;">Decorations</td><td style="padding:2px 6px;">Yes (takedown: <t t-esc="o.x_decor_takedown_by or '-'"/>)</td></tr>
+                                </table>
+                            </td>
+                            <!-- BAR + FOOD -->
+                            <td style="width:50%; padding:0; border:none;">
+                                <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd;">BAR</div>
+                                <table style="width:100%; font-size:9.5px; border:1px solid #cbb8dd; border-top:none;">
+                                    <t t-if="o.x_bar_use">
+                                        <tr><td style="padding:2px 6px; width:55%;">Bars</td><td style="padding:2px 6px;"><t t-esc="o.x_num_bars or 0"/></td></tr>
+                                        <tr><td style="padding:2px 6px;">Bartenders</td><td style="padding:2px 6px;"><t t-esc="o.x_bartender_count or 0"/></td></tr>
+                                        <tr t-if="o.x_need_beer_tub"><td style="padding:2px 6px;">Beer tub</td><td style="padding:2px 6px;">Yes</td></tr>
+                                    </t>
+                                    <t t-else="">
+                                        <tr><td style="padding:2px 6px;" colspan="2"><em>No bar service.</em></td></tr>
+                                    </t>
+                                </table>
+                                <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd; margin-top:6px;">FOOD</div>
+                                <table style="width:100%; font-size:9.5px; border:1px solid #cbb8dd; border-top:none;">
+                                    <t t-if="o.x_food_request or o.x_food_by_us or o.x_caterer_id">
+                                        <tr t-if="o.x_food_by_us"><td style="padding:2px 6px; width:55%;">Food by lodge</td><td style="padding:2px 6px;">Yes</td></tr>
+                                        <tr t-if="o.x_caterer_id"><td style="padding:2px 6px;">Catered by</td><td style="padding:2px 6px;"><t t-esc="o.x_caterer_id.name"/></td></tr>
+                                        <tr t-if="o.x_catering_details"><td style="padding:2px 6px;" colspan="2"><em><t t-esc="o.x_catering_details"/></em></td></tr>
+                                    </t>
+                                    <t t-else="">
+                                        <tr><td style="padding:2px 6px;" colspan="2"><em>No food service.</em></td></tr>
+                                    </t>
+                                </table>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <!-- ===================== STAFF ROSTER (ASSIGNED) ===================== -->
+                    <t t-if="o.x_staff_assignment_ids">
+                        <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd;">STAFF ROSTER (ASSIGNED)</div>
+                        <table style="width:100%; border-collapse:collapse; font-size:9.5px; border:1px solid #cbb8dd; border-top:none; margin-bottom:8px;">
+                            <tr style="background:#f4f0f8;">
+                                <th style="padding:2px 6px; text-align:left;">Employee / Volunteer</th>
+                                <th style="padding:2px 6px; text-align:left;">Role</th>
+                                <th style="padding:2px 6px; text-align:left;">Note</th>
+                            </tr>
+                            <tr t-foreach="o.x_staff_assignment_ids" t-as="a">
+                                <td style="padding:2px 6px; border-top:1px solid #eee;"><t t-esc="a.employee_id.name"/></td>
+                                <td style="padding:2px 6px; border-top:1px solid #eee;"><span t-field="a.role"/></td>
+                                <td style="padding:2px 6px; border-top:1px solid #eee;"><t t-esc="a.note or ''"/></td>
+                            </tr>
+                        </table>
+                    </t>
+
+                    <!-- ===================== NOTES ===================== -->
+                    <t t-set="notes"
+                       t-value="[x for x in [o.description, o.x_event_description, o.x_decoration_notes, o.x_extras] if x]"/>
+                    <t t-if="notes">
+                        <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd;">EVENT NOTES</div>
+                        <div style="font-size:9.5px; border:1px solid #cbb8dd; border-top:none; padding:4px 6px; margin-bottom:8px;">
+                            <div t-if="o.description" style="margin-bottom:2px;"><t t-esc="o.description"/></div>
+                            <div t-if="o.x_event_description" style="margin-bottom:2px;"><strong>Host:</strong> <t t-esc="o.x_event_description"/></div>
+                            <div t-if="o.x_decoration_notes" style="margin-bottom:2px;"><strong>Decor:</strong> <t t-esc="o.x_decoration_notes"/></div>
+                            <div t-if="o.x_extras"><strong>Extras:</strong> <t t-esc="o.x_extras"/></div>
+                        </div>
+                    </t>
+
+                    <!-- ===================== CHECKLIST ===================== -->
+                    <t t-if="kids">
+                        <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px;">DAY-OF CHECKLIST</div>
+                        <table style="width:100%; border-collapse:collapse; font-size:10px; border:1px solid #ccc; border-top:none; margin-bottom:10px;">
+                            <tr t-foreach="kids" t-as="kid">
+                                <td style="padding:3px 6px; width:22px; border-bottom:1px solid #eee; text-align:center;">
+                                    <t t-set="done" t-value="'done' in (kid.state or '').lower()"/>
+                                    <span t-att-style="'display:inline-block; width:11px; height:11px; border:1.4px solid #333; text-align:center; line-height:10px; font-size:10px;' + (' background:#46166a; color:#fff;' if done else '')">
+                                        <t t-if="done">X</t>
+                                    </span>
+                                </td>
+                                <td style="padding:3px 6px; border-bottom:1px solid #eee;">
+                                    <span t-att-style="'text-decoration:line-through; color:#888;' if done else ''"><t t-esc="kid.name"/></span>
+                                </td>
+                            </tr>
+                        </table>
+                    </t>
+
+                    <!-- ===================== HANDWRITTEN DAY-OF NOTES ===================== -->
+                    <div style="font-weight:bold; font-size:10px; margin-top:6px;">Day-Of Notes / Issues</div>
+                    <div style="border:1px solid #ccc; height:90px; margin-top:2px;"></div>
+
+                </div>
+            </t>
+        </t>
+    </template>
+
+</odoo>

@@ -90,10 +90,35 @@
                         <field name="x_balance_due_days_before"/>
                         <field name="x_member_discount_pct"/>
                         <field name="x_event_tax_id"/>
+                        <field name="x_ubi_tax_pct"
+                               string="UBI / Property Tax % (non-member)"/>
+                    </group>
+                    <group string="Marketing / Exclusive Use Fees">
+                        <field name="x_marketing_signage_fee"/>
+                        <field name="x_exclusive_use_fee"/>
+                    </group>
+                    <group string="Labor Rates &amp; Service Fees (drive auto Event Costs)">
+                        <field name="x_labor_markup_pct"/>
+                        <field name="x_event_staff_rate"/>
+                        <field name="x_event_service_fee"/>
+                        <field name="x_bartender_rate"/>
+                        <field name="x_bar_service_fee"/>
+                        <field name="x_cook_rate"/>
+                        <field name="x_kitchen_support_rate"/>
+                        <field name="x_kitchen_service_fee"/>
+                        <field name="x_custodial_rate"/>
+                        <field name="x_custodial_service_fee"/>
+                    </group>
+                    <group string="Department Managers (Call-Outs)">
+                        <field name="x_bar_manager_id"/>
+                        <field name="x_kitchen_manager_id"/>
+                        <field name="x_custodial_manager_id"/>
                     </group>
                     <group string="Terms &amp; Checklist">
                         <field name="x_event_terms_url" widget="url"/>
                         <field name="x_event_terms_label"/>
+                        <field name="x_event_contract_terms"
+                               placeholder="Optional — overrides the default Terms &amp; Conditions wording printed on the Facility Usage Agreement."/>
                         <field name="x_event_checklist_template_id"/>
                         <field name="x_event_project_id"/>
                         <field name="x_event_calendar_user_id"/>
