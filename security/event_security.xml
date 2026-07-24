@@ -38,15 +38,16 @@
             <field name="implied_ids" eval="[(4, ref('group_event_coordinator'))]"/>
         </record>
 
-        <!-- Hide event quotes (sale.order linked to an event) from portal /
-             public (share) users. Global rule: AND-ed for everyone, but the
-             second clause is always-true for internal users (user.share is
-             False) and always-false for share users, so only internal staff
-             can read event quotes. -->
+        <!-- The event quote is now the CUSTOMER-facing document (a single
+             "Event Rental" line + tax), sent by email / viewed on the portal.
+             So it must NOT be hidden from portal users any more. This rule is
+             kept as a no-op (always true) rather than deleted so the id stays
+             stable; standard Odoo portal rules still limit a portal user to
+             their OWN orders. -->
         <record id="rule_sale_order_event_quotes_internal_only" model="ir.rule">
-            <field name="name">Event quotes: internal users only</field>
+            <field name="name">Event quotes: customer-visible</field>
             <field name="model_id" ref="sale.model_sale_order"/>
-            <field name="domain_force">['|', ('x_event_task_id', '=', False), (1, '=', 1) if not user.share else (0, '=', 1)]</field>
+            <field name="domain_force">[(1, '=', 1)]</field>
             <field name="perm_read">1</field>
             <field name="perm_write">1</field>
             <field name="perm_create">1</field>

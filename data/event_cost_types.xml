@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- =========================================================================
+     HUMAN: The starting "Type" options on the Event Costs tab. These are the
+     built-ins; add your own under Elks Events -> Configuration -> Cost Types.
+     AI: noupdate="1" so renames/reorders by the user survive upgrades. The
+     three labor types carry is_labor=True (coordinator-fee labor base). The
+     `code` is the stable key the migration maps old Selection values onto.
+     ========================================================================= -->
+<odoo>
+    <data noupdate="1">
+        <record id="cost_type_setup_labor" model="elks.event.cost.type">
+            <field name="name">Setup Hours</field>
+            <field name="code">setup_labor</field>
+            <field name="is_labor">True</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="cost_type_event_labor" model="elks.event.cost.type">
+            <field name="name">Event Hours</field>
+            <field name="code">event_labor</field>
+            <field name="is_labor">True</field>
+            <field name="sequence">20</field>
+        </record>
+        <record id="cost_type_cleanup_labor" model="elks.event.cost.type">
+            <field name="name">Cleanup Hours</field>
+            <field name="code">cleanup_labor</field>
+            <field name="is_labor">True</field>
+            <field name="sequence">30</field>
+        </record>
+        <record id="cost_type_event_workers" model="elks.event.cost.type">
+            <field name="name">Event Workers</field>
+            <field name="code">event_workers</field>
+            <field name="sequence">40</field>
+        </record>
+        <record id="cost_type_supplies" model="elks.event.cost.type">
+            <field name="name">Supplies</field>
+            <field name="code">supplies</field>
+            <field name="sequence">50</field>
+        </record>
+        <record id="cost_type_linens" model="elks.event.cost.type">
+            <field name="name">Linens</field>
+            <field name="code">linens</field>
+            <field name="sequence">60</field>
+        </record>
+        <record id="cost_type_bar_service" model="elks.event.cost.type">
+            <field name="name">Bar Services</field>
+            <field name="code">bar_service</field>
+            <field name="sequence">70</field>
+        </record>
+        <record id="cost_type_services" model="elks.event.cost.type">
+            <field name="name">Services</field>
+            <field name="code">services</field>
+            <field name="sequence">80</field>
+        </record>
+        <record id="cost_type_coordinator" model="elks.event.cost.type">
+            <field name="name">Event Coordinator Fee</field>
+            <field name="code">coordinator</field>
+            <field name="sequence">90</field>
+        </record>
+        <record id="cost_type_other" model="elks.event.cost.type">
+            <field name="name">Other</field>
+            <field name="code">other</field>
+            <field name="sequence">100</field>
+        </record>
+    </data>
+</odoo>

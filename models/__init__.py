@@ -3,6 +3,7 @@ from . import product_template
 from . import project_project
 from . import maintenance_location
 from . import event_room_booking
+from . import event_cost_type
 from . import event_cost_line
 from . import event_checklist_template
 from . import project_task

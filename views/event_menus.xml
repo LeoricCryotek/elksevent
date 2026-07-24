@@ -57,4 +57,10 @@
               action="action_event_checklist_templates"
               sequence="20"/>
 
+    <menuitem id="menu_event_cost_types"
+              name="Cost Types"
+              parent="menu_event_config"
+              action="action_event_cost_types"
+              sequence="30"/>
+
 </odoo>

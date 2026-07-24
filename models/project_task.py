@@ -323,8 +323,37 @@ class ProjectTask(models.Model):
         "Coordinator Fee %", default=20.0,
         help="Percentage of room income for event coordinator compensation.",
     )
+    # Coordinator fee is now an EDITABLE amount: it auto-seeds from the computed
+    # rate (x_coordinator_fee_auto) but staff can overwrite it per event. It is
+    # part of the customer's single Event Rental price.
     x_coordinator_fee = fields.Monetary(
-        "Coordinator Fee", currency_field='x_currency_id',
+        "Coordinator Fee", currency_field='x_currency_id', tracking=True,
+        help="Auto-fills from the rate; adjust as needed. Included in the "
+             "Event Rental price.",
+    )
+    x_coordinator_fee_auto = fields.Monetary(
+        "Suggested Coordinator Fee", currency_field='x_currency_id',
+        compute='_compute_coordinator_auto',
+        help="The fee the configured rate would produce (room income x %, or "
+             "the fixed rate).",
+    )
+    x_coordinator_fee_variance = fields.Monetary(
+        "Coordinator Fee Adj.", currency_field='x_currency_id',
+        compute='_compute_coordinator_auto',
+        help="Difference between the entered fee and the suggested amount.",
+    )
+    # Event-cost (customer charges) roll-up + tax/total mirrors of the quote.
+    x_eventcosts_total = fields.Monetary(
+        "Event Costs Total", currency_field='x_currency_id',
+        compute='_compute_financials', store=True,
+        help="Sum of the Event Costs lines (customer charges).",
+    )
+    x_event_tax_amount = fields.Monetary(
+        "Tax", currency_field='x_currency_id',
+        compute='_compute_financials', store=True,
+    )
+    x_event_grand_total = fields.Monetary(
+        "Grand Total (incl. tax)", currency_field='x_currency_id',
         compute='_compute_financials', store=True,
     )
 
@@ -495,7 +524,79 @@ class ProjectTask(models.Model):
                 vals['project_id'] = default_proj
         records = super().create(vals_list)
         records._sync_requested_rooms()
+        records._reconcile_event_datetime()
         return records
+
+    def write(self, vals):
+        res = super().write(vals)
+        if not self.env.context.get('_evt_dt_sync'):
+            if 'date_deadline' in vals:
+                # Header "Event Date" changed -> drive the tab date + start.
+                self._push_deadline_to_event_time()
+            elif vals.keys() & self._EVENT_TIME_KEYS:
+                # Tab/web date or start changed -> rebuild the header.
+                self._push_event_time_to_deadline()
+        return res
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Event Date <-> Start Time <-> header link
+    # HUMAN: The "Event Date" at the top of the form (the task deadline) and the
+    #        Event Date + Start Time on the Event Details tab are ONE thing.
+    #        Set either and the others follow — the top date+time fills the tab
+    #        date and start time, and picking a start time on the tab updates
+    #        the top field. End time is separate.
+    # AI: date_deadline (datetime in v19) is the single display of event date +
+    #     start. _push_deadline_to_event_time (header->tab) and
+    #     _push_event_time_to_deadline (tab/web->header) keep them equal; both
+    #     write with _evt_dt_sync in context so the paired write never loops.
+    #     _reconcile_event_datetime seeds whichever side is empty (create +
+    #     migration). x_event_end_* is independent.
+    # ──────────────────────────────────────────────────────────────────
+    _EVENT_TIME_KEYS = frozenset((
+        'x_event_date', 'x_event_start_time',
+        'x_event_start_sel', 'x_event_start_time_text'))
+
+    def _push_deadline_to_event_time(self):
+        for rec in self:
+            dl = rec.date_deadline
+            if not rec.x_is_event or not dl:
+                continue
+            upd = {}
+            d = dl.date() if hasattr(dl, 'date') else dl
+            if rec.x_event_date != d:
+                upd['x_event_date'] = d
+            if hasattr(dl, 'hour'):
+                upd['x_event_start_time'] = dl.hour + dl.minute / 60.0
+            if upd:
+                rec.with_context(_evt_dt_sync=True).write(upd)
+
+    def _push_event_time_to_deadline(self):
+        from datetime import datetime, time as _dtime
+        dl_is_dt = (self.env['project.task']._fields['date_deadline'].type
+                    == 'datetime')
+        for rec in self:
+            if not rec.x_is_event or not rec.x_event_date:
+                continue
+            if dl_is_dt:
+                st = rec.x_event_start_time or 0.0
+                h = min(int(st), 23)
+                mnt = min(int(round((st - int(st)) * 60)), 59)
+                new_dl = datetime.combine(rec.x_event_date, _dtime(h, mnt))
+            else:
+                new_dl = rec.x_event_date
+            if rec.date_deadline != new_dl:
+                rec.with_context(_evt_dt_sync=True).write(
+                    {'date_deadline': new_dl})
+
+    def _reconcile_event_datetime(self):
+        """Seed whichever side is set. Used on create + in migration."""
+        for rec in self:
+            if not rec.x_is_event:
+                continue
+            if rec.date_deadline:
+                rec._push_deadline_to_event_time()
+            elif rec.x_event_date:
+                rec._push_event_time_to_deadline()
 
     # ──────────────────────────────────────────────────────────────────
     # SECTION: Requested rooms <-> booking lines (full reconcile)
@@ -707,6 +808,25 @@ class ProjectTask(models.Model):
         if not self.x_customer_email:
             self.x_customer_email = p.email
 
+    @api.onchange('date_deadline')
+    def _onchange_deadline_sets_event_date(self):
+        """The header "Event Date" (date_deadline) drives the workflow.
+
+        The header field IS the task's date_deadline (relabeled "Event Date").
+        The rest of the module keys off x_event_date (+ start time), so mirror
+        the header into those here: setting the header fills the event date and
+        seeds the start time from the header's time. This is why submitting no
+        longer complains that the event date is unset when it's clearly in the
+        header. Only seeds a BLANK start time, so a start picked on the tab is
+        never overwritten.
+        """
+        dl = self.date_deadline
+        if not dl:
+            return
+        self.x_event_date = dl.date() if hasattr(dl, 'date') else dl
+        if hasattr(dl, 'hour'):
+            self.x_event_start_time = dl.hour + dl.minute / 60.0
+
     # ------------------------------------------------------------------
     # Computed: staff totals (legacy fields)
     # ------------------------------------------------------------------
@@ -736,66 +856,77 @@ class ProjectTask(models.Model):
     #     / coordinator config changes don't retro-recompute existing events.
     #     x_total_billed feeds the PO budget guard and the assessor net income.
     # ──────────────────────────────────────────────────────────────────
-    @api.depends(
-        'x_room_booking_ids.subtotal',
-        'x_cost_line_ids.total',
-        'x_coordinator_fee_pct',
-        'x_room_rental_rate',
-        'x_staff_total_cost',
-        'x_linen_charges', 'x_supply_charges', 'x_additional_charges',
-        'x_deposit_amount', 'x_deposit_received',
-        'x_purchase_order_ids.amount_total',
-        'x_purchase_order_ids.state',
-        'x_sale_order_id.amount_untaxed', 'x_is_member',
-    )
-    def _compute_financials(self):
-        Settings = self.env['elks.lodge.settings'].sudo()
-        settings = Settings.search([], limit=1)
+    @api.depends('x_room_income', 'x_coordinator_fee_pct', 'x_coordinator_fee')
+    def _compute_coordinator_auto(self):
+        """Suggested coordinator fee from the configured rate + the variance."""
+        settings = self._event_settings()
         for rec in self:
-            # Room income from room booking lines
-            room_income = sum(rec.x_room_booking_ids.mapped('subtotal'))
-            # Fall back to legacy field if no room bookings
-            if not room_income and rec.x_room_rental_rate:
-                room_income = rec.x_room_rental_rate
-            rec.x_room_income = room_income
-
-            # Coordinator fee
             if settings and settings.x_coordinator_fee_type == 'fixed':
-                rec.x_coordinator_fee = settings.x_coordinator_fixed_rate or 0.0
+                auto = settings.x_coordinator_fixed_rate or 0.0
             else:
                 pct = rec.x_coordinator_fee_pct or 0.0
                 if settings and settings.x_coordinator_percentage:
                     pct = settings.x_coordinator_percentage
-                rec.x_coordinator_fee = room_income * (pct / 100.0)
+                auto = (rec.x_room_income or 0.0) * (pct / 100.0)
+            rec.x_coordinator_fee_auto = auto
+            rec.x_coordinator_fee_variance = (rec.x_coordinator_fee or 0.0) - auto
 
-            # Customer-facing total — prefer the itemized quote (net of the
-            # member discount) when a quote exists; otherwise fall back to the
-            # legacy room-income + coordinator figure.
+    @api.depends(
+        'x_room_booking_ids.subtotal',
+        'x_cost_line_ids.total',
+        'x_coordinator_fee',
+        'x_room_rental_rate',
+        'x_est_labor_cost',
+        'x_deposit_amount', 'x_deposit_received',
+        'x_purchase_order_ids.amount_total',
+        'x_purchase_order_ids.state',
+        'x_sale_order_id.amount_untaxed',
+        'x_sale_order_id.amount_tax',
+        'x_sale_order_id.amount_total', 'x_is_member',
+    )
+    def _compute_financials(self):
+        for rec in self:
+            # Room income from room booking lines
+            room_income = sum(rec.x_room_booking_ids.mapped('subtotal'))
+            if not room_income and rec.x_room_rental_rate:
+                room_income = rec.x_room_rental_rate
+            rec.x_room_income = room_income
+
+            # Event Costs are now customer CHARGES (roll into the price).
+            rec.x_eventcosts_total = sum(rec.x_cost_line_ids.mapped('total'))
+
+            # Customer-facing pre-tax total — the single Event Rental line
+            # (rooms + event costs + coordinator, net of member/COL discount)
+            # comes straight from the quote's untaxed amount when built.
             if rec.x_sale_order_id:
-                # The quote's amount_untaxed is ALREADY net of member discount
-                # and any COL waiver (applied as line discounts in
-                # _sync_quote_lines), so do not discount again here.
                 customer_total = rec.x_sale_order_id.amount_untaxed or 0.0
+                rec.x_event_tax_amount = rec.x_sale_order_id.amount_tax or 0.0
+                rec.x_event_grand_total = rec.x_sale_order_id.amount_total or 0.0
             else:
-                customer_total = room_income + rec.x_coordinator_fee
+                customer_total = (
+                    room_income + rec.x_eventcosts_total
+                    + (rec.x_coordinator_fee or 0.0))
+                rec.x_event_tax_amount = 0.0
+                rec.x_event_grand_total = customer_total
             rec.x_total_billed = customer_total
             rec.x_subtotal = customer_total
             rec.x_event_total = customer_total
 
-            # Total costs from cost lines
-            rec.x_total_costs = sum(rec.x_cost_line_ids.mapped('total'))
-
-            # Balance due
-            deposit = rec.x_deposit_amount if rec.x_deposit_received else 0.0
-            rec.x_balance_due = rec.x_total_billed - deposit
-
-            # Budget remaining (billed minus costs AND linked POs)
+            # Real costs to the lodge = actual vendor POs + estimated labor.
+            # (Event-cost LINES are revenue now, so they are NOT costs here.)
             po_total = sum(
                 rec.x_purchase_order_ids.filtered(
                     lambda p: p.state != 'cancel'
                 ).mapped('amount_total')
             )
-            rec.x_budget_remaining = rec.x_total_billed - rec.x_total_costs - po_total
+            rec.x_total_costs = po_total + (rec.x_est_labor_cost or 0.0)
+
+            # Balance due
+            deposit = rec.x_deposit_amount if rec.x_deposit_received else 0.0
+            rec.x_balance_due = rec.x_total_billed - deposit
+
+            # Budget remaining (billed minus real costs)
+            rec.x_budget_remaining = rec.x_total_billed - rec.x_total_costs
 
     # ------------------------------------------------------------------
     # Computed: invoice count
@@ -910,9 +1041,18 @@ class ProjectTask(models.Model):
         for rec in self:
             if rec.x_approval_state != 'draft':
                 raise UserError(_("Only draft events can be submitted."))
+            # The header "Event Date" is date_deadline; mirror it into
+            # x_event_date if the onchange didn't run (programmatic path, stale
+            # form) so a booking with a header date submits cleanly.
+            if not rec.x_event_date and rec.date_deadline:
+                dl = rec.date_deadline
+                rec.x_event_date = dl.date() if hasattr(dl, 'date') else dl
+                if hasattr(dl, 'hour') and not rec.x_event_start_time:
+                    rec.x_event_start_time = dl.hour + dl.minute / 60.0
             if not rec.x_event_date:
                 raise UserError(_(
-                    "Please set the event date before submitting for approval."
+                    "Please set the event date (top-right) before submitting "
+                    "for approval."
                 ))
             vals = {
                 'x_approval_state': 'board',
@@ -1261,10 +1401,16 @@ class ProjectTask(models.Model):
         return self.action_open_quote()
 
     def _sync_quote_lines(self):
-        """Rebuild the auto-generated quote lines; preserve manual lines.
+        """Rebuild the customer quote as ONE 'Event Rental' line (+ tax).
 
-        Auto lines are tagged with ``x_event_source`` so a rebuild only
-        replaces them, leaving any hand-added lines untouched.
+        The customer only ever sees a single 'Event Rental' line and a tax
+        line. That price is built from the event's own tabs — Rooms + Event
+        Costs + the Coordinator fee — net of the member / Celebration-of-Life
+        discount. Items flagged non-taxable (on Event Costs) go on a second,
+        untaxed 'Event Rental' line so tax lands on taxable items only; a note
+        line spells that out. Auto lines carry x_event_source so a rebuild only
+        touches them (manual lines are preserved). The full breakdown lives on
+        the event's Financials tab, not on the order.
         """
         self.ensure_one()
         so = self.x_sale_order_id
@@ -1274,133 +1420,110 @@ class ProjectTask(models.Model):
         so.order_line.filtered('x_event_source').unlink()
         SOL = self.env['sale.order.line']
 
-        # Rooms (one line per booking, mapped product, overridden price)
-        for rb in self.x_room_booking_ids:
-            prod = rb.room_id.x_product_id
-            if not prod:
-                continue
+        rental_product = settings.x_facility_product_id if settings else False
+        if not rental_product:
+            raise UserError(_(
+                "Set the 'Facility (Invoice) Product' in Lodge Settings — it's "
+                "used as the single 'Event Rental' line on the quote."))
+
+        # Seed the coordinator fee from the computed rate the first time.
+        if not self.x_coordinator_fee and self.x_coordinator_fee_auto:
+            self.x_coordinator_fee = self.x_coordinator_fee_auto
+
+        # Member / Celebration-of-Life rate. COL = memorial with a valid member
+        # number: the family is billed at the member rate and the ROOM is waived.
+        is_col = (
+            self.x_event_type == 'memorial'
+            and self.x_member_number
+            and self.x_member_number != '000000000'
+        )
+        apply_member = self.x_is_member or is_col
+        disc = 0.0
+        if apply_member and settings and settings.x_member_discount_pct:
+            disc = settings.x_member_discount_pct / 100.0
+
+        rooms = sum(self.x_room_booking_ids.mapped('subtotal'))
+        rooms_net = 0.0 if is_col else rooms * (1.0 - disc)
+
+        # Event Costs = customer charges. Apply the member rate; split by tax.
+        ec_taxable = 0.0
+        ec_nontax = 0.0
+        for c in self.x_cost_line_ids:
+            amt = (c.total or 0.0) * (1.0 - disc)
+            if c.x_taxable:
+                ec_taxable += amt
+            else:
+                ec_nontax += amt
+
+        coord = (self.x_coordinator_fee or 0.0) * (1.0 - disc)
+
+        taxable_total = rooms_net + ec_taxable + coord
+        nontax_total = ec_nontax
+        tax_ids = (settings.x_event_tax_id.ids
+                   if settings and settings.x_event_tax_id else [])
+
+        # Taxable Event Rental line (always present, even if $0 with no extras).
+        SOL.create({
+            'order_id': so.id,
+            'product_id': rental_product.id,
+            'name': _("Event Rental"),
+            'product_uom_qty': 1,
+            'price_unit': taxable_total,
+            'tax_id': [(6, 0, tax_ids)],
+            'x_event_source': 'event_rental',
+        })
+        # Non-taxable portion, only when there is one.
+        if nontax_total:
             SOL.create({
                 'order_id': so.id,
-                'product_id': prod.id,
-                'name': _("Room: %s", rb.room_id.name),
+                'product_id': rental_product.id,
+                'name': _("Event Rental — non-taxable items"),
                 'product_uom_qty': 1,
-                'price_unit': rb.subtotal,
-                'x_event_source': 'room:%s' % rb.id,
+                'price_unit': nontax_total,
+                'tax_id': [(6, 0, [])],
+                'x_event_source': 'event_rental_nt',
             })
+        # Disclaimer note under the totals.
+        SOL.create({
+            'order_id': so.id,
+            'display_type': 'line_note',
+            'name': _("Taxes applied to taxable items only."),
+            'x_event_source': 'tax_note',
+        })
 
+        # Seed estimated labor hours (internal P&L cost, not a customer line).
         if settings:
-            # Bartenders — guest-driven
-            if (settings.x_bartender_product_id
-                    and settings.x_guests_per_bartender
-                    and self.x_guest_count):
-                bartenders = math.ceil(
-                    self.x_guest_count / settings.x_guests_per_bartender)
-                if bartenders > 0:
-                    SOL.create({
-                        'order_id': so.id,
-                        'product_id': settings.x_bartender_product_id.id,
-                        'product_uom_qty': bartenders,
-                        'x_event_source': 'bartender',
-                    })
-            # Catering — per plate, guest-driven (all food is lodge-catered)
-            if ((self.x_food_request or self.x_food_by_us)
-                    and settings.x_catering_product_id and self.x_guest_count):
-                SOL.create({
-                    'order_id': so.id,
-                    'product_id': settings.x_catering_product_id.id,
-                    'product_uom_qty': self.x_guest_count,
-                    'price_unit': settings.x_per_plate_charge or 0.0,
-                    'x_event_source': 'catering',
-                })
-            # Default products added to every event quote
-            for prod in settings.x_default_quote_product_ids:
-                SOL.create({
-                    'order_id': so.id,
-                    'product_id': prod.id,
-                    'product_uom_qty': 1,
-                    'x_event_source': 'default:%s' % prod.id,
-                })
-
-            # Seed estimated labor hours from settings. Labor is NOT a customer
-            # charge line (the customer sees the event rental price); it's a
-            # back-end estimate that feeds the event's P&L cost side.
             if not self.x_est_event_hours and settings.x_default_event_hours:
                 self.x_est_event_hours = settings.x_default_event_hours
             if not self.x_est_cleaning_hours and settings.x_default_cleaning_hours:
                 self.x_est_cleaning_hours = settings.x_default_cleaning_hours
 
-            # Member discount — shown as a discount % on every auto line so the
-            # quote reflects the same net the customer's invoice will charge.
-            # Celebration of Life (memorial) with a member number entered also
-            # gets the member rate (covers the member's family).
-            is_col = (
-                self.x_event_type == 'memorial'
-                and self.x_member_number
-                and self.x_member_number != '000000000'
-            )
-            apply_member_rate = self.x_is_member or is_col
-            if apply_member_rate and settings.x_member_discount_pct:
-                so.order_line.filtered('x_event_source').write({
-                    'discount': settings.x_member_discount_pct,
-                })
-            # COL: facility/room is no charge for a departed member (food, bar
-            # and other services are still billed at the member rate above).
-            if is_col:
-                so.order_line.filtered(
-                    lambda l: (l.x_event_source or '').startswith('room')
-                ).write({'discount': 100.0})
-
-            # Lodge-provided insurance (when the renter can't supply their own).
-            # Added AFTER the discount write so it bills at full price.
-            if self.x_insurance_by == 'lodge' and settings.x_insurance_product_id:
-                SOL.create({
-                    'order_id': so.id,
-                    'product_id': settings.x_insurance_product_id.id,
-                    'product_uom_qty': 1,
-                    'x_event_source': 'insurance',
-                })
-
     def action_add_coordinator_fee(self):
-        """Add/refresh the coordinator fee line and check labor is included."""
+        """Reset the coordinator fee to the suggested (auto) amount + rebuild.
+
+        The coordinator fee is now a field on the event (x_coordinator_fee)
+        that folds into the single Event Rental price. This button re-seeds it
+        from the configured rate; adjust the field by hand any time.
+        """
         self.ensure_one()
-        so = self.x_sale_order_id
-        if not so:
-            raise UserError(_(
-                "Build the quote first, then add the coordinator fee."))
-        settings = self._event_settings()
-        if not settings or not settings.x_coordinator_product_id:
-            raise UserError(_(
-                "Set a Coordinator Fee Product in Lodge Settings first."))
-        room_total = sum(self.x_room_booking_ids.mapped('subtotal'))
-        if settings.x_coordinator_fee_type == 'fixed':
-            fee = settings.x_coordinator_fixed_rate or 0.0
-        else:
-            fee = room_total * ((settings.x_coordinator_percentage or 0.0) / 100.0)
-        so.order_line.filtered(
-            lambda l: l.x_event_source == 'coordinator').unlink()
-        self.env['sale.order.line'].create({
-            'order_id': so.id,
-            'product_id': settings.x_coordinator_product_id.id,
-            'name': _("Event Coordinator Fee"),
-            'product_uom_qty': 1,
-            'price_unit': fee,
-            'x_event_source': 'coordinator',
-        })
+        self.x_coordinator_fee = self.x_coordinator_fee_auto
+        if self.x_sale_order_id:
+            self._sync_quote_lines()
         # Nudge if labor isn't captured when the lodge does setup/takedown
         if self.x_setup_by == 'us' or self.x_takedown_by == 'us':
             labor = self.x_cost_line_ids.filtered(
-                lambda c: c.cost_type in (
-                    'setup_labor', 'event_labor', 'cleanup_labor'))
+                lambda c: c.cost_type_id.is_labor)
             if not labor:
                 self.message_post(
                     body=_(
                         "<b>Reminder:</b> the lodge is doing setup/takedown "
                         "but no event-staff labor lines are entered. Add them "
-                        "so labor is included in costs."),
+                        "so labor is captured in costs."),
                     subtype_xmlid='mail.mt_note',
                 )
         self.message_post(
-            body=_("Coordinator fee set: $%(fee).2f", fee=fee),
+            body=_("Coordinator fee set to the suggested $%(fee).2f",
+                   fee=self.x_coordinator_fee),
             subtype_xmlid='mail.mt_note',
         )
         return True

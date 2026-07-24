@@ -12,8 +12,9 @@ AI
 --
 - Model `elks.event.cost.line`; m2o `event_id` -> project.task; `total`
   is computed from quantity x unit_cost.
-- `cost_type` in COST_TYPE_CHOICES; labor types ('setup_labor',
-  'event_labor','cleanup_labor') are what action_add_coordinator_fee checks.
+- `cost_type_id` -> elks.event.cost.type (configurable). Types flagged
+  is_labor are what the coordinator-fee labor base checks (via the related
+  `is_labor`), replacing the old hard-coded labor tuple.
 - Summed by project.task._compute_financials into x_total_costs.
 """
 from odoo import api, fields, models
@@ -26,20 +27,6 @@ from odoo import api, fields, models
 # ──────────────────────────────────────────────────────────────────────
 
 
-COST_TYPE_CHOICES = [
-    ('setup_labor', 'Setup Hours'),
-    ('event_labor', 'Event Hours'),
-    ('cleanup_labor', 'Cleanup Hours'),
-    ('event_workers', 'Event Workers'),
-    ('supplies', 'Supplies'),
-    ('linens', 'Linens'),
-    ('bar_service', 'Bar Services'),
-    ('services', 'Services'),
-    ('coordinator', 'Event Coordinator Fee'),
-    ('other', 'Other'),
-]
-
-
 class EventCostLine(models.Model):
     _name = "elks.event.cost.line"
     _description = "Event Cost Line"
@@ -49,9 +36,14 @@ class EventCostLine(models.Model):
         'project.task', string="Event", required=True, ondelete='cascade',
     )
     sequence = fields.Integer(default=10)
-    cost_type = fields.Selection(
-        COST_TYPE_CHOICES, string="Type", required=True, default='other',
+    cost_type_id = fields.Many2one(
+        'elks.event.cost.type', string="Type", required=True,
+        default=lambda self: self.env['elks.event.cost.type'].search(
+            [('code', '=', 'other')], limit=1),
+        help="Category of cost. Manage the list under Elks Events -> "
+             "Configuration -> Cost Types.",
     )
+    is_labor = fields.Boolean(related='cost_type_id.is_labor', store=False)
     name = fields.Char("Description")
     quantity = fields.Float("Quantity", default=1.0)
     unit_cost = fields.Monetary(
@@ -70,6 +62,12 @@ class EventCostLine(models.Model):
         default=False,
         help="When checked, this line's total is included in the base "
              "amount used to calculate the Event Coordinator's fee.",
+    )
+    x_taxable = fields.Boolean(
+        "Taxable", default=True,
+        help="If checked, this charge is part of the taxable subtotal on the "
+             "customer's single 'Event Rental' line. Untick items that are "
+             "not taxed (e.g. insurance).",
     )
     purchase_order_id = fields.Many2one(
         'purchase.order', string="Linked PO",

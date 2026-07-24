@@ -139,7 +139,8 @@
                                    invisible="not x_is_elks_event"
                                    required="x_is_elks_event"/>
                             <field name="x_event_type"/>
-                            <field name="x_event_date"/>
+                            <field name="x_event_date" readonly="1"
+                                   help="Set from the Event Date field at the top of the form."/>
                             <field name="x_event_start_sel"/>
                             <field name="x_event_end_sel"/>
                             <field name="x_event_duration" widget="float_time"
@@ -164,10 +165,12 @@
                     <group>
                         <group string="Event Description">
                             <field name="x_event_description" nolabel="1"
+                                   colspan="2"
                                    placeholder="Customer's description of their event..."/>
                         </group>
                         <group string="Special Requests">
                             <field name="x_special_requests" nolabel="1"
+                                   colspan="2"
                                    placeholder="Any special requests or accommodations..."/>
                         </group>
                     </group>
@@ -261,17 +264,26 @@
                     </group>
                 </page>
 
-                <!-- ===== Event Costs (PO Section) ===== -->
+                <!-- ===== Event Costs (customer charges) ===== -->
                 <page string="Event Costs" name="event_costs"
                       invisible="not x_is_event">
+                    <p class="text-muted">
+                        Customer charges that roll into the single "Event Rental"
+                        price (bar, food, A/V, linens, security, etc.). Untick
+                        "Taxable" for items that aren't taxed. These are billed
+                        to the customer — the lodge's own costs are tracked via
+                        the Labor section and linked Purchase Orders.
+                    </p>
                     <field name="x_cost_line_ids">
                         <list editable="bottom">
                             <field name="sequence" widget="handle"/>
-                            <field name="cost_type"/>
+                            <field name="cost_type_id"
+                                   options="{'no_quick_create': True}"/>
                             <field name="name"/>
                             <field name="quantity"/>
-                            <field name="unit_cost"/>
-                            <field name="total" sum="Total Costs"/>
+                            <field name="unit_cost" string="Amount"/>
+                            <field name="total" sum="Event Costs Total"/>
+                            <field name="x_taxable"/>
                             <field name="counts_for_coordinator"/>
                             <field name="purchase_order_id" optional="hide"/>
                             <field name="currency_id" column_invisible="1"/>
@@ -335,11 +347,27 @@
                       invisible="not x_is_event">
                     <field name="x_currency_id" invisible="1"/>
                     <group>
-                        <group string="Billing Summary">
-                            <field name="x_room_income" readonly="1"/>
-                            <field name="x_coordinator_fee" readonly="1"
-                                   help="Calculated from Lodge Settings (fixed rate or % of room income)."/>
+                        <group string="Billing Summary (what the customer pays)">
+                            <field name="x_room_income" readonly="1"
+                                   string="Rooms Subtotal"/>
+                            <field name="x_eventcosts_total" readonly="1"
+                                   string="Event Costs Subtotal"/>
+                            <label for="x_coordinator_fee"/>
+                            <div class="o_row">
+                                <field name="x_coordinator_fee"/>
+                                <span class="text-muted"
+                                      invisible="not x_coordinator_fee_variance">
+                                    (suggested <field name="x_coordinator_fee_auto" readonly="1" nolabel="1"/>,
+                                    adj <field name="x_coordinator_fee_variance" readonly="1" nolabel="1"
+                                               decoration-warning="x_coordinator_fee_variance != 0"/>)
+                                </span>
+                            </div>
                             <field name="x_total_billed" readonly="1"
+                                   string="Event Rental (pre-tax)"/>
+                            <field name="x_event_tax_amount" readonly="1"
+                                   string="Tax (taxable items only)"/>
+                            <field name="x_event_grand_total" readonly="1"
+                                   string="Grand Total"
                                    class="oe_subtotal_footer_separator"/>
                         </group>
                         <group string="Deposit">
@@ -391,7 +419,7 @@
                                 help="Set the estimated hours to the hours actually worked (updates the P&amp;L)."/>
                     </group>
                     <group string="Contract / Agreement Notes">
-                        <field name="x_contract_notes" nolabel="1"
+                        <field name="x_contract_notes" nolabel="1" colspan="2"
                                placeholder="Terms, conditions, and agreement details for the invoice..."/>
                     </group>
                 </page>
