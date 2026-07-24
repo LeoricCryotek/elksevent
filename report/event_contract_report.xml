@@ -25,6 +25,8 @@
                 <t t-set="dep_pct"
                    t-value="(settings.x_deposit_pct if settings else 50.0) or 0.0"/>
                 <t t-set="deposit" t-value="grand * dep_pct / 100.0"/>
+                <t t-set="dep_received" t-value="o.x_deposit_received"/>
+                <t t-set="dep_paid" t-value="(o.x_deposit_amount or deposit) if dep_received else 0.0"/>
                 <!-- Terms &amp; Conditions live on the editable T&amp;C page; the
                      agreement links to it (settings URL or the /event-terms page)
                      so the printed terms are never a hardcoded duplicate. -->
@@ -64,6 +66,11 @@
                         </tr>
                     </table>
                     <hr style="border-top:2px solid #46166a; margin:4px 0 12px 0;"/>
+
+                    <!-- Retainer PAID stamp -->
+                    <div t-if="dep_received" style="border:2px solid #0a7a24; color:#0a7a24; font-weight:bold; text-align:center; padding:6px; margin-bottom:12px; font-size:14px;">
+                        RETAINER / RESERVATION FEE PAID - $<t t-esc="'{:,.2f}'.format(dep_paid)"/><t t-if="o.x_deposit_date"> on <span t-field="o.x_deposit_date" t-options='{"widget":"date"}'/></t>
+                    </div>
 
                     <!-- Event particulars -->
                     <table style="width:100%; font-size:12px; margin-bottom:12px;">
@@ -125,11 +132,20 @@
                             </tr>
                             <tr>
                                 <td style="padding:6px; text-align:right;">Reservation Fee due at signing (<t t-esc="'{:g}'.format(dep_pct)"/>%):</td>
-                                <td style="padding:6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(deposit)"/></td>
+                                <td style="padding:6px; text-align:right;">
+                                    $<t t-esc="'{:,.2f}'.format(deposit)"/>
+                                    <t t-if="dep_received">
+                                        <span style="color:#0a7a24; font-weight:bold; margin-left:6px;">- PAID<t t-if="o.x_deposit_date"> <span t-field="o.x_deposit_date" t-options='{"widget":"date"}'/></t></span>
+                                    </t>
+                                </td>
                             </tr>
-                            <tr>
+                            <tr t-if="dep_received">
+                                <td style="padding:6px; text-align:right;">Retainer received:</td>
+                                <td style="padding:6px; text-align:right; color:#0a7a24; font-weight:bold;">-$<t t-esc="'{:,.2f}'.format(dep_paid)"/></td>
+                            </tr>
+                            <tr style="font-weight:bold;">
                                 <td style="padding:6px; text-align:right;">Balance due before event:</td>
-                                <td style="padding:6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(grand - deposit)"/></td>
+                                <td style="padding:6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(grand - (dep_paid if dep_received else deposit))"/></td>
                             </tr>
                         </tbody>
                     </table>
