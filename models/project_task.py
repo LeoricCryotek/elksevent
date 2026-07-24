@@ -909,11 +909,17 @@ class ProjectTask(models.Model):
         'x_deposit_amount', 'x_deposit_received',
         'x_purchase_order_ids.amount_total',
         'x_purchase_order_ids.state',
-        'x_sale_order_id.amount_untaxed',
-        'x_sale_order_id.amount_tax',
-        'x_sale_order_id.amount_total', 'x_is_member',
+        'x_is_member', 'x_event_type', 'x_member_number',
     )
     def _compute_financials(self):
+        settings = self._event_settings()
+        # Event tax rate (simple percentage sale tax) from settings.
+        rate = 0.0
+        tax = settings.x_event_tax_id if settings else False
+        if tax and getattr(tax, 'amount_type', 'percent') == 'percent':
+            rate = (tax.amount or 0.0) / 100.0
+        disc_pct = (settings.x_member_discount_pct
+                    if settings and settings.x_member_discount_pct else 0.0)
         for rec in self:
             # Room income from room booking lines
             room_income = sum(rec.x_room_booking_ids.mapped('subtotal'))
@@ -923,30 +929,33 @@ class ProjectTask(models.Model):
 
             # Event Costs are now customer CHARGES (roll into the price).
             rec.x_eventcosts_total = sum(rec.x_cost_line_ids.mapped('total'))
-
-            # Taxable base = GOODS: rooms + Event-Cost items flagged Taxable.
-            # Everything else (services: coordinator fee + non-taxable items)
-            # is exempt. Shown on the Financials tab so staff can see exactly
-            # what's being taxed.
             ec_taxable = sum(
                 c.total for c in rec.x_cost_line_ids if c.x_taxable)
             ec_nontax = rec.x_eventcosts_total - ec_taxable
-            rec.x_taxable_subtotal = room_income + ec_taxable
-            rec.x_nontaxable_subtotal = ec_nontax + (rec.x_coordinator_fee or 0.0)
 
-            # Customer-facing pre-tax total — the single Event Rental line
-            # (rooms + event costs + coordinator, net of member/COL discount)
-            # comes straight from the quote's untaxed amount when built.
-            if rec.x_sale_order_id:
-                customer_total = rec.x_sale_order_id.amount_untaxed or 0.0
-                rec.x_event_tax_amount = rec.x_sale_order_id.amount_tax or 0.0
-                rec.x_event_grand_total = rec.x_sale_order_id.amount_total or 0.0
-            else:
-                customer_total = (
-                    room_income + rec.x_eventcosts_total
-                    + (rec.x_coordinator_fee or 0.0))
-                rec.x_event_tax_amount = 0.0
-                rec.x_event_grand_total = customer_total
+            # Member / Celebration-of-Life rate: COL waives the room; both bill
+            # the rest at the member rate. Mirrors _sync_quote_lines so the
+            # Financials tab matches the quote the customer will get.
+            is_col = (
+                rec.x_event_type == 'memorial'
+                and rec.x_member_number
+                and rec.x_member_number != '000000000')
+            apply_member = rec.x_is_member or is_col
+            disc = (disc_pct / 100.0) if apply_member else 0.0
+            rooms_net = 0.0 if is_col else room_income * (1.0 - disc)
+            factor = 1.0 - disc
+
+            # Taxable base = GOODS (rooms + items flagged Taxable), NET of any
+            # member discount. Services (coordinator + non-taxable items) are
+            # exempt. Computed LIVE here so tax updates the instant a Taxable
+            # box changes — it no longer waits for the quote to be rebuilt.
+            rec.x_taxable_subtotal = rooms_net + ec_taxable * factor
+            rec.x_nontaxable_subtotal = (
+                ec_nontax * factor + (rec.x_coordinator_fee or 0.0) * factor)
+            rec.x_event_tax_amount = rec.x_taxable_subtotal * rate
+
+            customer_total = rec.x_taxable_subtotal + rec.x_nontaxable_subtotal
+            rec.x_event_grand_total = customer_total + rec.x_event_tax_amount
             rec.x_total_billed = customer_total
             rec.x_subtotal = customer_total
             rec.x_event_total = customer_total
@@ -1465,9 +1474,10 @@ class ProjectTask(models.Model):
                 "Set the 'Facility (Invoice) Product' in Lodge Settings — it's "
                 "used as the single 'Event Rental' line on the quote."))
 
-        # Seed the coordinator fee from the computed rate the first time.
-        if not self.x_coordinator_fee and self.x_coordinator_fee_auto:
-            self.x_coordinator_fee = self.x_coordinator_fee_auto
+        # NOTE: the coordinator fee is NOT auto-seeded here. Building a quote
+        # must never change it — some events are unsponsored ($0 fee). The fee
+        # only changes when staff press the "Coordinator Fee" button
+        # (action_add_coordinator_fee), which sets it to the suggested amount.
 
         # Member / Celebration-of-Life rate. COL = memorial with a valid member
         # number: the family is billed at the member rate and the ROOM is waived.
