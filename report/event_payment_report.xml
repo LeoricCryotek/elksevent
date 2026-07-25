@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- =========================================================================
+     HUMAN: Per-event Payment Distribution. Itemizes every charge (rooms, event
+     costs, coordinator, tax) the way it is billed, then groups the total by
+     income (GL) account so the office can (a) enter the line items into Clover
+     and (b) apply the received payment to the correct accounts in the books.
+     Prints from the event's Print menu.
+     AI: qweb-pdf on project.task using project.task._event_payment_distribution.
+     Net of discount; charges sum to x_total_billed, + tax = grand total.
+     Accounts from FRS product income accounts; unmapped -> 'Unassigned'.
+     ========================================================================= -->
+<odoo>
+    <record id="action_report_event_payment" model="ir.actions.report">
+        <field name="name">Event Payment Distribution</field>
+        <field name="model">project.task</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_event_payment</field>
+        <field name="report_file">elksevent.report_event_payment</field>
+        <field name="binding_model_id" ref="project.model_project_task"/>
+        <field name="binding_type">report</field>
+        <field name="paperformat_id" ref="paperformat_event_sheet"/>
+        <field name="print_report_name">'Payment - %s' % (object.name or 'Event')</field>
+    </record>
+
+    <template id="report_event_payment">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="settings"
+                   t-value="o.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
+                <t t-set="d" t-value="o._event_payment_distribution()"/>
+                <div class="page" style="font-size:10.5px; color:#222;">
+
+                    <!-- Header -->
+                    <table style="width:100%; border:none; margin-bottom:4px;">
+                        <tr>
+                            <td style="border:none; padding:0;">
+                                <div style="font-size:15px; font-weight:bold;">
+                                    <t t-if="settings"><t t-esc="settings.name"/></t><t t-else="">Elks Lodge</t>
+                                    <t t-if="settings and settings.lodge_number">#<t t-esc="settings.lodge_number"/></t>
+                                </div>
+                                <div style="font-size:13px; font-weight:bold; color:#46166a;">Event Payment Distribution</div>
+                            </td>
+                            <td style="border:none; padding:0; text-align:right; font-size:9px; color:#666;">
+                                Printed <span t-esc="time.strftime('%m/%d/%Y')"/>
+                            </td>
+                        </tr>
+                    </table>
+                    <hr style="border-top:2px solid #46166a; margin:2px 0 8px 0;"/>
+
+                    <table style="width:100%; font-size:10px; margin-bottom:8px;">
+                        <tr>
+                            <td style="padding:2px 4px;"><strong>Event:</strong> <t t-esc="o.name or ''"/></td>
+                            <td style="padding:2px 4px;"><strong>Date:</strong>
+                                <t t-if="o.x_event_date"><span t-field="o.x_event_date"/></t>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:2px 4px;"><strong>Host:</strong> <t t-esc="o.x_customer_name or ''"/></td>
+                            <td style="padding:2px 4px;"><strong>Type:</strong> <span t-field="o.x_event_type"/> (<t t-if="o.x_is_member">Member</t><t t-else="">Non-Member</t>)</td>
+                        </tr>
+                    </table>
+
+                    <!-- Itemized charges -->
+                    <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px;">CHARGES (enter as Clover line items)</div>
+                    <table style="width:100%; border-collapse:collapse; font-size:10px; border:1px solid #cbb8dd; border-top:none;">
+                        <tr style="background:#f4f0f8;">
+                            <th style="padding:3px 6px; text-align:left; width:55%;">Item</th>
+                            <th style="padding:3px 6px; text-align:left; width:30%;">Income Account (GL)</th>
+                            <th style="padding:3px 6px; text-align:right; width:15%;">Amount</th>
+                        </tr>
+                        <tr t-foreach="d['charges']" t-as="c">
+                            <td style="padding:3px 6px; border-top:1px solid #eee;"><t t-esc="c['name']"/></td>
+                            <td style="padding:3px 6px; border-top:1px solid #eee; color:#555;"><t t-esc="c['account']"/></td>
+                            <td style="padding:3px 6px; text-align:right; border-top:1px solid #eee;">$<t t-esc="'{:,.2f}'.format(c['amount'])"/></td>
+                        </tr>
+                        <tr style="background:#efe9f5;">
+                            <td colspan="2" style="padding:3px 6px; text-align:right; font-weight:bold;">Subtotal (pre-tax):</td>
+                            <td style="padding:3px 6px; text-align:right; font-weight:bold;">$<t t-esc="'{:,.2f}'.format(d['subtotal'])"/></td>
+                        </tr>
+                        <tr t-if="d['tax']">
+                            <td colspan="2" style="padding:3px 6px; text-align:right;">Tax (<t t-esc="d['tax_acct']"/>):</td>
+                            <td style="padding:3px 6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(d['tax'])"/></td>
+                        </tr>
+                        <tr style="background:#e8e0f0; font-weight:bold;">
+                            <td colspan="2" style="padding:3px 6px; text-align:right;">GRAND TOTAL:</td>
+                            <td style="padding:3px 6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(d['grand'])"/></td>
+                        </tr>
+                    </table>
+
+                    <!-- GL application summary -->
+                    <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin-top:10px;">APPLY THE PAYMENT TO THESE ACCOUNTS</div>
+                    <table style="width:100%; border-collapse:collapse; font-size:10px; border:1px solid #cbb8dd; border-top:none;">
+                        <tr style="background:#f4f0f8;">
+                            <th style="padding:3px 6px; text-align:left;">Income Account (GL)</th>
+                            <th style="padding:3px 6px; text-align:right; width:20%;">Amount</th>
+                        </tr>
+                        <tr t-foreach="d['gl']" t-as="g">
+                            <td style="padding:3px 6px; border-top:1px solid #eee;"><t t-esc="g['account']"/></td>
+                            <td style="padding:3px 6px; text-align:right; border-top:1px solid #eee;">$<t t-esc="'{:,.2f}'.format(g['amount'])"/></td>
+                        </tr>
+                        <tr style="background:#e8e0f0; font-weight:bold;">
+                            <td style="padding:3px 6px; text-align:right;">Total to apply:</td>
+                            <td style="padding:3px 6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(d['grand'])"/></td>
+                        </tr>
+                    </table>
+
+                    <!-- Payments recorded -->
+                    <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin-top:10px;">PAYMENTS RECEIVED</div>
+                    <table style="width:100%; border-collapse:collapse; font-size:10px; border:1px solid #cbb8dd; border-top:none;">
+                        <tr style="background:#f4f0f8;">
+                            <th style="padding:3px 6px; text-align:left;">Method</th>
+                            <th style="padding:3px 6px; text-align:left;">Date</th>
+                            <th style="padding:3px 6px; text-align:left;">Reference</th>
+                            <th style="padding:3px 6px; text-align:right; width:18%;">Amount</th>
+                        </tr>
+                        <t t-if="d['payments']">
+                            <tr t-foreach="d['payments']" t-as="p">
+                                <td style="padding:3px 6px; border-top:1px solid #eee;"><t t-esc="p['label']"/></td>
+                                <td style="padding:3px 6px; border-top:1px solid #eee;"><t t-if="p['date']"><span t-esc="p['date']"/></t></td>
+                                <td style="padding:3px 6px; border-top:1px solid #eee;"><t t-esc="p['ref']"/></td>
+                                <td style="padding:3px 6px; text-align:right; border-top:1px solid #eee;">$<t t-esc="'{:,.2f}'.format(p['amount'])"/></td>
+                            </tr>
+                        </t>
+                        <t t-else="">
+                            <tr><td colspan="4" style="padding:4px 6px;"><em>No payment recorded yet.</em></td></tr>
+                        </t>
+                        <tr style="background:#efe9f5; font-weight:bold;">
+                            <td colspan="3" style="padding:3px 6px; text-align:right;">Paid to date:</td>
+                            <td style="padding:3px 6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(d['paid'])"/></td>
+                        </tr>
+                        <tr style="font-weight:bold;">
+                            <td colspan="3" style="padding:3px 6px; text-align:right;">Balance remaining:</td>
+                            <td style="padding:3px 6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(d['balance'])"/></td>
+                        </tr>
+                    </table>
+
+                    <p style="font-size:9px; color:#888; margin-top:10px;">
+                        Amounts are net of any discount and reflect what is billed.
+                        Enter the line items above into Clover, then post the
+                        received payment to the listed income accounts. Any item
+                        showing "Unassigned" needs an income account set on its
+                        product in Lodge Settings.
+                    </p>
+                </div>
+            </t>
+        </t>
+    </template>
+</odoo>

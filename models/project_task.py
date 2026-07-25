@@ -2346,7 +2346,7 @@ class ProjectTask(models.Model):
             raise UserError(_(
                 "%s has no email address on their contact.", partner.name))
         pdf, _dummy = self.env['ir.actions.report']._render_qweb_pdf(
-            'elksevent.report_event_callout', self.ids, data={'dept': dept})
+            'elksevent.report_event_callout_%s' % dept, self.ids)
         fname = '%s Call-Out - %s.pdf' % (label, self.name or 'Event')
         attachment = self.env['ir.attachment'].create({
             'name': fname,
@@ -2745,6 +2745,96 @@ class ProjectTask(models.Model):
         disc = 0.0
         deposit_pct = (settings.x_deposit_pct if settings else 50.0) or 0.0
         return base, disc, deposit_pct
+
+    def _event_payment_distribution(self):
+        """Itemize the event's charges and group them by income (GL) account so
+        a payment (e.g. a Clover deposit) can be applied to the right accounts.
+
+        Amounts are NET of any discount (coordinator fee is never discounted),
+        so the itemized charges sum to x_total_billed and, with tax, to the
+        grand total. Accounts come from the FRS product income accounts; a
+        component with no mapped account shows as 'Unassigned'.
+        """
+        self.ensure_one()
+        s = self._event_settings()
+        disc = ((self.x_discount_pct or 0.0) / 100.0
+                if self.x_discount_reason else 0.0)
+        factor = 1.0 - disc
+        is_col = (self.x_event_type == 'memorial' and self.x_member_number
+                  and self.x_member_number != '000000000')
+
+        def acct(product):
+            tmpl = product.product_tmpl_id if product else False
+            a = tmpl.x_elks_income_account_id if tmpl else False
+            return a.display_name if a else 'Unassigned'
+
+        charges = []
+        fac_prod = s.x_facility_product_id if s else False
+        clean_prod = s.x_cleaning_product_id if s else False
+        room_factor = 0.0 if is_col else factor
+        for rb in self.x_room_booking_ids:
+            rprod = rb.room_id.x_product_id or fac_prod
+            rate = (rb.rate or 0.0) * room_factor
+            clean = (rb.cleaning_fee or 0.0) * room_factor
+            svc = (rb.service_fee or 0.0) * room_factor
+            if rate:
+                charges.append({'name': 'Room Fee - %s' % rb.room_id.name,
+                                'amount': rate, 'account': acct(rprod)})
+            if clean:
+                charges.append({'name': 'Cleaning Fee - %s' % rb.room_id.name,
+                                'amount': clean, 'account': acct(clean_prod or rprod)})
+            if svc:
+                charges.append({'name': 'Service Fee - %s' % rb.room_id.name,
+                                'amount': svc, 'account': acct(fac_prod or rprod)})
+
+        cat_prod = {
+            'bar': s.x_bar_product_id, 'catering': s.x_catering_product_id,
+            'event': s.x_event_labor_product_id,
+            'cleaning': s.x_cleaning_product_id, 'other': fac_prod,
+        } if s else {}
+        for cl in self.x_cost_line_ids:
+            net = (cl.total or 0.0) * factor
+            if not net:
+                continue
+            prod = cat_prod.get(cl.cost_type_id.category) or fac_prod
+            charges.append({'name': cl.name or (cl.cost_type_id.name or 'Charge'),
+                            'amount': net, 'account': acct(prod)})
+
+        if self.x_coordinator_fee:
+            charges.append({'name': 'Event Coordinator Fee',
+                            'amount': self.x_coordinator_fee,
+                            'account': acct(s.x_coordinator_product_id if s else False)})
+
+        tax = self.x_event_tax_amount or 0.0
+        tax_acct = 'Sales Tax Payable'
+        gl = {}
+        for c in charges:
+            gl[c['account']] = gl.get(c['account'], 0.0) + c['amount']
+        if tax:
+            gl[tax_acct] = gl.get(tax_acct, 0.0) + tax
+        gl_list = sorted(({'account': k, 'amount': v} for k, v in gl.items()),
+                         key=lambda x: x['account'])
+
+        subtotal = sum(c['amount'] for c in charges)
+        grand = subtotal + tax
+        payments = []
+        paid = 0.0
+        if self.x_deposit_received:
+            amt = self.x_deposit_amount or 0.0
+            method_label = dict(
+                self._fields['x_deposit_method'].selection).get(
+                self.x_deposit_method) or 'Deposit'
+            payments.append({
+                'label': method_label,
+                'amount': amt, 'date': self.x_deposit_date,
+                'ref': self.x_deposit_reference or '',
+            })
+            paid += amt
+        return {
+            'charges': charges, 'gl': gl_list, 'subtotal': subtotal,
+            'tax': tax, 'tax_acct': tax_acct, 'grand': grand,
+            'payments': payments, 'paid': paid, 'balance': grand - paid,
+        }
 
     def _event_terms_body_html(self):
         """Return the CURRENT body of the /event-terms website page so the

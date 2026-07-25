@@ -73,14 +73,69 @@
                     </div>
 
                     <!-- Event particulars -->
+                    <!-- Event name banner so the host sees exactly which
+                         booking this agreement is for (e.g. "Chatfield
+                         Wedding Reception"). Sits above the tabular
+                         host/date/phone details. -->
+                    <div style="text-align:center; font-size:15px; font-weight:bold; margin-bottom:8px;">
+                        <t t-esc="o.name or ''"/>
+                    </div>
                     <table style="width:100%; font-size:12px; margin-bottom:12px;">
                         <tr>
                             <td style="padding:3px;"><strong>Host:</strong> <t t-esc="o.x_customer_name or ''"/></td>
-                            <td style="padding:3px;"><strong>Type:</strong> <t t-esc="o.x_event_type or ''"/></td>
+                            <td style="padding:3px;"><strong>Type:</strong> <span t-field="o.x_event_type"/></td>
                         </tr>
                         <tr>
-                            <td style="padding:3px;"><strong>Date:</strong> <t t-esc="o.x_event_date or ''"/></td>
+                            <td style="padding:3px;"><strong>Event Date:</strong> <t t-esc="o.x_event_date or ''"/></td>
                             <td style="padding:3px;"><strong>Guests:</strong> <t t-esc="o.x_guest_count or 0"/></td>
+                        </tr>
+                        <!-- Event window (start / end wall-clock times).
+                             Use the *_text fields when populated (already
+                             formatted "9:00 PM") and fall back to the
+                             float hour display. Duration lets the host
+                             see the length of the rental at a glance. -->
+                        <tr>
+                            <td style="padding:3px;">
+                                <strong>Event Time:</strong>
+                                <t t-esc="o.x_event_start_time_text or ''"/>
+                                <t t-if="o.x_event_end_time_text">
+                                    &#8211; <t t-esc="o.x_event_end_time_text"/>
+                                </t>
+                            </td>
+                            <td style="padding:3px;">
+                                <t t-if="o.x_event_duration">
+                                    <strong>Duration:</strong>
+                                    <t t-esc="'{:.2f}'.format(o.x_event_duration)"/> hrs
+                                </t>
+                            </td>
+                        </tr>
+                        <!-- Access windows so the customer sees the
+                             setup, entry, and cleanup times printed on
+                             the signed contract. Rows only render when
+                             a value is present so a bare "8:00 AM" line
+                             for setup won't appear when unused. -->
+                        <tr t-if="o.x_requested_setup or o.x_requested_entry">
+                            <td style="padding:3px;">
+                                <t t-if="o.x_requested_setup">
+                                    <strong>Setup:</strong>
+                                    <span t-field="o.x_requested_setup"
+                                          t-options='{"widget":"datetime"}'/>
+                                </t>
+                            </td>
+                            <td style="padding:3px;">
+                                <t t-if="o.x_requested_entry">
+                                    <strong>Entry:</strong>
+                                    <span t-field="o.x_requested_entry"
+                                          t-options='{"widget":"datetime"}'/>
+                                </t>
+                            </td>
+                        </tr>
+                        <tr t-if="o.x_cleanup_datetime">
+                            <td style="padding:3px;" colspan="2">
+                                <strong>Cleanup:</strong>
+                                <span t-field="o.x_cleanup_datetime"
+                                      t-options='{"widget":"datetime"}'/>
+                            </td>
                         </tr>
                         <tr>
                             <td style="padding:3px;"><strong>Phone:</strong> <t t-esc="o.x_customer_phone or ''"/></td>

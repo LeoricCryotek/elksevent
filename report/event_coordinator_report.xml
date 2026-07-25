@@ -103,7 +103,7 @@
                         </tr>
                         <tr>
                             <td style="padding:2px 4px;"><strong>Host:</strong> <t t-esc="o.x_customer_name or '-'"/></td>
-                            <td style="padding:2px 4px;"><strong>Type:</strong> <t t-esc="o.x_event_type or '-'"/></td>
+                            <td style="padding:2px 4px;"><strong>Type:</strong> <span t-field="o.x_event_type"/> (<t t-if="o.x_is_member">Member</t><t t-else="">Non-Member</t>)</td>
                         </tr>
                         <tr>
                             <td style="padding:2px 4px;"><strong>Phone:</strong> <t t-esc="o.x_customer_phone or '-'"/></td>
