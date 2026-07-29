@@ -731,6 +731,43 @@
                     </group>
                 </page>
 
+                <!-- ===== Documents / Print (event-only, replaces the global
+                     Print-cog reports so they don't clutter every task) ===== -->
+                <page string="Documents" name="event_documents"
+                      invisible="not x_is_event">
+                    <group>
+                        <group string="Customer Documents">
+                            <button name="%(action_report_event_contract)d" type="action"
+                                    string="Facility Usage Agreement" class="btn-secondary" icon="fa-file-text-o"/>
+                            <button name="%(action_report_event_payment)d" type="action"
+                                    string="Payment Distribution" class="btn-secondary" icon="fa-money"/>
+                        </group>
+                        <group string="Internal Documents">
+                            <button name="%(action_report_event_coordinator)d" type="action"
+                                    string="Event Coordinator Sheet" class="btn-secondary" icon="fa-clipboard"/>
+                            <button name="%(action_report_event_pl_single)d" type="action"
+                                    string="Event P&amp;L" class="btn-secondary" icon="fa-line-chart"/>
+                            <button name="%(action_report_event_gratuity)d" type="action"
+                                    string="Gratuity Distribution" class="btn-secondary" icon="fa-money"/>
+                        </group>
+                    </group>
+                    <group string="Department Call-Outs (print or email a quote request)">
+                        <div>
+                            <button name="%(action_report_event_callout)d" type="action"
+                                    string="All Departments" class="btn-secondary" icon="fa-print"/>
+                            <button name="%(action_report_event_callout_bar)d" type="action"
+                                    string="Bar" class="btn-secondary" icon="fa-print"
+                                    invisible="not x_bar_use"/>
+                            <button name="%(action_report_event_callout_kitchen)d" type="action"
+                                    string="Kitchen" class="btn-secondary" icon="fa-print"
+                                    invisible="not x_food_request"/>
+                            <button name="%(action_report_event_callout_custodial)d" type="action"
+                                    string="Custodial" class="btn-secondary" icon="fa-print"
+                                    invisible="not x_cleaning_use"/>
+                        </div>
+                    </group>
+                </page>
+
             </xpath>
         </field>
     </record>
