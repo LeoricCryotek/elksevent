@@ -941,11 +941,15 @@ class ProjectTask(models.Model):
             if not rec.x_is_event or not dl:
                 continue
             upd = {}
-            d = dl.date() if hasattr(dl, 'date') else dl
+            if hasattr(dl, 'hour'):
+                # UTC datetime -> user-local date + start time.
+                dl_local = fields.Datetime.context_timestamp(rec, dl)
+                d = dl_local.date()
+                upd['x_event_start_time'] = dl_local.hour + dl_local.minute / 60.0
+            else:
+                d = dl
             if rec.x_event_date != d:
                 upd['x_event_date'] = d
-            if hasattr(dl, 'hour'):
-                upd['x_event_start_time'] = dl.hour + dl.minute / 60.0
             if upd:
                 rec.with_context(_evt_dt_sync=True).write(upd)
 
@@ -960,7 +964,12 @@ class ProjectTask(models.Model):
                 st = rec.x_event_start_time or 0.0
                 h = min(int(st), 23)
                 mnt = min(int(round((st - int(st)) * 60)), 59)
-                new_dl = datetime.combine(rec.x_event_date, _dtime(h, mnt))
+                # The date + start time are the user's LOCAL wall-clock; store
+                # date_deadline in UTC so it round-trips back to the same time.
+                naive_local = datetime.combine(rec.x_event_date, _dtime(h, mnt))
+                tz = pytz.timezone(rec.env.user.tz or 'UTC')
+                new_dl = tz.localize(naive_local).astimezone(
+                    pytz.utc).replace(tzinfo=None)
             else:
                 new_dl = rec.x_event_date
             if rec.date_deadline != new_dl:
@@ -1202,9 +1211,14 @@ class ProjectTask(models.Model):
         dl = self.date_deadline
         if not dl:
             return
-        self.x_event_date = dl.date() if hasattr(dl, 'date') else dl
+        # date_deadline is a UTC datetime; convert to the user's timezone so the
+        # tab date + start time show the LOCAL wall-clock they entered.
         if hasattr(dl, 'hour'):
-            self.x_event_start_time = dl.hour + dl.minute / 60.0
+            dl_local = fields.Datetime.context_timestamp(self, dl)
+            self.x_event_date = dl_local.date()
+            self.x_event_start_time = dl_local.hour + dl_local.minute / 60.0
+        else:
+            self.x_event_date = dl
 
     # ------------------------------------------------------------------
     # Computed: staff totals (legacy fields)
@@ -1588,9 +1602,14 @@ class ProjectTask(models.Model):
             # form) so a booking with a header date submits cleanly.
             if not rec.x_event_date and rec.date_deadline:
                 dl = rec.date_deadline
-                rec.x_event_date = dl.date() if hasattr(dl, 'date') else dl
-                if hasattr(dl, 'hour') and not rec.x_event_start_time:
-                    rec.x_event_start_time = dl.hour + dl.minute / 60.0
+                if hasattr(dl, 'hour'):
+                    dl_local = fields.Datetime.context_timestamp(rec, dl)
+                    rec.x_event_date = dl_local.date()
+                    if not rec.x_event_start_time:
+                        rec.x_event_start_time = (
+                            dl_local.hour + dl_local.minute / 60.0)
+                else:
+                    rec.x_event_date = dl
             if not rec.x_event_date:
                 raise UserError(_(
                     "Please set the event date (top-right) before submitting "
@@ -1833,7 +1852,11 @@ class ProjectTask(models.Model):
         if self.x_event_date and 'date_deadline' in Task._fields:
             if Task._fields['date_deadline'].type == 'datetime':
                 from datetime import datetime, time as _dtime
-                deadline = datetime.combine(self.x_event_date, _dtime(12, 0))
+                # Local noon on the event date, stored in UTC.
+                naive = datetime.combine(self.x_event_date, _dtime(12, 0))
+                tz = pytz.timezone(self.env.user.tz or 'UTC')
+                deadline = tz.localize(naive).astimezone(
+                    pytz.utc).replace(tzinfo=None)
             else:
                 deadline = self.x_event_date
         item_labels = dict(
@@ -2583,7 +2606,8 @@ class ProjectTask(models.Model):
         d = self.x_event_date
         if not d and self.date_deadline:
             dl = self.date_deadline
-            d = dl.date() if hasattr(dl, 'date') else dl
+            d = (fields.Datetime.context_timestamp(self, dl).date()
+                 if hasattr(dl, 'hour') else dl)
         if not d:
             return None, None
 
