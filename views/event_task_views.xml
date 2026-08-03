@@ -108,16 +108,16 @@
                 <separator string="Event Timeclock Hours"/>
                 <button name="action_open_add_hours" type="object"
                         string="Add Timeclock Hours" class="btn-primary"
-                        icon="fa-clock-o"
+                        icon="fa-clock-o" groups="elksevent.group_event_coordinator"
                         invisible="not x_is_event"/>
                 <button name="action_distribute_gratuity" type="object"
                         string="Distribute Gratuity" class="btn-secondary"
-                        icon="fa-money"
+                        icon="fa-money" groups="elksevent.group_event_coordinator"
                         invisible="not x_is_event"
                         help="Split the bar and kitchen gratuity pools across the matching shifts, by hours, for payroll."/>
                 <button name="action_pay_coordinator" type="object"
                         string="Pay Coordinator" class="btn-secondary"
-                        icon="fa-user"
+                        icon="fa-user" groups="elksevent.group_event_coordinator"
                         invisible="not x_is_event or not x_coordinator_employee_id"
                         help="Post the coordinator fee to the tagged coordinator's timecard as a flat payout (no clocked hours needed)."/>
                 <field name="x_attendance_ids"
@@ -477,7 +477,7 @@
                 </page>
 
                 <!-- ===== Event Costs (customer charges) ===== -->
-                <page string="Event Costs" name="event_costs"
+                <page string="Event Costs" name="event_costs" groups="elksevent.group_event_coordinator"
                       invisible="not x_is_event">
                     <p class="text-muted">
                         Customer charges that roll into the single "Event Rental"
@@ -508,7 +508,7 @@
                 </page>
 
                 <!-- ===== Board / Floor Approval ===== -->
-                <page string="Approval" name="board_approval"
+                <page string="Approval" name="board_approval" groups="elksevent.group_event_coordinator"
                       invisible="not x_is_event">
                     <div class="alert alert-info" role="alert"
                          invisible="x_approval_state != 'draft'">
@@ -556,7 +556,7 @@
                 </page>
 
                 <!-- ===== Financials / Invoice ===== -->
-                <page string="Financials" name="event_financials"
+                <page string="Financials" name="event_financials" groups="elksevent.group_event_coordinator"
                       invisible="not x_is_event">
                     <field name="x_currency_id" invisible="1"/>
                     <group>
@@ -733,7 +733,7 @@
 
                 <!-- ===== Documents / Print (event-only, replaces the global
                      Print-cog reports so they don't clutter every task) ===== -->
-                <page string="Documents" name="event_documents"
+                <page string="Documents" name="event_documents" groups="elksevent.group_event_coordinator"
                       invisible="not x_is_event">
                     <group>
                         <group string="Customer Documents">

@@ -38,6 +38,48 @@
             <field name="implied_ids" eval="[(4, ref('group_event_coordinator'))]"/>
         </record>
 
+        <!-- Event Department Manager — Bar / Kitchen / Custodial managers who
+             help build quotes. They can view event bookings, log notes in the
+             chatter, and enter their staffing response (counts / hours) on the
+             event so the coordinator can quote quickly. NO board approval, NO
+             financials, and they only see EVENT tasks (not other projects). -->
+        <record id="group_event_dept_manager" model="res.groups">
+            <field name="name">Event Department Manager</field>
+            <field name="privilege_id" ref="res_groups_privilege_elksevent"/>
+            <field name="sequence">5</field>
+            <field name="comment">
+                Bar / Kitchen / Custodial managers: view event bookings, add
+                notes, and enter their staffing response (staff count + hours)
+                to help build quotes. No approval, no financials, scoped to
+                event tasks only.
+            </field>
+        </record>
+
+        <!-- Visibility: event staff see ALL event tasks (not just ones they
+             follow). Group rules are OR-combined, so this GRANTS access on top
+             of the base project rule. Without it, a Coordinator whose project
+             membership is empty sees no events. -->
+        <record id="rule_event_task_event_staff" model="ir.rule">
+            <field name="name">Event tasks: visible to event coordinators</field>
+            <field name="model_id" ref="project.model_project_task"/>
+            <field name="domain_force">[('x_is_event', '=', True)]</field>
+            <field name="groups" eval="[(4, ref('group_event_coordinator'))]"/>
+            <field name="perm_read">1</field>
+            <field name="perm_write">1</field>
+            <field name="perm_create">1</field>
+            <field name="perm_unlink">1</field>
+        </record>
+        <record id="rule_event_task_dept_manager" model="ir.rule">
+            <field name="name">Event tasks: department managers (event-only)</field>
+            <field name="model_id" ref="project.model_project_task"/>
+            <field name="domain_force">[('x_is_event', '=', True)]</field>
+            <field name="groups" eval="[(4, ref('group_event_dept_manager'))]"/>
+            <field name="perm_read">1</field>
+            <field name="perm_write">1</field>
+            <field name="perm_create">0</field>
+            <field name="perm_unlink">0</field>
+        </record>
+
         <!-- The event quote is now the CUSTOMER-facing document (a single
              "Event Rental" line + tax), sent by email / viewed on the portal.
              So it must NOT be hidden from portal users any more. This rule is

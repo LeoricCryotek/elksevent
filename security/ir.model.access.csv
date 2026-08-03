@@ -16,3 +16,12 @@ access_event_assessor_wizard,elks.event.assessor.wizard,model_elks_event_assesso
 access_event_add_hours_wizard,elks.event.add.hours.wizard,model_elks_event_add_hours_wizard,elksevent.group_event_coordinator,1,1,1,1
 access_event_staff_assignment_coord,elks.event.staff.assignment.coordinator,model_elks_event_staff_assignment,elksevent.group_event_coordinator,1,1,1,1
 access_event_staff_assignment_user,elks.event.staff.assignment.user,model_elks_event_staff_assignment,project.group_project_user,1,0,0,0
+access_event_task_deptmgr,project.task.event.deptmgr,project.model_project_task,elksevent.group_event_dept_manager,1,1,0,0
+access_event_project_deptmgr,project.project.event.deptmgr,project.model_project_project,elksevent.group_event_dept_manager,1,0,0,0
+access_event_stage_deptmgr,project.task.type.event.deptmgr,project.model_project_task_type,elksevent.group_event_dept_manager,1,0,0,0
+access_event_cost_line_deptmgr,elks.event.cost.line.deptmgr,model_elks_event_cost_line,elksevent.group_event_dept_manager,1,0,0,0
+access_event_room_booking_deptmgr,elks.event.room.booking.deptmgr,model_elks_event_room_booking,elksevent.group_event_dept_manager,1,0,0,0
+access_event_cost_type_deptmgr,elks.event.cost.type.deptmgr,model_elks_event_cost_type,elksevent.group_event_dept_manager,1,0,0,0
+access_event_checklist_tmpl_deptmgr,elks.event.checklist.template.deptmgr,model_elks_event_checklist_template,elksevent.group_event_dept_manager,1,0,0,0
+access_event_staff_assignment_deptmgr,elks.event.staff.assignment.deptmgr,model_elks_event_staff_assignment,elksevent.group_event_dept_manager,1,1,1,1
+access_event_attendance_deptmgr,hr.attendance.event.deptmgr,hr_attendance.model_hr_attendance,elksevent.group_event_dept_manager,1,0,0,0

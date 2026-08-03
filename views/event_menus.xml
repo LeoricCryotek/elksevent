@@ -6,7 +6,7 @@
               name="Elks Events"
               sequence="58"
               web_icon="elksevent,static/description/icon.png"
-              groups="elksevent.group_event_coordinator"/>
+              groups="elksevent.group_event_coordinator,elksevent.group_event_dept_manager"/>
 
     <!-- Bookings -->
     <menuitem id="menu_event_bookings"
@@ -19,12 +19,14 @@
               name="Board Approval Queue"
               parent="menu_elksevent_root"
               action="action_event_board_queue"
+              groups="elksevent.group_event_coordinator"
               sequence="20"/>
 
     <!-- Reports -->
     <menuitem id="menu_event_reports"
               name="Reports"
               parent="menu_elksevent_root"
+              groups="elksevent.group_event_coordinator"
               sequence="30"/>
 
     <menuitem id="menu_event_pl_report"
@@ -43,6 +45,7 @@
     <menuitem id="menu_event_config"
               name="Configuration"
               parent="menu_elksevent_root"
+              groups="elksevent.group_event_coordinator"
               sequence="90"/>
 
     <menuitem id="menu_event_venues"

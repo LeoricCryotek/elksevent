@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Elks Event Bookings',
-    'version': '19.0.8.13.0',
+    'version': '19.0.9.0.0',
     'category': 'Services/Project',
     'summary': 'Facility event booking, board approval, room billing, and P&L reporting',
     'description': """
