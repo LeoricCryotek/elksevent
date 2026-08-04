@@ -197,6 +197,12 @@
                         icon="fa-undo"
                         groups="elksevent.group_event_officer"
                         invisible="not x_is_event or x_approval_state != 'rejected'"/>
+                <button name="action_open_marketing_event"
+                        string="Marketing Listing"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-bullhorn"
+                        invisible="not x_is_event or not x_is_elks_event"/>
                 <button name="action_receive_deposit"
                         string="Deposit Received"
                         type="object"

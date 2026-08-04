@@ -642,6 +642,11 @@ class ProjectTask(models.Model):
     x_calendar_event_id = fields.Many2one(
         'calendar.event', string="Calendar Booking", copy=False,
     )
+    x_marketing_event_id = fields.Many2one(
+        'event.event', string="Marketing Listing", copy=False,
+        help="Public-facing listing in the Events app, auto-created when "
+             "this is flagged as an Elks Event so it can be marketed.",
+    )
 
     # Labor PLANNING inputs — how long we expect each phase to take. These
     # drive the estimated hours (below), which drive the labor cost for the
@@ -856,6 +861,7 @@ class ProjectTask(models.Model):
         records._sync_requested_rooms()
         records._reconcile_event_datetime()
         records.with_context(_labor_sync=True)._sync_labor_cost_lines()
+        records.filtered('x_is_elks_event')._sync_marketing_event()
         return records
 
     def write(self, vals):
@@ -889,6 +895,11 @@ class ProjectTask(models.Model):
                         _logger.warning(
                             "Calendar resync failed for task %s: %s",
                             rec.id, e)
+        # Keep the marketing (Events-app) listing in sync when the Elks
+        # Event flag toggles or the schedule / name changes.
+        if (not self.env.context.get('_marketing_sync')
+                and (vals.keys() & self._MARKETING_SYNC_KEYS)):
+            self._sync_marketing_event()
         return res
 
     # Fields whose change requires pushing new start/stop onto the
@@ -2696,6 +2707,78 @@ class ProjectTask(models.Model):
                 vals['user_id'] = cal_user.id
                 vals['partner_ids'] = [(4, cal_user.partner_id.id)]
             self.x_calendar_event_id.sudo().write(vals)
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Marketing listing (Events app)
+    # HUMAN: When a booking is flagged as an Elks Event (the lodge's own
+    #        event, not a billed rental), auto-create a public listing in
+    #        the Events app so it can be marketed. Unchecking archives it.
+    # AI: _sync_marketing_event() creates/updates the linked event.event.
+    #     Best-effort; never blocks the workflow. Link: x_marketing_event_id.
+    # ──────────────────────────────────────────────────────────────────
+    _MARKETING_SYNC_KEYS = frozenset((
+        'name', 'x_is_elks_event', 'x_event_date',
+        'x_event_start_time', 'x_event_end_time',
+        'x_event_start_sel', 'x_event_end_sel',
+        'x_event_start_time_text', 'x_event_end_time_text',
+        'date_deadline', 'description', 'x_event_type',
+    ))
+
+    def _sync_marketing_event(self):
+        """Create / update the Events-app listing for an Elks Event.
+
+        Only fires for tasks flagged both as an event (x_is_event) and as
+        the lodge's own Elks Event (x_is_elks_event). Unchecking the Elks
+        Event flag archives the listing so it drops off the public site.
+        """
+        if 'event.event' not in self.env:
+            return
+        Event = self.env['event.event'].sudo()
+        for rec in self:
+            try:
+                if not (rec.x_is_event and rec.x_is_elks_event):
+                    # No longer an Elks Event -> retire any existing listing.
+                    if rec.x_marketing_event_id:
+                        rec.x_marketing_event_id.active = False
+                    continue
+                start, stop = rec._event_calendar_window()
+                if not start:
+                    continue
+                tz_name = rec.env.user.tz or rec.env.context.get('tz') or 'UTC'
+                vals = {
+                    'name': rec.name or _('Elks Event'),
+                    'date_begin': start,
+                    'date_end': stop or start,
+                    'date_tz': tz_name,
+                }
+                if 'description' in Event._fields:
+                    vals['description'] = rec.description or ''
+                ev = rec.x_marketing_event_id
+                if ev:
+                    if not ev.active:
+                        ev.active = True
+                    ev.write(vals)
+                else:
+                    ev = Event.create(vals)
+                    rec.with_context(_marketing_sync=True).x_marketing_event_id = ev.id
+            except Exception as e:  # noqa: BLE001 - never block the workflow
+                _logger.warning(
+                    "Marketing event sync failed for task %s: %s", rec.id, e)
+
+    def action_open_marketing_event(self):
+        """Smart-button: open the linked Events-app listing."""
+        self.ensure_one()
+        if not self.x_marketing_event_id:
+            self._sync_marketing_event()
+        if not self.x_marketing_event_id:
+            return False
+        return {
+            'type': 'ir.actions.act_window',
+            'res_model': 'event.event',
+            'res_id': self.x_marketing_event_id.id,
+            'view_mode': 'form',
+            'target': 'current',
+        }
 
     # ──────────────────────────────────────────────────────────────────
     # SECTION: Customer emails

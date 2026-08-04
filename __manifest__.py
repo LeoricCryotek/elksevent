@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Elks Event Bookings',
-    'version': '19.0.9.2.0',
+    'version': '19.0.9.3.0',
     'category': 'Services/Project',
     'summary': 'Facility event booking, board approval, room billing, and P&L reporting',
     'description': """
@@ -46,6 +46,7 @@ Key features
         'project',
         'mail',
         'website',
+        'event',
         'account',
         'purchase',
         'sale_management',
