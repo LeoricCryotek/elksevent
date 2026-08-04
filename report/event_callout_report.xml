@@ -231,7 +231,7 @@
                 <strong>REQUIRED:</strong> The building must be fully cleaned and the
                 bathrooms restocked by
                 <strong>
-                    <t t-if="o.x_custodial_ready_datetime"><span t-field="o.x_custodial_ready_datetime" t-options='{"widget":"datetime","format":"EEE, MMM d, yyyy h:mm a"}'/></t>
+                    <t t-if="o.x_cleanup_datetime"><span t-field="o.x_cleanup_datetime" t-options='{"widget":"datetime","format":"EEE, MMM d, yyyy h:mm a"}'/></t>
                     <t t-else="">________________ (date &amp; time)</t>
                 </strong>
                 (typically the day following the event).

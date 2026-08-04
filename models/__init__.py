@@ -6,6 +6,7 @@ from . import event_room_booking
 from . import event_cost_type
 from . import event_cost_line
 from . import event_staff_assignment
+from . import event_access_window
 from . import event_checklist_template
 from . import project_task
 from . import purchase_order

@@ -25,3 +25,6 @@ access_event_cost_type_deptmgr,elks.event.cost.type.deptmgr,model_elks_event_cos
 access_event_checklist_tmpl_deptmgr,elks.event.checklist.template.deptmgr,model_elks_event_checklist_template,elksevent.group_event_dept_manager,1,0,0,0
 access_event_staff_assignment_deptmgr,elks.event.staff.assignment.deptmgr,model_elks_event_staff_assignment,elksevent.group_event_dept_manager,1,1,1,1
 access_event_attendance_deptmgr,hr.attendance.event.deptmgr,hr_attendance.model_hr_attendance,elksevent.group_event_dept_manager,1,0,0,0
+access_event_access_window_coord,elks.event.access.window.coordinator,model_elks_event_access_window,elksevent.group_event_coordinator,1,1,1,1
+access_event_access_window_user,elks.event.access.window.user,model_elks_event_access_window,project.group_project_user,1,0,0,0
+access_event_access_window_deptmgr,elks.event.access.window.deptmgr,model_elks_event_access_window,elksevent.group_event_dept_manager,1,1,1,1

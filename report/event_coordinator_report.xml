@@ -183,6 +183,25 @@
                         </table>
                     </t>
 
+                    <!-- ===================== ACCESS WINDOWS ===================== -->
+                    <t t-if="o.x_access_window_ids">
+                        <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd;">ADDITIONAL ACCESS WINDOWS</div>
+                        <table style="width:100%; border-collapse:collapse; font-size:9.5px; border:1px solid #cbb8dd; border-top:none; margin-bottom:8px;">
+                            <tr style="background:#f4f0f8;">
+                                <th style="padding:2px 6px; text-align:left;">Purpose</th>
+                                <th style="padding:2px 6px; text-align:left;">Start</th>
+                                <th style="padding:2px 6px; text-align:left;">End</th>
+                                <th style="padding:2px 6px; text-align:left;">Assigned Staff</th>
+                            </tr>
+                            <tr t-foreach="o.x_access_window_ids" t-as="w">
+                                <td style="padding:2px 6px; border-top:1px solid #eee;"><t t-esc="w.name or ''"/></td>
+                                <td style="padding:2px 6px; border-top:1px solid #eee;"><t t-if="w.start_datetime"><span t-field="w.start_datetime" t-options='{"widget":"datetime","format":"MM/dd h:mm a"}'/></t></td>
+                                <td style="padding:2px 6px; border-top:1px solid #eee;"><t t-if="w.end_datetime"><span t-field="w.end_datetime" t-options='{"widget":"datetime","format":"MM/dd h:mm a"}'/></t></td>
+                                <td style="padding:2px 6px; border-top:1px solid #eee;"><t t-esc="', '.join(w.employee_ids.mapped('name'))"/></td>
+                            </tr>
+                        </table>
+                    </t>
+
                     <!-- ===================== NOTES ===================== -->
                     <t t-set="notes"
                        t-value="[x for x in [o.description, o.x_event_description, o.x_decoration_notes, o.x_extras] if x]"/>

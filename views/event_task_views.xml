@@ -309,6 +309,17 @@
                                    required="x_cleanup_scheduled"/>
                         </group>
                     </group>
+                    <separator string="Additional Access Windows (with assigned staff)"/>
+                    <field name="x_access_window_ids">
+                        <list editable="bottom">
+                            <field name="name" string="Purpose"/>
+                            <field name="start_datetime"/>
+                            <field name="end_datetime"/>
+                            <field name="employee_ids" widget="many2many_tags"
+                                   options="{'no_create_edit': True}"/>
+                            <field name="note" optional="show"/>
+                        </list>
+                    </field>
                     <group>
                         <group string="Event Description">
                             <field name="x_event_description" nolabel="1"
@@ -387,9 +398,6 @@
                                    invisible="not x_cleaning_use"/>
                             <field name="x_cleaner_hours"
                                    string="Hours per Cleaner"
-                                   invisible="not x_cleaning_use"/>
-                            <field name="x_custodial_ready_datetime"
-                                   string="Building Clean &amp; Restocked By"
                                    invisible="not x_cleaning_use"/>
                         </group>
                     </group>

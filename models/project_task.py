@@ -194,6 +194,11 @@ class ProjectTask(models.Model):
         "Requested Setup",
         help="Date & time the host requests to begin setup (may be before the "
              "event day).")
+    x_access_window_ids = fields.One2many(
+        'elks.event.access.window', 'event_id',
+        string="Additional Access Windows",
+        help="Extra access / setup times beyond entry & setup, each with the "
+             "staff assigned to be there.")
     x_cleanup_scheduled = fields.Boolean(
         "Cleanup Scheduled",
         help="Tick to schedule a cleanup date & time for this event.")
