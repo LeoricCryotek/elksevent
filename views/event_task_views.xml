@@ -477,7 +477,8 @@
                     <field name="x_room_booking_ids">
                         <list editable="bottom">
                             <field name="sequence" widget="handle"/>
-                            <field name="room_id"/>
+                            <field name="room_id"
+                                   domain="[('x_is_rentable', '=', True), ('active', '=', True), ('id', 'not in', parent.x_booked_room_ids)]"/>
                             <field name="rate"/>
                             <field name="cleaning_fee"/>
                             <field name="service_fee"/>

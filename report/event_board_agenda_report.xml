@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- =========================================================================
+     HUMAN: Board Agenda for the Secretary. One consolidated list of every
+     event awaiting board / floor review (the "Present to Board" queue), so
+     the Secretary can print it for the meeting or email it out ahead of
+     time instead of hand-collating each request. Columns: Title, Type,
+     Date, Elk (member?), Event Total. Driven from Reports menu -> Board
+     Agenda (print) / Email Board Agenda (server actions).
+     AI: qweb-pdf on project.task. The template ignores which record is
+     passed and always renders the full pending set via
+     project.task._board_agenda_events(), so it stays complete.
+     ========================================================================= -->
+<odoo>
+
+    <!-- Printable report over the pending-events recordset -->
+    <record id="action_report_event_board_agenda" model="ir.actions.report">
+        <field name="name">Board Agenda - Events for Review</field>
+        <field name="model">project.task</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_event_board_agenda</field>
+        <field name="report_file">elksevent.report_event_board_agenda</field>
+        <field name="paperformat_id" ref="paperformat_event_sheet"/>
+        <field name="print_report_name">'Board Agenda'</field>
+    </record>
+
+    <!-- Reports-menu entry: print the agenda for ALL pending events -->
+    <record id="action_server_board_agenda_print" model="ir.actions.server">
+        <field name="name">Board Agenda (Present to Board)</field>
+        <field name="model_id" ref="project.model_project_task"/>
+        <field name="binding_type">action</field>
+        <field name="state">code</field>
+        <field name="code">action = model._board_agenda_report_action()</field>
+    </record>
+
+    <!-- Reports-menu entry: email the agenda PDF ahead of the meeting -->
+    <record id="action_server_board_agenda_email" model="ir.actions.server">
+        <field name="name">Email Board Agenda</field>
+        <field name="model_id" ref="project.model_project_task"/>
+        <field name="binding_type">action</field>
+        <field name="state">code</field>
+        <field name="code">action = model.action_email_board_agenda()</field>
+    </record>
+
+    <template id="report_event_board_agenda">
+        <t t-call="web.html_container">
+            <t t-set="settings"
+               t-value="docs[0].env['elks.lodge.settings'].sudo().search([], limit=1)"/>
+            <t t-set="evts" t-value="docs[0]._board_agenda_events()"/>
+            <div class="page" style="font-size:11px; color:#222;">
+
+                <!-- Header -->
+                <table style="width:100%; border:none; margin-bottom:4px;">
+                    <tr>
+                        <td style="border:none; padding:0;">
+                            <div style="font-size:16px; font-weight:bold;">
+                                <t t-if="settings"><t t-esc="settings.name"/></t><t t-else="">Elks Lodge</t>
+                                <t t-if="settings and settings.lodge_number">#<t t-esc="settings.lodge_number"/></t>
+                            </div>
+                            <div style="font-size:14px; font-weight:bold; color:#46166a;">Events for Board Review</div>
+                        </td>
+                        <td style="border:none; padding:0; text-align:right; font-size:9px; color:#666;">
+                            Printed <span t-esc="time.strftime('%m/%d/%Y')"/>
+                        </td>
+                    </tr>
+                </table>
+                <hr style="border-top:2px solid #46166a; margin:2px 0 8px 0;"/>
+
+                <p style="font-size:10px; color:#555; margin:0 0 8px 0;">
+                    All events currently in the Present-to-Board / Floor-Vote
+                    queue, awaiting approval.
+                </p>
+
+                <table style="width:100%; border-collapse:collapse; font-size:10.5px; border:1px solid #cbb8dd;">
+                    <tr style="background:#46166a; color:#fff;">
+                        <th style="padding:4px 6px; text-align:left; width:4%;">#</th>
+                        <th style="padding:4px 6px; text-align:left; width:34%;">Title</th>
+                        <th style="padding:4px 6px; text-align:left; width:22%;">Type of Event</th>
+                        <th style="padding:4px 6px; text-align:left; width:16%;">Event Date</th>
+                        <th style="padding:4px 6px; text-align:center; width:9%;">Elk?</th>
+                        <th style="padding:4px 6px; text-align:right; width:15%;">Event Total</th>
+                    </tr>
+                    <t t-set="idx" t-value="0"/>
+                    <tr t-foreach="evts" t-as="o" t-att-style="'background:#f4f0f8;' if o_index % 2 else 'background:#ffffff;'">
+                        <td style="padding:4px 6px; border-top:1px solid #e3d9ee;"><t t-esc="o_index + 1"/></td>
+                        <td style="padding:4px 6px; border-top:1px solid #e3d9ee;">
+                            <strong><t t-esc="o.name or ''"/></strong>
+                            <t t-if="o.x_approval_state == 'floor'">
+                                <span style="font-size:8.5px; color:#8a6d1a;"> (Floor Vote)</span>
+                            </t>
+                        </td>
+                        <td style="padding:4px 6px; border-top:1px solid #e3d9ee;"><span t-field="o.x_event_type"/></td>
+                        <td style="padding:4px 6px; border-top:1px solid #e3d9ee;">
+                            <t t-if="o.x_event_date"><span t-field="o.x_event_date"/></t>
+                            <t t-else=""><span style="color:#999;">TBD</span></t>
+                        </td>
+                        <td style="padding:4px 6px; border-top:1px solid #e3d9ee; text-align:center;">
+                            <t t-if="o.x_is_member"><strong>Yes</strong></t><t t-else="">No</t>
+                        </td>
+                        <td style="padding:4px 6px; border-top:1px solid #e3d9ee; text-align:right;">$<t t-esc="'{:,.2f}'.format(o.x_event_total or 0.0)"/></td>
+                    </tr>
+                    <tr style="background:#e8e0f0; font-weight:bold;">
+                        <td colspan="4" style="padding:4px 6px; text-align:right;"><t t-esc="len(evts)"/> event(s) &#8212; combined total:</td>
+                        <td style="padding:4px 6px;"></td>
+                        <td style="padding:4px 6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(sum(evts.mapped('x_event_total')))"/></td>
+                    </tr>
+                </table>
+
+                <p style="font-size:9px; color:#888; margin-top:12px;">
+                    "Elk?" indicates whether the requesting host is a member.
+                    Event Total is the customer-facing total (after any member
+                    discount). Events marked "Floor Vote" have cleared the board
+                    and await the membership floor vote.
+                </p>
+            </div>
+        </t>
+    </template>
+
+</odoo>

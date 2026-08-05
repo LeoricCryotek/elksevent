@@ -437,6 +437,17 @@ class ProjectTask(models.Model):
     x_room_booking_ids = fields.One2many(
         'elks.event.room.booking', 'event_id', string="Rooms Booked",
     )
+    # Rooms already on a booking line — used to filter the room dropdown so
+    # the same room can't be added twice on the Rooms tab.
+    x_booked_room_ids = fields.Many2many(
+        'maintenance.location', string="Booked Rooms",
+        compute='_compute_booked_room_ids',
+    )
+
+    @api.depends('x_room_booking_ids.room_id')
+    def _compute_booked_room_ids(self):
+        for rec in self:
+            rec.x_booked_room_ids = rec.x_room_booking_ids.mapped('room_id')
     # Multi-select of requested rooms — the website-form-builder-friendly way
     # to pick MANY rooms (renders as "Multiple Checkboxes"). Selecting rooms
     # here auto-creates the booking lines above with each room's default fees.
@@ -2778,6 +2789,75 @@ class ProjectTask(models.Model):
             'res_id': self.x_marketing_event_id.id,
             'view_mode': 'form',
             'target': 'current',
+        }
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Board agenda (Secretary)
+    # HUMAN: One consolidated list of every event awaiting board / floor
+    #        review, so the Secretary can print it for the meeting or email
+    #        it out ahead of time instead of hand-collating each request.
+    #        Columns: Title, Type, Date, Elk (member?), Event Total.
+    # AI: _board_agenda_events() searches the pending set; the print/email
+    #     actions render report_event_board_agenda over that set.
+    # ──────────────────────────────────────────────────────────────────
+    @api.model
+    def _board_agenda_events(self):
+        """Events currently pending board or floor review, date-ordered."""
+        return self.search([
+            ('x_is_event', '=', True),
+            ('parent_id', '=', False),
+            ('x_approval_state', 'in', ('board', 'floor')),
+        ], order='x_event_date, name')
+
+    @api.model
+    def _board_agenda_report_action(self):
+        """Return the printable agenda report for all pending events."""
+        events = self._board_agenda_events()
+        if not events:
+            raise UserError(_(
+                "There are no events awaiting board or floor review right now."))
+        report = self.env.ref('elksevent.action_report_event_board_agenda')
+        return report.report_action(events)
+
+    def action_email_board_agenda(self):
+        """Render the agenda to PDF and open an email with it attached."""
+        events = self._board_agenda_events()
+        if not events:
+            raise UserError(_(
+                "There are no events awaiting board or floor review right now."))
+        report = self.env.ref('elksevent.action_report_event_board_agenda')
+        pdf_content, _ct = report._render_qweb_pdf(
+            report.report_name, events.ids)
+        today = fields.Date.context_today(self)
+        fname = 'Board_Agenda_%s.pdf' % today.strftime('%Y%m%d')
+        proj = events[:1].project_id
+        attachment = self.env['ir.attachment'].create({
+            'name': fname,
+            'type': 'binary',
+            'datas': base64.b64encode(pdf_content),
+            'mimetype': 'application/pdf',
+            'res_model': 'project.project' if proj else False,
+            'res_id': proj.id if proj else False,
+        })
+        ctx = {
+            'default_composition_mode': 'comment',
+            'default_subject': 'Events for Board Review - %s' % (
+                today.strftime('%m/%d/%Y')),
+            'default_body': Markup(
+                '<p>Attached is the consolidated list of events awaiting '
+                'board review.</p>'),
+            'default_attachment_ids': [(6, 0, attachment.ids)],
+        }
+        if proj:
+            ctx['default_model'] = 'project.project'
+            ctx['default_res_ids'] = proj.ids
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _("Email Board Agenda"),
+            'res_model': 'mail.compose.message',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': ctx,
         }
 
     # ──────────────────────────────────────────────────────────────────

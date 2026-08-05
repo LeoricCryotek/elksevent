@@ -29,6 +29,18 @@
               groups="elksevent.group_event_coordinator"
               sequence="30"/>
 
+    <menuitem id="menu_event_board_agenda"
+              name="Board Agenda (Present to Board)"
+              parent="menu_event_reports"
+              action="action_server_board_agenda_print"
+              sequence="5"/>
+
+    <menuitem id="menu_event_board_agenda_email"
+              name="Email Board Agenda"
+              parent="menu_event_reports"
+              action="action_server_board_agenda_email"
+              sequence="6"/>
+
     <menuitem id="menu_event_pl_report"
               name="Event P&amp;L Report"
               parent="menu_event_reports"
