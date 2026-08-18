@@ -1630,20 +1630,19 @@ class ProjectTask(models.Model):
             + (b.room_id.x_cleaning_fee or 0.0)
             + (b.room_id.x_service_fee or 0.0)
             for b in bookings) or room_income
-        # A Celebration of Life for a member gives the FACILITY away entirely
-        # (billed room = $0). Otherwise the room bills at the set price, with
-        # any manual member discount applied on top.
-        is_col = (self.x_event_type == 'memorial' and self.x_member_number
-                  and self.x_member_number != '000000000')
-        if is_col:
-            rooms_net = 0.0
-        elif self.x_discount_reason and self.x_discount_type == 'amount':
+        # The room bills at the PRICE SET ON THE ROOMS TAB — that set price IS
+        # the room discount decision (set it to $0 to give the space away for
+        # a Celebration of Life, or to a reduced rate for a member courtesy).
+        # An optional manual reason/percent/amount reduces the set price on top.
+        if self.x_discount_reason and self.x_discount_type == 'amount':
             rooms_net = max(room_income - (self.x_discount_value or 0.0), 0.0)
         elif self.x_discount_reason:
             rooms_net = room_income * (
                 1.0 - (self.x_discount_pct or 0.0) / 100.0)
         else:
             rooms_net = room_income
+        # Discount = the room's retail default minus what we actually charge
+        # (i.e. exactly the amount taken off the room rental).
         discount = max(room_retail - rooms_net, 0.0)
         return rooms_net, discount
 
@@ -1656,12 +1655,16 @@ class ProjectTask(models.Model):
             'officer_board': _("Officer / Board Approved Discount"),
             'other': _("Discount"),
         }
+        if self.x_discount_reason:
+            return labels[self.x_discount_reason]
         is_col = (self.x_event_type == 'memorial' and self.x_member_number
                   and self.x_member_number != '000000000')
         if is_col:
-            return _("Celebration of Life (member) - facility waived")
-        if self.x_discount_reason:
-            return labels[self.x_discount_reason]
+            # $0 room = a full waiver; a reduced (non-zero) room is a courtesy.
+            _rooms_net, _disc = self._event_room_discount()
+            if _rooms_net <= 0.005:
+                return _("Celebration of Life (member) - facility waived")
+            return _("Celebration of Life (member) - room courtesy")
         return _("Room Rental Discount")
 
     @api.constrains('x_discount_reason', 'x_discount_note',
@@ -3491,13 +3494,14 @@ class ProjectTask(models.Model):
     def _event_invoice_base(self):
         """Return (base, discount_pct, deposit_pct) for invoice math.
 
-        ``base`` is the quote total, which is ALREADY net of the member
-        discount and any COL waiver (those are line discounts on the quote),
-        so the invoice does NOT discount again — disc is 0.
+        ``base`` is the LIVE customer total (x_total_billed) — already net of
+        the room / member / COL discount — so the invoice reflects current
+        numbers even if the quote document wasn't rebuilt. disc is 0 (the
+        room discount is surfaced as its own line, not applied again).
         """
         self.ensure_one()
         settings = self._event_settings()
-        base = self.x_quote_total or self.x_total_billed or 0.0
+        base = self.x_total_billed or self.x_quote_total or 0.0
         disc = 0.0
         deposit_pct = (settings.x_deposit_pct if settings else 50.0) or 0.0
         return base, disc, deposit_pct
@@ -3782,7 +3786,17 @@ class ProjectTask(models.Model):
         if self.x_is_elks_event:
             raise UserError(_(
                 "This is an Elks Event — it is not billed."))
-        base = self.x_quote_total or self.x_total_billed or 0.0
+        # Always refresh the quote first so the invoice bills from CURRENT
+        # numbers (room waiver, event costs, coordinator, discount) — no need
+        # to remember to click Build Quote separately.
+        if self.x_sale_order_id:
+            try:
+                self._sync_quote_lines()
+            except Exception as e:  # noqa: BLE001 - don't block invoicing
+                _logger.warning(
+                    "Quote refresh before invoice failed for %s: %s",
+                    self.id, e)
+        base = self.x_total_billed or self.x_quote_total or 0.0
         if base <= 0:
             raise UserError(_(
                 "Nothing to invoice. Build the event quote first."))
