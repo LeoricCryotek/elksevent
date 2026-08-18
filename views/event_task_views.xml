@@ -617,7 +617,10 @@
                                    string="Event Costs Subtotal"/>
                             <label for="x_coordinator_fee"/>
                             <div class="o_row">
-                                <field name="x_coordinator_fee"/>
+                                <field name="x_coordinator_fee"
+                                       readonly="not x_coordinator_fee_manual"/>
+                                <field name="x_coordinator_fee_manual"/>
+                                <span>Custom fee</span>
                                 <span class="text-muted"
                                       invisible="not x_coordinator_fee_variance">
                                     (suggested <field name="x_coordinator_fee_auto" readonly="1" nolabel="1"/>,

@@ -698,14 +698,21 @@ class ProjectTask(models.Model):
         "Coordinator Fee %", default=20.0,
         help="Percentage of room income for event coordinator compensation.",
     )
-    # Coordinator fee is now an EDITABLE amount: it auto-seeds from the computed
-    # rate (x_coordinator_fee_auto) but staff can overwrite it per event. It is
-    # part of the customer's single Event Rental price.
+    # Coordinator fee AUTO-TRACKS the suggested rate (room RETAIL x %, or the
+    # fixed rate). It stays in sync as the rooms change UNLESS "Custom fee" is
+    # ticked, which lets staff pin a manual amount (e.g. $0 for an unsponsored
+    # event). Part of the customer's single Event Rental price.
     x_coordinator_fee = fields.Monetary(
         "Coordinator Fee", currency_field='x_currency_id', tracking=True,
-        help="Auto-fills from the rate; adjust as needed. Included in the "
-             "Event Rental price.",
+        compute='_compute_coordinator_fee', store=True, readonly=False,
+        help="Auto-fills from the room's retail rate x the coordinator %. Tick "
+             "'Custom fee' to pin a manual amount. Included in the Event "
+             "Rental price.",
     )
+    x_coordinator_fee_manual = fields.Boolean(
+        "Custom Coordinator Fee", default=False, tracking=True,
+        help="When ticked, the coordinator fee is NOT auto-updated from the "
+             "room rate — type any amount (e.g. $0 for an unsponsored event).")
     x_coordinator_employee_id = fields.Many2one(
         'hr.employee', string="Event Coordinator",
         help="The employee who coordinated this event. Use 'Pay Coordinator' "
@@ -1540,23 +1547,47 @@ class ProjectTask(models.Model):
             g = rec.x_guest_count or 0
             rec.x_bartender_count = math.ceil(g / per) if g else 0
 
+    def _coordinator_auto_value(self):
+        """The suggested coordinator fee: the fixed rate, or the coordinator %
+        of the room's DEFAULT (retail) rate + fees — never the charged/billed
+        (discounted) amount, so a member or COL discount can't shrink the pay.
+        Computed from the bookings directly (not x_room_retail) to avoid a
+        dependency cycle with the financials compute."""
+        self.ensure_one()
+        settings = self._event_settings()
+        if settings and settings.x_coordinator_fee_type == 'fixed':
+            return settings.x_coordinator_fixed_rate or 0.0
+        pct = self.x_coordinator_fee_pct or 0.0
+        if settings and settings.x_coordinator_percentage:
+            pct = settings.x_coordinator_percentage
+        retail = sum(
+            (b.room_id.x_room_rate or 0.0)
+            + (b.room_id.x_cleaning_fee or 0.0)
+            + (b.room_id.x_service_fee or 0.0)
+            for b in self.x_room_booking_ids)
+        if not retail:
+            retail = self.x_room_rental_rate or 0.0
+        return retail * (pct / 100.0)
+
+    @api.depends('x_room_booking_ids.room_id', 'x_room_booking_ids.subtotal',
+                 'x_room_rental_rate', 'x_coordinator_fee_pct',
+                 'x_coordinator_fee_manual')
+    def _compute_coordinator_fee(self):
+        """Auto-track the suggested fee unless 'Custom fee' is ticked."""
+        for rec in self:
+            if rec.x_coordinator_fee_manual:
+                # Preserve the manually pinned amount.
+                rec.x_coordinator_fee = rec.x_coordinator_fee
+            else:
+                rec.x_coordinator_fee = rec._coordinator_auto_value()
+
     @api.depends('x_room_retail', 'x_coordinator_fee_pct', 'x_coordinator_fee')
     def _compute_coordinator_auto(self):
-        """Suggested coordinator fee from the configured rate + the variance.
-
-        The percentage is taken on the room's DEFAULT (retail) rental rate —
-        NOT the charged/discounted rate — so a member or COL discount never
-        shrinks the coordinator's pay.
-        """
-        settings = self._event_settings()
+        """Suggested coordinator fee (retail-based) + the variance vs the fee
+        actually entered (non-zero only when 'Custom fee' pins a different
+        amount)."""
         for rec in self:
-            if settings and settings.x_coordinator_fee_type == 'fixed':
-                auto = settings.x_coordinator_fixed_rate or 0.0
-            else:
-                pct = rec.x_coordinator_fee_pct or 0.0
-                if settings and settings.x_coordinator_percentage:
-                    pct = settings.x_coordinator_percentage
-                auto = (rec.x_room_retail or 0.0) * (pct / 100.0)
+            auto = rec._coordinator_auto_value()
             rec.x_coordinator_fee_auto = auto
             rec.x_coordinator_fee_variance = (rec.x_coordinator_fee or 0.0) - auto
 
@@ -2418,14 +2449,14 @@ class ProjectTask(models.Model):
         # Labor section — see _compute_est_hours — not seeded here.)
 
     def action_add_coordinator_fee(self):
-        """Reset the coordinator fee to the suggested (auto) amount + rebuild.
+        """Reset the coordinator fee to the suggested (retail-based) amount.
 
-        The coordinator fee is now a field on the event (x_coordinator_fee)
-        that folds into the single Event Rental price. This button re-seeds it
-        from the configured rate; adjust the field by hand any time.
+        Clears the 'Custom fee' flag so the fee auto-tracks the room rate
+        again, then rebuilds the quote.
         """
         self.ensure_one()
-        self.x_coordinator_fee = self.x_coordinator_fee_auto
+        self.x_coordinator_fee_manual = False
+        self.x_coordinator_fee = self._coordinator_auto_value()
         if self.x_sale_order_id:
             self._sync_quote_lines()
         # Nudge if labor isn't captured when the lodge does setup/takedown
