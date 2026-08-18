@@ -136,11 +136,11 @@ class ProjectTask(models.Model):
     # SECTION: Manual discount (fields)
     # HUMAN: Staff choose when/why a discount applies (no automatic member
     #        discount). Pick a reason, then give it as either a percent or a
-    #        fixed dollar amount off the room + event-cost subtotal — the
-    #        coordinator fee is never discounted. A written note is required.
-    # AI: _discount_fraction() collapses either input to one fraction so the
-    #     pricing math stays proportional; _check_discount_note enforces the
-    #     note. member/nonprofit default to 50% via _onchange_discount_reason.
+    #        fixed dollar amount off the ROOM RENTAL only — event costs and the
+    #        coordinator fee are never discounted. A written note is required.
+    # AI: _event_room_discount() returns (rooms_net, discount) applied to the
+    #     room only; _check_discount_note enforces the note. member/nonprofit
+    #     default to 50% via _onchange_discount_reason.
     # ──────────────────────────────────────────────────────────────────
     x_discount_reason = fields.Selection([
         ('member', 'Member'),
@@ -157,12 +157,13 @@ class ProjectTask(models.Model):
              "or as a fixed dollar amount.")
     x_discount_pct = fields.Float(
         "Discount %", tracking=True,
-        help="Percent off the billable subtotal (rooms + event costs). Only "
-             "applied when Discount Type is Percent and a Reason is set.")
+        help="Percent off the ROOM RENTAL only (event costs are never "
+             "discounted). Applied when Discount Type is Percent and a Reason "
+             "is set.")
     x_discount_value = fields.Monetary(
         "Discount Amount", currency_field='x_currency_id', tracking=True,
-        help="Fixed dollar discount off the room + event-cost subtotal "
-             "(coordinator fee is never discounted). Applied when Discount "
+        help="Fixed dollar discount off the ROOM RENTAL only (event costs and "
+             "the coordinator fee are never discounted). Applied when Discount "
              "Type is Amount and a Reason is set.")
     x_discount_note = fields.Char(
         "Discount Note", tracking=True,
@@ -1570,21 +1571,40 @@ class ProjectTask(models.Model):
             self.x_discount_pct = 0.0
             self.x_discount_value = 0.0
 
-    def _discount_fraction(self):
-        """Effective discount as a fraction of the discountable base (rooms +
-        event costs; coordinator fee is never discounted). Works for both a
-        percent and a fixed-dollar discount so the rest of the pricing math
-        stays proportional (and the taxable/non-taxable split is preserved)."""
+    def _event_room_discount(self):
+        """The member / Celebration-of-Life discount, which applies to the
+        ROOM ONLY — never event costs or the coordinator fee.
+
+        Returns (rooms_net_billed, discount_from_retail):
+        - COL (memorial with a valid member #) waives the room entirely.
+        - Percent reason takes % off the charged room; Amount reason takes a
+          fixed dollar amount off the charged room.
+        - The reported discount is the room's RETAIL default minus what is
+          actually billed for the room (so a per-booking rate override also
+          shows as part of the discount, retail -> actual).
+        """
         self.ensure_one()
-        if not self.x_discount_reason:
-            return 0.0
-        if self.x_discount_type == 'amount':
-            base = (sum(self.x_room_booking_ids.mapped('subtotal'))
-                    or self.x_room_rental_rate or 0.0) + (
-                        self.x_eventcosts_total or 0.0)
-            amt = min(self.x_discount_value or 0.0, base)
-            return (amt / base) if base else 0.0
-        return (self.x_discount_pct or 0.0) / 100.0
+        bookings = self.x_room_booking_ids
+        room_income = (sum(bookings.mapped('subtotal'))
+                       or self.x_room_rental_rate or 0.0)
+        room_retail = sum(
+            (b.room_id.x_room_rate or 0.0)
+            + (b.room_id.x_cleaning_fee or 0.0)
+            + (b.room_id.x_service_fee or 0.0)
+            for b in bookings) or room_income
+        is_col = (self.x_event_type == 'memorial' and self.x_member_number
+                  and self.x_member_number != '000000000')
+        if is_col:
+            rooms_net = 0.0
+        elif self.x_discount_reason and self.x_discount_type == 'amount':
+            rooms_net = max(room_income - (self.x_discount_value or 0.0), 0.0)
+        elif self.x_discount_reason:
+            rooms_net = room_income * (
+                1.0 - (self.x_discount_pct or 0.0) / 100.0)
+        else:
+            rooms_net = room_income
+        discount = max(room_retail - rooms_net, 0.0)
+        return rooms_net, discount
 
     def _event_discount_label(self):
         """Human label for the discount, for the invoice / Financials."""
@@ -1717,26 +1737,18 @@ class ProjectTask(models.Model):
                 c.total for c in rec.x_cost_line_ids if c.x_taxable)
             ec_nontax = rec.x_eventcosts_total - ec_taxable
 
-            # Celebration-of-Life waives the room. The discount is now MANUAL:
-            # staff pick a reason + percent under Financials. Mirrors
-            # _sync_quote_lines so the Financials tab matches the quote.
-            is_col = (
-                rec.x_event_type == 'memorial'
-                and rec.x_member_number
-                and rec.x_member_number != '000000000')
-            disc = rec._discount_fraction()
-            rooms_net = 0.0 if is_col else room_income * (1.0 - disc)
-            factor = 1.0 - disc
+            # The member / Celebration-of-Life discount applies to the ROOM
+            # ONLY — never to event costs or the coordinator fee. rooms_net is
+            # the billed room after that discount (0 for a COL waiver).
+            rooms_net, room_disc = rec._event_room_discount()
 
-            # Taxable base = GOODS (rooms + items flagged Taxable), NET of any
-            # member discount. Services (coordinator + non-taxable items) are
-            # exempt. Computed LIVE here so tax updates the instant a Taxable
-            # box changes — it no longer waits for the quote to be rebuilt.
-            # Coordinator fee is NEVER discounted (it's built on the room retail
-            # cost and is the coordinator's pay), so it is added at full value.
-            rec.x_taxable_subtotal = rooms_net + ec_taxable * factor
+            # Taxable base = GOODS (rooms + items flagged Taxable). Event costs
+            # are billed at FULL (no discount); services (coordinator + items
+            # marked non-taxable) are exempt. Computed LIVE so tax updates the
+            # instant a Taxable box changes.
+            rec.x_taxable_subtotal = rooms_net + ec_taxable
             rec.x_nontaxable_subtotal = (
-                ec_nontax * factor + (rec.x_coordinator_fee or 0.0))
+                ec_nontax + (rec.x_coordinator_fee or 0.0))
             rec.x_event_tax_amount = rec.x_taxable_subtotal * rate
 
             customer_total = rec.x_taxable_subtotal + rec.x_nontaxable_subtotal
@@ -1786,12 +1798,9 @@ class ProjectTask(models.Model):
             rec.x_total_costs = (rec.x_cogs or 0.0) + po_total
             rec.x_net_income = rec.x_total_billed - rec.x_total_costs
 
-            # Discount dollar value = full LIST price minus what was billed.
-            # The room uses its RETAIL (default) rate here, so a member/COL
-            # room reduction or waiver shows as the discount (retail -> actual).
-            rec.x_discount_amount = (
-                room_retail + rec.x_eventcosts_total
-                + (rec.x_coordinator_fee or 0.0)) - rec.x_total_billed
+            # Discount dollar value = the ROOM's retail default minus the
+            # billed room (event costs are never discounted).
+            rec.x_discount_amount = room_disc
 
             # UBI: non-member room rentals are Unrelated Business Income.
             # Reserve the property-tax percentage on that room income.
@@ -2351,24 +2360,16 @@ class ProjectTask(models.Model):
         # only changes when staff press the "Coordinator Fee" button
         # (action_add_coordinator_fee), which sets it to the suggested amount.
 
-        # Celebration-of-Life (memorial with a valid member number) waives the
-        # ROOM. The discount is MANUAL: staff pick a reason + percent under
-        # Financials. Kept in sync with _compute_financials.
-        is_col = (
-            self.x_event_type == 'memorial'
-            and self.x_member_number
-            and self.x_member_number != '000000000'
-        )
-        disc = self._discount_fraction()
+        # The member / Celebration-of-Life discount applies to the ROOM ONLY
+        # (never event costs or the coordinator fee). Kept in sync with
+        # _compute_financials via the shared helper.
+        rooms_net, _room_disc = self._event_room_discount()
 
-        rooms = sum(self.x_room_booking_ids.mapped('subtotal'))
-        rooms_net = 0.0 if is_col else rooms * (1.0 - disc)
-
-        # Event Costs = customer charges. Apply the member rate; split by tax.
+        # Event Costs = customer charges, billed at FULL (not discounted).
         ec_taxable = 0.0
         ec_nontax = 0.0
         for c in self.x_cost_line_ids:
-            amt = (c.total or 0.0) * (1.0 - disc)
+            amt = (c.total or 0.0)
             if c.x_taxable:
                 ec_taxable += amt
             else:
@@ -3453,13 +3454,13 @@ class ProjectTask(models.Model):
         """
         self.ensure_one()
         s = self._event_settings()
-        # Honour either a percent OR a fixed-amount discount (via the shared
-        # helper) so the itemized charges net down to x_total_billed and the
-        # GL breakout reconciles for both discount types.
-        disc = self._discount_fraction()
-        factor = 1.0 - disc
-        is_col = (self.x_event_type == 'memorial' and self.x_member_number
-                  and self.x_member_number != '000000000')
+        # The discount applies to the ROOM only. Scale each room component by
+        # rooms_net / room_income (0 for a COL waiver); event costs are billed
+        # at FULL. The itemized charges still net to x_total_billed.
+        rooms_net, _room_disc = self._event_room_discount()
+        room_income = (sum(self.x_room_booking_ids.mapped('subtotal'))
+                       or self.x_room_rental_rate or 0.0)
+        room_factor = (rooms_net / room_income) if room_income else 0.0
 
         def acct(product):
             tmpl = product.product_tmpl_id if product else False
@@ -3469,7 +3470,6 @@ class ProjectTask(models.Model):
         charges = []
         fac_prod = s.x_facility_product_id if s else False
         clean_prod = s.x_cleaning_product_id if s else False
-        room_factor = 0.0 if is_col else factor
         for rb in self.x_room_booking_ids:
             rprod = rb.room_id.x_product_id or fac_prod
             rate = (rb.rate or 0.0) * room_factor
@@ -3491,7 +3491,7 @@ class ProjectTask(models.Model):
             'cleaning': s.x_cleaning_product_id, 'other': fac_prod,
         } if s else {}
         for cl in self.x_cost_line_ids:
-            net = (cl.total or 0.0) * factor
+            net = (cl.total or 0.0)  # event costs are not discounted
             if not net:
                 continue
             prod = cat_prod.get(cl.cost_type_id.category) or fac_prod
@@ -3567,6 +3567,13 @@ class ProjectTask(models.Model):
         }
         for k, v in repl.items():
             inner = inner.replace(k, v)
+        # The website page stores its content double-escaped, and re-serializing
+        # the arch escapes it again — so "&" arrives as "&amp;amp;" and prints
+        # literally. Collapse ONE level of double-escaping for common entities
+        # (never producing a bare "&", which keeps the HTML valid).
+        inner = re.sub(
+            r'&amp;(amp;|lt;|gt;|quot;|apos;|nbsp;|#\d+;|#x[0-9a-fA-F]+;)',
+            r'&\1', inner)
         return Markup(inner)
 
     def _event_invoice_terms(self):
@@ -3748,47 +3755,56 @@ class ProjectTask(models.Model):
 
         base, _disc, deposit_pct = self._event_invoice_base()
         deposit_gross = base * deposit_pct / 100.0
-        # Member / COL discount to surface on the invoice (retail -> actual).
-        disc_total = max(self.x_discount_amount or 0.0, 0.0)
-        show_disc = (disc_total > 0.005
+        facility = settings.x_facility_product_id if settings else False
+        dep_product = settings.x_deposit_product_id if settings else False
+
+        # Itemize at RETAIL so the customer sees the room's default rate + the
+        # other charges, then the discount that brings it to the billed total:
+        #   Room (retail) + Event Costs & Services − Discount = billed.
+        room_retail = self.x_room_retail or 0.0
+        other_full = (self.x_eventcosts_total or 0.0) + (
+            self.x_coordinator_fee or 0.0)
+        retail_total = room_retail + other_full
+        disc_total = max(retail_total - base, 0.0)
+        # Only the FINAL invoice itemizes retail + discount; the deposit is a
+        # single reservation-fee (down-payment) line.
+        show_disc = (kind == 'final' and disc_total > 0.005
                      and (not settings or settings.x_invoice_show_discount))
         disc_label = self._event_discount_label()
-        lines = []
+
+        # Which portion of the event this invoice bills, and its product.
         if kind == 'final' and self.x_deposit_received:
-            # Show the FULL rental, then credit the deposit already paid so the
-            # customer sees: total − deposit = balance. (Net revenue = balance;
-            # the deposit invoice carries the deposit portion, no double count.)
-            facility = settings.x_facility_product_id if settings else False
-            if show_disc:
-                lines.append(_line(_("Facility Usage and Rental (retail)"),
-                                   base + disc_total, facility))
-                lines.append(_line(_("Less: %s", disc_label),
-                                   -disc_total, facility))
-            else:
-                lines.append(_line(_("Facility Usage and Rental"), base,
-                                   facility))
+            portion, line_prod, label = 1.0, facility, _("Final")
+        elif kind == 'deposit':
+            portion, line_prod, label = (deposit_pct / 100.0, dep_product,
+                                         _("Reservation Fee"))
+        else:  # final, no deposit on file
+            portion, line_prod, label = (1.0 - deposit_pct / 100.0, facility,
+                                         _("Facility Usage and Rental"))
+
+        lines = []
+        if show_disc:
+            rlabel = (_("Reservation Fee - Facility / Room Rental (retail)")
+                      if kind == 'deposit'
+                      else _("Facility / Room Rental (retail)"))
+            if room_retail:
+                lines.append(_line(rlabel, room_retail * portion, line_prod))
+            if other_full:
+                lines.append(_line(_("Event Costs & Services"),
+                                   other_full * portion, line_prod))
+            lines.append(_line(_("Less: %s", disc_label),
+                               -disc_total * portion, line_prod))
+        else:
+            gross, _d, product, plabel = self._event_invoice_portion(kind)
+            lines.append(_line(plabel, gross, product))
+
+        # Final invoice after a deposit: credit the reservation fee already paid.
+        if kind == 'final' and self.x_deposit_received:
             dep_label = _("Less: Reservation Fee / Deposit paid")
             if self.x_deposit_date:
                 dep_label = _("Less: Reservation Fee / Deposit paid %s",
                               self.x_deposit_date)
-            dep_product = settings.x_deposit_product_id if settings else False
             lines.append(_line(dep_label, -deposit_gross, dep_product))
-            label = _("Final")
-        else:
-            gross, _d, product, label = self._event_invoice_portion(kind)
-            if show_disc:
-                # This invoice covers a portion of the event (deposit % or the
-                # remaining %); show the discount pro-rated to that portion so
-                # the net still equals `gross`.
-                portion = (deposit_pct / 100.0) if kind == 'deposit' else (
-                    1.0 - deposit_pct / 100.0)
-                disc_portion = disc_total * portion
-                lines.append(_line(_("%s (retail)", label),
-                                   gross + disc_portion, product))
-                lines.append(_line(_("Less: %s", disc_label),
-                                   -disc_portion, product))
-            else:
-                lines.append(_line(label, gross, product))
 
         move = self.env['account.move'].create({
             'move_type': 'out_invoice',
