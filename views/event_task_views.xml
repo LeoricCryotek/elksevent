@@ -653,9 +653,9 @@
                                  style="margin:2px 0; padding:4px 8px;">
                                 <strong>Discount applied: <field name="x_discount_amount" readonly="1" nolabel="1" class="oe_inline"/></strong>
                                 <span invisible="not x_discount_reason"> (<field name="x_discount_reason" readonly="1" nolabel="1" class="oe_inline"/>)</span>
-                                <div class="text-muted" invisible="x_room_retail == x_room_income">
+                                <div class="text-muted" invisible="x_room_retail == x_room_net">
                                     Rooms: retail <field name="x_room_retail" readonly="1" nolabel="1" class="oe_inline"/>
-                                    &#8594; charged <field name="x_room_income" readonly="1" nolabel="1" class="oe_inline"/>
+                                    &#8594; billed <field name="x_room_net" readonly="1" nolabel="1" class="oe_inline"/>
                                 </div>
                             </div>
                             <field name="x_total_billed" readonly="1"

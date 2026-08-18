@@ -628,6 +628,12 @@ class ProjectTask(models.Model):
              "per-event override or member/COL discount. Drives the "
              "coordinator fee base and the member-discount amount.",
     )
+    x_room_net = fields.Monetary(
+        "Room Rental (billed)", currency_field='x_currency_id',
+        compute='_compute_financials', store=True,
+        help="What the customer is actually billed for the room after the "
+             "member / Celebration-of-Life discount ($0 for a COL waiver).",
+    )
 
     # ------------------------------------------------------------------
     # Cost lines (the 'PO section')
@@ -1624,8 +1630,14 @@ class ProjectTask(models.Model):
             + (b.room_id.x_cleaning_fee or 0.0)
             + (b.room_id.x_service_fee or 0.0)
             for b in bookings) or room_income
-        # Bill the room at the SET price; apply any manual discount on top.
-        if self.x_discount_reason and self.x_discount_type == 'amount':
+        # A Celebration of Life for a member gives the FACILITY away entirely
+        # (billed room = $0). Otherwise the room bills at the set price, with
+        # any manual member discount applied on top.
+        is_col = (self.x_event_type == 'memorial' and self.x_member_number
+                  and self.x_member_number != '000000000')
+        if is_col:
+            rooms_net = 0.0
+        elif self.x_discount_reason and self.x_discount_type == 'amount':
             rooms_net = max(room_income - (self.x_discount_value or 0.0), 0.0)
         elif self.x_discount_reason:
             rooms_net = room_income * (
@@ -1644,12 +1656,12 @@ class ProjectTask(models.Model):
             'officer_board': _("Officer / Board Approved Discount"),
             'other': _("Discount"),
         }
-        if self.x_discount_reason:
-            return labels[self.x_discount_reason]
         is_col = (self.x_event_type == 'memorial' and self.x_member_number
                   and self.x_member_number != '000000000')
         if is_col:
-            return _("Celebration of Life (member) - room rate")
+            return _("Celebration of Life (member) - facility waived")
+        if self.x_discount_reason:
+            return labels[self.x_discount_reason]
         return _("Room Rental Discount")
 
     @api.constrains('x_discount_reason', 'x_discount_note',
@@ -1726,6 +1738,7 @@ class ProjectTask(models.Model):
         'x_room_rental_rate',
         'x_cost_line_ids.x_line_cogs',
         'x_cost_line_ids.cost_type_id',
+        'x_cost_line_ids.x_auto_source',
         'x_deposit_amount', 'x_deposit_received',
         'x_purchase_order_ids.amount_total',
         'x_purchase_order_ids.state',
@@ -1772,6 +1785,7 @@ class ProjectTask(models.Model):
             # ONLY — never to event costs or the coordinator fee. rooms_net is
             # the billed room after that discount (0 for a COL waiver).
             rooms_net, room_disc = rec._event_room_discount()
+            rec.x_room_net = rooms_net
 
             # Taxable base = GOODS (rooms + items flagged Taxable). Event costs
             # are billed at FULL (no discount); services (coordinator + items
@@ -1788,35 +1802,49 @@ class ProjectTask(models.Model):
             rec.x_subtotal = customer_total
             rec.x_event_total = customer_total
 
-            # Real costs to the lodge = vendor POs + goods COGS + labor that is
-            # ACTUALLY PAID. Labor is only a cost once it is clocked by a
-            # non-volunteer (payroll) employee — volunteer hours cost nothing,
-            # so the billed labor stays as profit until a paid person works it.
+            # Real costs to the lodge = vendor POs + goods COGS + labor.
+            # Labor is PROJECTED then ACTUAL: before anyone works a category we
+            # use the estimated labor COGS on the cost lines; once someone
+            # clocks in for that category we switch to the actual PAID labor
+            # (which is $0 if only volunteers worked it — volunteers cost
+            # nothing).
             po_total = sum(
                 rec.x_purchase_order_ids.filtered(
                     lambda p: p.state != 'cancel'
                 ).mapped('amount_total')
             )
-            # Goods COGS = non-labor cost lines only (catering food, supplies,
-            # gratuity pass-through, ...). The auto LABOR lines are the billing
-            # basis, not a cost, so their COGS is excluded here.
             cats = {'catering': 0.0, 'bar': 0.0, 'event': 0.0, 'cleaning': 0.0}
             goods_cogs = 0.0
+            est_labor = {'catering': 0.0, 'bar': 0.0, 'event': 0.0,
+                         'cleaning': 0.0, 'other': 0.0}
             for c in rec.x_cost_line_ids:
-                if (c.x_auto_source or '').startswith('labor'):
-                    continue
-                cogs = c.x_line_cogs or 0.0
-                goods_cogs += cogs
                 cat = c.cost_type_id.category
+                cogs = c.x_line_cogs or 0.0
+                if (c.x_auto_source or '').startswith('labor'):
+                    # Estimated labor cost, held by category as the projection.
+                    est_labor[cat if cat in est_labor else 'other'] += cogs
+                    continue
+                goods_cogs += cogs
                 if cat in cats:
                     cats[cat] += cogs
+            # Which categories have anyone clocked in (paid OR volunteer)?
+            role_cat = {'event': 'event', 'bartender': 'bar',
+                        'kitchen': 'catering', 'custodial': 'cleaning'}
+            worked = set()
+            for att in rec.x_attendance_ids:
+                wc = role_cat.get(att.x_event_role or 'event')
+                if wc:
+                    worked.add(wc)
             # Actual PAID labor (non-volunteer attendance) by category.
             paid = rec._paid_labor_by_category()
-            for cat in cats:
-                cats[cat] += paid.get(cat, 0.0)
-            paid_labor = sum(paid.values())
+            labor_total = est_labor['other']
+            for cat in ('catering', 'bar', 'event', 'cleaning'):
+                lab = (paid.get(cat, 0.0) if cat in worked
+                       else est_labor.get(cat, 0.0))
+                cats[cat] += lab
+                labor_total += lab
 
-            rec.x_cogs = goods_cogs + paid_labor
+            rec.x_cogs = goods_cogs + labor_total
             rec.x_cat_catering = cats['catering']
             rec.x_cat_bar = cats['bar']
             rec.x_cat_event = cats['event']
