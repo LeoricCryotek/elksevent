@@ -3811,13 +3811,13 @@ class ProjectTask(models.Model):
         tax_cmd = self._event_invoice_tax_cmd()
         partner = self._get_event_partner()
 
-        def _line(label, amount, product):
+        def _line(label, amount, product, taxable=True):
             vals = {
                 'name': self._event_invoice_line_name(label),
                 'quantity': 1,
                 'price_unit': amount,
                 'discount': 0.0,
-                'tax_ids': tax_cmd,
+                'tax_ids': tax_cmd if taxable else [(5, 0, 0)],
             }
             if product:
                 vals['product_id'] = product.id
@@ -3827,57 +3827,71 @@ class ProjectTask(models.Model):
             return (0, 0, vals)
 
         base, _disc, deposit_pct = self._event_invoice_base()
-        deposit_gross = base * deposit_pct / 100.0
         facility = settings.x_facility_product_id if settings else False
         dep_product = settings.x_deposit_product_id if settings else False
 
-        # Itemize at RETAIL so the customer sees the room's default rate + the
-        # other charges, then the discount that brings it to the billed total:
-        #   Room (retail) + Event Costs & Services − Discount = billed.
+        # Split by TAX exactly like the quote: only GOODS are taxed (the room +
+        # any event-cost line flagged Taxable). Services (non-taxable event
+        # costs + the coordinator fee) are exempt. This keeps the invoice tax
+        # equal to the quote tax.
+        rooms_net, room_disc = self._event_room_discount()
         room_retail = self.x_room_retail or 0.0
-        other_full = (self.x_eventcosts_total or 0.0) + (
-            self.x_coordinator_fee or 0.0)
-        retail_total = room_retail + other_full
-        disc_total = max(retail_total - base, 0.0)
-        # Only the FINAL invoice itemizes retail + discount; the deposit is a
-        # single reservation-fee (down-payment) line.
-        show_disc = (kind == 'final' and disc_total > 0.005
-                     and (not settings or settings.x_invoice_show_discount))
+        ec_taxable = sum(c.total for c in self.x_cost_line_ids if c.x_taxable)
+        ec_nontax = (self.x_eventcosts_total or 0.0) - ec_taxable
+        coord = self.x_coordinator_fee or 0.0
+        taxable_net = rooms_net + ec_taxable          # what gets taxed
+        nontax_net = ec_nontax + coord                # exempt
         disc_label = self._event_discount_label()
 
         # Which portion of the event this invoice bills, and its product.
         if kind == 'final' and self.x_deposit_received:
-            portion, line_prod, label = 1.0, facility, _("Final")
+            portion, line_prod = 1.0, facility
         elif kind == 'deposit':
-            portion, line_prod, label = (deposit_pct / 100.0, dep_product,
-                                         _("Reservation Fee"))
+            portion, line_prod = deposit_pct / 100.0, dep_product
         else:  # final, no deposit on file
-            portion, line_prod, label = (1.0 - deposit_pct / 100.0, facility,
-                                         _("Facility Usage and Rental"))
+            portion, line_prod = 1.0 - deposit_pct / 100.0, facility
+
+        # The FINAL invoice itemizes the room at retail + the discount line;
+        # the deposit is a plain reservation-fee split.
+        show_disc = (kind == 'final' and room_disc > 0.005
+                     and (not settings or settings.x_invoice_show_discount))
 
         lines = []
+        # ---- TAXABLE side (goods) ----
         if show_disc:
-            rlabel = (_("Reservation Fee - Facility / Room Rental (retail)")
-                      if kind == 'deposit'
-                      else _("Facility / Room Rental (retail)"))
             if room_retail:
-                lines.append(_line(rlabel, room_retail * portion, line_prod))
-            if other_full:
-                lines.append(_line(_("Event Costs & Services"),
-                                   other_full * portion, line_prod))
+                lines.append(_line(_("Facility / Room Rental (retail)"),
+                                   room_retail * portion, line_prod, True))
+            if ec_taxable:
+                lines.append(_line(_("Taxable Event Costs"),
+                                   ec_taxable * portion, line_prod, True))
             lines.append(_line(_("Less: %s", disc_label),
-                               -disc_total * portion, line_prod))
-        else:
-            gross, _d, product, plabel = self._event_invoice_portion(kind)
-            lines.append(_line(plabel, gross, product))
+                               -room_disc * portion, line_prod, True))
+        elif taxable_net:
+            tlabel = (_("Reservation Fee") if kind == 'deposit'
+                      else _("Facility Usage and Rental"))
+            lines.append(_line(tlabel, taxable_net * portion, line_prod, True))
+        # ---- NON-TAXABLE side (services + coordinator) ----
+        if nontax_net:
+            slabel = (_("Reservation Fee - services")
+                      if kind == 'deposit'
+                      else _("Event Services (non-taxable)"))
+            lines.append(_line(slabel, nontax_net * portion, line_prod, False))
 
-        # Final invoice after a deposit: credit the reservation fee already paid.
+        # Final invoice after a deposit: credit the deposit already paid,
+        # split by tax so the tax still nets out correctly.
         if kind == 'final' and self.x_deposit_received:
-            dep_label = _("Less: Reservation Fee / Deposit paid")
-            if self.x_deposit_date:
-                dep_label = _("Less: Reservation Fee / Deposit paid %s",
-                              self.x_deposit_date)
-            lines.append(_line(dep_label, -deposit_gross, dep_product))
+            dp = deposit_pct / 100.0
+            suffix = (_(" %s", self.x_deposit_date) if self.x_deposit_date
+                      else "")
+            if taxable_net:
+                lines.append(_line(
+                    _("Less: Deposit paid%s", suffix),
+                    -taxable_net * dp, dep_product, True))
+            if nontax_net:
+                lines.append(_line(
+                    _("Less: Deposit paid - services%s", suffix),
+                    -nontax_net * dp, dep_product, False))
 
         move = self.env['account.move'].create({
             'move_type': 'out_invoice',
@@ -3895,7 +3909,9 @@ class ProjectTask(models.Model):
             self._attach_event_agreement(move)
         self.message_post(
             body=_("<b>%(label)s invoice created</b>: %(link)s",
-                   label=label, link=move._get_html_link()),
+                   label=(_("Reservation Fee") if kind == 'deposit'
+                          else _("Final")),
+                   link=move._get_html_link()),
             subtype_xmlid='mail.mt_note',
         )
         return {
