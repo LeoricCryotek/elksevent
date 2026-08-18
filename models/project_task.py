@@ -1603,16 +1603,17 @@ class ProjectTask(models.Model):
             self.x_discount_value = 0.0
 
     def _event_room_discount(self):
-        """The member / Celebration-of-Life discount, which applies to the
-        ROOM ONLY — never event costs or the coordinator fee.
+        """The room discount, which applies to the ROOM ONLY — never event
+        costs or the coordinator fee.
 
         Returns (rooms_net_billed, discount_from_retail):
-        - COL (memorial with a valid member #) waives the room entirely.
-        - Percent reason takes % off the charged room; Amount reason takes a
-          fixed dollar amount off the charged room.
+        - The room BILLS at the price set on the Rooms tab (the booking
+          subtotals). Set it to $0 there to give the space away (e.g. a
+          Celebration of Life); set a reduced rate for a member courtesy.
+        - An optional manual reason/percent/amount reduces the set price
+          further.
         - The reported discount is the room's RETAIL default minus what is
-          actually billed for the room (so a per-booking rate override also
-          shows as part of the discount, retail -> actual).
+          actually billed, i.e. exactly what was taken off the room rental.
         """
         self.ensure_one()
         bookings = self.x_room_booking_ids
@@ -1623,11 +1624,8 @@ class ProjectTask(models.Model):
             + (b.room_id.x_cleaning_fee or 0.0)
             + (b.room_id.x_service_fee or 0.0)
             for b in bookings) or room_income
-        is_col = (self.x_event_type == 'memorial' and self.x_member_number
-                  and self.x_member_number != '000000000')
-        if is_col:
-            rooms_net = 0.0
-        elif self.x_discount_reason and self.x_discount_type == 'amount':
+        # Bill the room at the SET price; apply any manual discount on top.
+        if self.x_discount_reason and self.x_discount_type == 'amount':
             rooms_net = max(room_income - (self.x_discount_value or 0.0), 0.0)
         elif self.x_discount_reason:
             rooms_net = room_income * (
@@ -1638,19 +1636,21 @@ class ProjectTask(models.Model):
         return rooms_net, discount
 
     def _event_discount_label(self):
-        """Human label for the discount, for the invoice / Financials."""
+        """Human label for the room-rental discount (invoice / Financials)."""
         self.ensure_one()
-        is_col = (self.x_event_type == 'memorial' and self.x_member_number
-                  and self.x_member_number != '000000000')
-        if is_col:
-            return _("Celebration of Life (member) - facility waived")
         labels = {
             'member': _("Member Discount"),
             'nonprofit': _("Non-Profit Discount"),
             'officer_board': _("Officer / Board Approved Discount"),
             'other': _("Discount"),
         }
-        return labels.get(self.x_discount_reason, _("Member Discount"))
+        if self.x_discount_reason:
+            return labels[self.x_discount_reason]
+        is_col = (self.x_event_type == 'memorial' and self.x_member_number
+                  and self.x_member_number != '000000000')
+        if is_col:
+            return _("Celebration of Life (member) - room rate")
+        return _("Room Rental Discount")
 
     @api.constrains('x_discount_reason', 'x_discount_note',
                     'x_discount_pct', 'x_discount_value', 'x_discount_type')
