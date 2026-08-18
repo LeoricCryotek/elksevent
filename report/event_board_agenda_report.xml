@@ -27,7 +27,6 @@
     <record id="action_server_board_agenda_print" model="ir.actions.server">
         <field name="name">Board Agenda (Present to Board)</field>
         <field name="model_id" ref="project.model_project_task"/>
-        <field name="binding_type">action</field>
         <field name="state">code</field>
         <field name="code">action = model._board_agenda_report_action()</field>
     </record>
@@ -36,7 +35,6 @@
     <record id="action_server_board_agenda_email" model="ir.actions.server">
         <field name="name">Email Board Agenda</field>
         <field name="model_id" ref="project.model_project_task"/>
-        <field name="binding_type">action</field>
         <field name="state">code</field>
         <field name="code">action = model.action_email_board_agenda()</field>
     </record>

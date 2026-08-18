@@ -10,6 +10,8 @@
             <xpath expr="//field[@name='check_out']" position="after">
                 <field name="x_event_id"/>
                 <field name="x_event_role" invisible="not x_event_id"/>
+                <field name="x_event_cost_line_id" invisible="not x_event_id"
+                       options="{'no_create': True}"/>
             </xpath>
         </field>
     </record>
@@ -23,6 +25,8 @@
             <xpath expr="//field[@name='worked_hours']" position="after">
                 <field name="x_event_id" optional="hide"/>
                 <field name="x_event_role" optional="hide"/>
+                <field name="x_event_cost_line_id" optional="hide"
+                       options="{'no_create': True}"/>
             </xpath>
         </field>
     </record>

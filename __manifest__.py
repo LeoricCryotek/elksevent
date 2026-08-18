@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Elks Event Bookings',
-    'version': '19.0.9.5.0',
+    'version': '19.0.9.11.0',
     'category': 'Services/Project',
     'summary': 'Facility event booking, board approval, room billing, and P&L reporting',
     'description': """
@@ -47,6 +47,7 @@ Key features
         'mail',
         'website',
         'event',
+        'survey',
         'account',
         'purchase',
         'sale_management',
@@ -63,6 +64,7 @@ Key features
         'data/event_checklist_data.xml',
         'data/event_cost_types.xml',
         'data/event_mail_templates.xml',
+        'data/event_after_action_mail.xml',
         'data/website_form_data.xml',
         'wizard/event_approval_wizard_views.xml',
         'wizard/event_add_hours_wizard_views.xml',
@@ -76,6 +78,7 @@ Key features
         'report/event_callout_report.xml',
         'report/event_payment_report.xml',
         'report/event_board_agenda_report.xml',
+        'report/event_insurance_worksheet.xml',
         'views/event_checklist_views.xml',
         'views/event_product_views.xml',
         'views/event_task_views.xml',
@@ -86,6 +89,7 @@ Key features
         'views/website_event_form.xml',
         'views/event_terms_page.xml',
         'views/event_form_snippet.xml',
+        'views/portal_callout_templates.xml',
     ],
     'assets': {},
     'installable': True,

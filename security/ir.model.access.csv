@@ -28,3 +28,9 @@ access_event_attendance_deptmgr,hr.attendance.event.deptmgr,hr_attendance.model_
 access_event_access_window_coord,elks.event.access.window.coordinator,model_elks_event_access_window,elksevent.group_event_coordinator,1,1,1,1
 access_event_access_window_user,elks.event.access.window.user,model_elks_event_access_window,project.group_project_user,1,0,0,0
 access_event_access_window_deptmgr,elks.event.access.window.deptmgr,model_elks_event_access_window,elksevent.group_event_dept_manager,1,1,1,1
+access_event_survey_survey_coord,survey.survey.event.coord,survey.model_survey_survey,elksevent.group_event_coordinator,1,0,0,0
+access_event_survey_user_input_coord,survey.user_input.event.coord,survey.model_survey_user_input,elksevent.group_event_coordinator,1,0,0,0
+access_event_callout_coord,elks.event.callout.coord,model_elks_event_callout,elksevent.group_event_coordinator,1,1,1,1
+access_event_callout_user,elks.event.callout.user,model_elks_event_callout,project.group_project_user,1,0,0,0
+access_event_callout_deptmgr,elks.event.callout.deptmgr,model_elks_event_callout,elksevent.group_event_dept_manager,1,1,0,0
+access_event_callout_portal,elks.event.callout.portal,model_elks_event_callout,base.group_portal,1,0,0,0

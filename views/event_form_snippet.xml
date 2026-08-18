@@ -90,6 +90,43 @@
                             </div>
                         </div>
 
+                        <!-- Elk member? (checkbox) -->
+                        <div data-name="Field" class="s_website_form_field mb-3 col-12"
+                             data-type="boolean">
+                            <div class="row s_col_no_resize s_col_no_bgcolor">
+                                <label class="col-form-label col-sm-auto s_website_form_label"
+                                       style="width: 200px" for="elksevt_member">
+                                    <span class="s_website_form_label_content">Are you an Elk member?</span>
+                                </label>
+                                <div class="col-sm">
+                                    <div class="form-check">
+                                        <input class="form-check-input s_website_form_input"
+                                               type="checkbox" name="x_is_member"
+                                               value="1" id="elksevt_member"/>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Member Number — shown only when Elk member is ticked -->
+                        <div data-name="Field" class="s_website_form_field mb-3 col-12"
+                             data-type="char"
+                             data-visibility="conditional"
+                             data-visibility-dependency="x_is_member"
+                             data-visibility-comparator="selected">
+                            <div class="row s_col_no_resize s_col_no_bgcolor">
+                                <label class="col-form-label col-sm-auto s_website_form_label"
+                                       style="width: 200px" for="elksevt_membernum">
+                                    <span class="s_website_form_label_content">Member Number</span>
+                                </label>
+                                <div class="col-sm">
+                                    <input class="form-control s_website_form_input"
+                                           type="text" name="x_member_number"
+                                           placeholder="e.g. 12345" id="elksevt_membernum"/>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Event Type -->
                         <div data-name="Field" class="s_website_form_field mb-3 col-12"
                              data-type="selection">
@@ -111,6 +148,63 @@
                                         <option value="holiday">Holiday Party</option>
                                         <option value="other">Other</option>
                                     </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Celebration of Life: honoree Elk details (shown when
+                             Event Type is Memorial / Celebration of Life) -->
+                        <div data-name="Field" class="s_website_form_field mb-3 col-12"
+                             data-type="boolean"
+                             data-visibility="conditional"
+                             data-visibility-dependency="x_event_type"
+                             data-visibility-comparator="equal"
+                             data-visibility-condition="memorial">
+                            <div class="row s_col_no_resize s_col_no_bgcolor">
+                                <label class="col-form-label col-sm-auto s_website_form_label"
+                                       style="width: 200px" for="elksevt_colelk">
+                                    <span class="s_website_form_label_content">Is this Celebration of Life for an Elk?</span>
+                                </label>
+                                <div class="col-sm">
+                                    <div class="form-check">
+                                        <input class="form-check-input s_website_form_input"
+                                               type="checkbox" name="x_col_is_elk"
+                                               value="1" id="elksevt_colelk"/>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div data-name="Field" class="s_website_form_field mb-3 col-12"
+                             data-type="char"
+                             data-visibility="conditional"
+                             data-visibility-dependency="x_col_is_elk"
+                             data-visibility-comparator="selected">
+                            <div class="row s_col_no_resize s_col_no_bgcolor">
+                                <label class="col-form-label col-sm-auto s_website_form_label"
+                                       style="width: 200px" for="elksevt_colnum">
+                                    <span class="s_website_form_label_content">Honoree's Member Number</span>
+                                </label>
+                                <div class="col-sm">
+                                    <input class="form-control s_website_form_input"
+                                           type="text" name="x_col_member_number"
+                                           placeholder="e.g. 12345" id="elksevt_colnum"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div data-name="Field" class="s_website_form_field mb-3 col-12"
+                             data-type="char"
+                             data-visibility="conditional"
+                             data-visibility-dependency="x_col_is_elk"
+                             data-visibility-comparator="selected">
+                            <div class="row s_col_no_resize s_col_no_bgcolor">
+                                <label class="col-form-label col-sm-auto s_website_form_label"
+                                       style="width: 200px" for="elksevt_collodge">
+                                    <span class="s_website_form_label_content">Honoree's Home Lodge</span>
+                                </label>
+                                <div class="col-sm">
+                                    <input class="form-control s_website_form_input"
+                                           type="text" name="x_col_home_lodge"
+                                           placeholder="e.g. Lewiston #896" id="elksevt_collodge"/>
                                 </div>
                             </div>
                         </div>
@@ -191,6 +285,37 @@
                                               name="x_event_description" rows="4"
                                               placeholder="Tell us about your event..."
                                               id="elksevt_desc"/>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Prohibited activities acknowledgment (required) -->
+                        <div data-name="Field"
+                             class="s_website_form_field mb-3 col-12 s_website_form_required"
+                             data-type="boolean">
+                            <div class="row s_col_no_resize s_col_no_bgcolor">
+                                <label class="col-form-label col-sm-auto s_website_form_label"
+                                       style="width: 200px" for="elksevt_prohib">
+                                    <span class="s_website_form_label_content">No Prohibited Activities</span>
+                                    <span class="s_website_form_mark"> *</span>
+                                </label>
+                                <div class="col-sm">
+                                    <p class="text-muted small mb-2">
+                                        Rental insurance does NOT cover: Elks-sponsored
+                                        activities; motorized vehicles/watercraft;
+                                        fireworks; gun/knife shows; inflatables
+                                        (bounce houses, slides, climbing towers);
+                                        mechanical rides; organized athletic events
+                                        (billiards, darts, shuffleboard, cornhole OK).
+                                    </p>
+                                    <div class="form-check">
+                                        <input class="form-check-input s_website_form_input"
+                                               type="checkbox" name="x_prohibited_ack"
+                                               value="1" required="1" id="elksevt_prohib"/>
+                                        <label class="form-check-label" for="elksevt_prohib">
+                                            I confirm none of the above are part of this event.
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
                         </div>

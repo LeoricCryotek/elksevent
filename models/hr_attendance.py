@@ -25,8 +25,12 @@ class HrAttendance(models.Model):
 
     # ──────────────────────────────────────────────────────────────────
     # SECTION: Event link
-    # HUMAN: Which event this shift was worked for, and what kind of work.
-    # AI: Both optional; indexed event_id. Read by project.task actuals.
+    # HUMAN: Which event this shift was worked for, what kind of work, and —
+    #        optionally — the exact Event Cost line it was billed under so we
+    #        can compare what we charged against the real labor cost.
+    # AI: All optional; indexed event_id + cost line. Read by project.task
+    #     actuals (_paid_labor_by_category) and the cost line true-up
+    #     (elks.event.cost.line._compute_labor_trueup).
     # ──────────────────────────────────────────────────────────────────
     x_event_id = fields.Many2one(
         'project.task', string="Event", index=True,
@@ -41,6 +45,13 @@ class HrAttendance(models.Model):
     ], string="Event Role", default='event',
         help="Which kind of labor this shift counts as. Drives the actual "
              "labor cost rolled into the event's P&L on true-up.",
+    )
+    x_event_cost_line_id = fields.Many2one(
+        'elks.event.cost.line', string="Charged As", index=True,
+        domain="[('event_id', '=', x_event_id)]",
+        help="Tie this shift to the Event Cost line it was billed under (e.g. "
+             "Cleaning Service). The line then compares what we billed against "
+             "the actual labor cost, flagging any under-billing.",
     )
     x_gratuity_share = fields.Monetary(
         "Gratuity", currency_field='currency_id',

@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- =========================================================================
+     HUMAN: Portal pages for department managers: a card on /my, a list of
+     their call-outs, and a detail page where they adjust staff counts/hours,
+     add notes, and certify. Certifying locks the numbers onto the event.
+     AI: Rendered by controllers/portal_callout.py. Ownership is enforced in
+     the controller (manager_partner_id == user.partner_id).
+     ========================================================================= -->
+<odoo>
+
+    <!-- /my card -->
+    <template id="portal_my_home_callout" inherit_id="portal.portal_my_home"
+              name="Portal My Home: Call-Outs" priority="30">
+        <xpath expr="//div[hasclass('o_portal_docs')]" position="inside">
+            <t t-call="portal.portal_docs_entry">
+                <t t-set="title">Department Call-Outs</t>
+                <t t-set="url" t-value="'/my/callouts'"/>
+                <t t-set="text">Review and certify staffing for your events</t>
+                <t t-set="placeholder_count" t-value="'callout_count'"/>
+            </t>
+        </xpath>
+    </template>
+
+    <!-- List of the manager's call-outs -->
+    <template id="portal_my_callouts" name="My Department Call-Outs">
+        <t t-call="portal.portal_layout">
+            <t t-set="breadcrumbs_searchbar" t-value="True"/>
+            <t t-call="portal.portal_page_title">
+                <t t-set="title">Department Call-Outs</t>
+            </t>
+            <t t-if="not callouts">
+                <div class="alert alert-info">You have no call-outs to review right now.</div>
+            </t>
+            <t t-if="callouts">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Event</th>
+                                <th>Department</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th/>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr t-foreach="callouts" t-as="co">
+                                <td><t t-esc="co.event_name"/></td>
+                                <td><t t-esc="co.department_label"/></td>
+                                <td><span t-field="co.event_date"/></td>
+                                <td>
+                                    <span t-if="co.state == 'certified'" class="badge text-bg-success">Certified</span>
+                                    <span t-elif="co.state == 'sent'" class="badge text-bg-warning">Needs Review</span>
+                                    <span t-else="" class="badge text-bg-secondary">Draft</span>
+                                </td>
+                                <td class="text-end">
+                                    <a t-attf-href="/my/callout/{{co.id}}" class="btn btn-sm btn-primary">Open</a>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </t>
+        </t>
+    </template>
+
+    <!-- Detail page: review, edit, certify -->
+    <template id="portal_callout_page" name="Department Call-Out">
+        <t t-call="portal.portal_layout">
+            <t t-call="portal.portal_page_title">
+                <t t-set="title">Call-Out</t>
+            </t>
+
+            <t t-if="saved">
+                <div class="alert alert-success">Saved.
+                    <t t-if="callout.state == 'certified'"> This call-out is certified.</t>
+                </div>
+            </t>
+
+            <div class="card">
+                <div class="card-body">
+                    <h4>
+                        <t t-esc="callout.department_label"/> Call-Out —
+                        <t t-esc="callout.event_name"/>
+                    </h4>
+                    <p class="text-muted">
+                        Event date: <span t-field="callout.event_date"/>.
+                        Adjust the estimated resources you will commit, add any
+                        notes, then certify.
+                    </p>
+
+                    <t t-if="callout.state == 'certified'">
+                        <div class="alert alert-success">
+                            Certified<t t-if="callout.certified_on"> on
+                            <span t-field="callout.certified_on"/></t>. Contact the
+                            event coordinator if anything needs to change.
+                        </div>
+                    </t>
+
+                    <form t-attf-action="/my/callout/{{callout.id}}/submit" method="post">
+                        <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                        <t t-set="ro" t-value="callout.state == 'certified'"/>
+
+                        <!-- Bar -->
+                        <t t-if="callout.department == 'bar'">
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label">Number of Bars</label>
+                                    <input type="number" name="num_bars" class="form-control"
+                                           t-att-value="callout.num_bars" t-att-readonly="ro"/>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Bartenders</label>
+                                    <input type="number" name="primary_count" class="form-control"
+                                           t-att-value="callout.primary_count" t-att-readonly="ro"/>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Hours each</label>
+                                    <input type="number" step="0.25" name="primary_hours" class="form-control"
+                                           t-att-value="callout.primary_hours" t-att-readonly="ro"/>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Drink Requests</label>
+                                <textarea name="drink_requests" class="form-control" rows="2"
+                                          t-att-readonly="ro"><t t-esc="callout.drink_requests or ''"/></textarea>
+                            </div>
+                        </t>
+
+                        <!-- Kitchen -->
+                        <t t-if="callout.department == 'kitchen'">
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <label class="form-label">Cooks</label>
+                                    <input type="number" name="primary_count" class="form-control"
+                                           t-att-value="callout.primary_count" t-att-readonly="ro"/>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Cook hours each</label>
+                                    <input type="number" step="0.25" name="primary_hours" class="form-control"
+                                           t-att-value="callout.primary_hours" t-att-readonly="ro"/>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Kitchen Support</label>
+                                    <input type="number" name="secondary_count" class="form-control"
+                                           t-att-value="callout.secondary_count" t-att-readonly="ro"/>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Support hours each</label>
+                                    <input type="number" step="0.25" name="secondary_hours" class="form-control"
+                                           t-att-value="callout.secondary_hours" t-att-readonly="ro"/>
+                                </div>
+                            </div>
+                        </t>
+
+                        <!-- Custodial -->
+                        <t t-if="callout.department == 'custodial'">
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label">Cleaners</label>
+                                    <input type="number" name="primary_count" class="form-control"
+                                           t-att-value="callout.primary_count" t-att-readonly="ro"/>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Hours each</label>
+                                    <input type="number" step="0.25" name="primary_hours" class="form-control"
+                                           t-att-value="callout.primary_hours" t-att-readonly="ro"/>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Building ready by</label>
+                                    <input type="datetime-local" name="ready_datetime" class="form-control"
+                                           t-att-value="ready_local"
+                                           t-att-readonly="ro"/>
+                                </div>
+                            </div>
+                        </t>
+
+                        <div class="mb-3">
+                            <label class="form-label">Notes / other pertinent information</label>
+                            <textarea name="manager_notes" class="form-control" rows="3"
+                                      t-att-readonly="ro"><t t-esc="callout.manager_notes or ''"/></textarea>
+                        </div>
+
+                        <t t-if="not ro">
+                            <div class="d-flex gap-2">
+                                <button type="submit" name="save" value="1" class="btn btn-secondary">Save</button>
+                                <button type="submit" name="certify" value="1" class="btn btn-success"
+                                        onclick="return confirm('Certify these resources? This locks the numbers and notifies the coordinator.');">
+                                    Certify
+                                </button>
+                            </div>
+                            <p class="text-muted small mt-2">
+                                Certifying confirms these are the resources estimated
+                                to be used for this event.
+                            </p>
+                        </t>
+                    </form>
+                </div>
+            </div>
+        </t>
+    </template>
+
+</odoo>

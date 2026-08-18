@@ -7,6 +7,7 @@ from . import event_cost_type
 from . import event_cost_line
 from . import event_staff_assignment
 from . import event_access_window
+from . import event_callout
 from . import event_checklist_template
 from . import project_task
 from . import purchase_order
@@ -14,4 +15,5 @@ from . import account_move
 from . import sale_order
 from . import calendar_event
 from . import hr_attendance
+from . import survey_user_input
 from . import lodge_settings

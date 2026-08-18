@@ -132,8 +132,11 @@ class WebsiteEventRequest(http.Controller):
         # in a separate field — use that regardless of member status.
         is_member = post.get('is_member') == 'yes'
         member_number = (post.get('member_number') or '').strip()
+        col_is_elk = post.get('col_is_elk') == 'yes'
         col_number = (post.get('col_member_number') or '').strip()
-        if col_number:
+        # For a Celebration of Life honoring an Elk, the honoree's number gives
+        # the family the member rate / free room.
+        if col_is_elk and col_number:
             member_number = col_number
         elif not is_member or not member_number:
             member_number = '000000000'
@@ -158,6 +161,12 @@ class WebsiteEventRequest(http.Controller):
             'x_customer_email': post.get('customer_email', ''),
             'x_is_member': is_member,
             'x_member_number': member_number,
+            # Celebration-of-Life honoree (Elk) details
+            'x_col_is_elk': col_is_elk,
+            'x_col_member_number': col_number,
+            'x_col_home_lodge': post.get('col_home_lodge', ''),
+            # K&K rental-insurance prohibited-activities acknowledgment
+            'x_prohibited_ack': bool(post.get('prohibited_ack')),
             'x_event_description': post.get('event_description', ''),
             'x_special_requests': post.get('special_requests', ''),
             # Promotional links

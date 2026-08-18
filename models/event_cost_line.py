@@ -103,3 +103,52 @@ class EventCostLine(models.Model):
     def _compute_total(self):
         for rec in self:
             rec.total = (rec.quantity or 0.0) * (rec.unit_cost or 0.0)
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Labor true-up (billed vs actual)
+    # HUMAN: Staff can tag their timeclock shift to the cost line it was
+    #        billed under (e.g. Cleaning Service). This compares what we
+    #        charged against the real labor cost so we can spot when a line
+    #        was under-billed (e.g. billed $50 but 10h x $10 = $100 of work).
+    # AI: actual = sum(non-volunteer tagged attendance worked_hours x rate),
+    #     rate = employee.hourly_cost, fallback role rate. variance = billed
+    #     total - actual; underbilled when actual > billed.
+    # ──────────────────────────────────────────────────────────────────
+    x_actual_labor_cost = fields.Monetary(
+        "Actual Labor", currency_field='currency_id',
+        compute='_compute_labor_trueup', store=False,
+        help="Real labor cost of the shifts tagged to this line "
+             "(hours x each worker's payroll rate). Volunteers cost nothing.",
+    )
+    x_labor_variance = fields.Monetary(
+        "Billed - Actual", currency_field='currency_id',
+        compute='_compute_labor_trueup', store=False,
+        help="Billed amount minus actual labor cost. Negative = under-billed.",
+    )
+    x_underbilled = fields.Boolean(
+        "Under-billed", compute='_compute_labor_trueup', store=False,
+        help="True when the actual labor cost exceeds what we billed.",
+    )
+
+    @api.depends(
+        'total',
+        'event_id.x_attendance_ids.x_event_cost_line_id',
+        'event_id.x_attendance_ids.worked_hours',
+        'event_id.x_attendance_ids.employee_id',
+        'event_id.x_attendance_ids.x_event_role',
+    )
+    def _compute_labor_trueup(self):
+        for line in self:
+            evt = line.event_id
+            atts = evt.x_attendance_ids.filtered(
+                lambda a: a.x_event_cost_line_id.id == line.id
+            ) if evt else line.env['hr.attendance']
+            rates = evt._event_role_rates(evt._event_settings()) if evt else {}
+            cost = 0.0
+            for a in atts:
+                if evt._elks_is_volunteer_att(a):
+                    continue
+                cost += (a.worked_hours or 0.0) * evt._att_labor_rate(a, rates)
+            line.x_actual_labor_cost = cost
+            line.x_labor_variance = (line.total or 0.0) - cost
+            line.x_underbilled = cost > (line.total or 0.0) and cost > 0.0

@@ -137,6 +137,14 @@
             <field name="sequence">37</field>
         </record>
 
+        <record id="cost_type_insurance" model="elks.event.cost.type">
+            <field name="name">Event Insurance</field>
+            <field name="code">insurance</field>
+            <field name="category">other</field>
+            <field name="protected">True</field>
+            <field name="sequence">39</field>
+        </record>
+
         <record id="cost_type_gratuity" model="elks.event.cost.type">
             <field name="name">Gratuity</field>
             <field name="code">gratuity</field>

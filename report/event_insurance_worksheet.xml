@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- =========================================================================
+     HUMAN: K&K / Gallagher Affinity "Elks Lodge Facility Rental Insurance"
+     application worksheet. Pre-fills everything the online K&K form asks for
+     from the event, so a staffer can complete the application for a renter.
+     Printed from the event's Insurance section ("Print Insurance Worksheet").
+     AI: qweb-pdf on project.task. ASCII-only; self-contained inline layout.
+     ========================================================================= -->
+<odoo>
+    <record id="action_report_event_insurance" model="ir.actions.report">
+        <field name="name">Insurance Worksheet</field>
+        <field name="model">project.task</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_event_insurance</field>
+        <field name="report_file">elksevent.report_event_insurance</field>
+        <field name="paperformat_id" ref="paperformat_event_sheet"/>
+        <field name="print_report_name">'Insurance Worksheet - %s' % (object.name or 'Event')</field>
+    </record>
+
+    <template id="report_event_insurance">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="s"
+                   t-value="o.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
+                <div class="page" style="font-size:11px; color:#222;">
+
+                    <table style="width:100%; border:none; margin-bottom:4px;">
+                        <tr>
+                            <td style="border:none; padding:0;">
+                                <div style="font-size:16px; font-weight:bold;">
+                                    <t t-if="s"><t t-esc="s.name"/></t><t t-else="">Elks Lodge</t>
+                                    <t t-if="s and s.lodge_number">#<t t-esc="s.lodge_number"/></t>
+                                </div>
+                                <div style="font-size:14px; font-weight:bold; color:#c0392b;">Facility Rental Insurance Worksheet</div>
+                            </td>
+                            <td style="border:none; padding:0; text-align:right; font-size:9px; color:#666;">
+                                Printed <span t-esc="time.strftime('%m/%d/%Y')"/>
+                            </td>
+                        </tr>
+                    </table>
+                    <hr style="border-top:2px solid #c0392b; margin:2px 0 8px 0;"/>
+
+                    <p style="font-size:10px; color:#555; margin:0 0 8px 0;">
+                        Use these answers to complete the K&amp;K / Gallagher Affinity
+                        Elks Lodge Facility Rental Insurance application.
+                    </p>
+
+                    <div style="background:#c0392b; color:#fff; font-weight:bold; padding:3px 6px;">EVENT INFORMATION</div>
+                    <table style="width:100%; border-collapse:collapse; font-size:11px; border:1px solid #e0b4ae; border-top:none;">
+                        <tr>
+                            <td style="padding:4px 6px; width:40%; background:#faf0ee; font-weight:bold;">Is the renter a member of the Elks?</td>
+                            <td style="padding:4px 6px;"><t t-if="o.x_is_member">Yes</t><t t-else="">No</t></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:4px 6px; background:#faf0ee; font-weight:bold;">Type of Event (K&amp;K category)</td>
+                            <td style="padding:4px 6px;"><span t-field="o.x_insurance_event_category"/></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:4px 6px; background:#faf0ee; font-weight:bold;">Renter / Host Name(s)</td>
+                            <td style="padding:4px 6px;"><t t-esc="o.x_customer_name or ''"/></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:4px 6px; background:#faf0ee; font-weight:bold;">Lodge Name / Number</td>
+                            <td style="padding:4px 6px;">
+                                <t t-if="s"><t t-esc="s.name"/><t t-if="s.lodge_number"> #<t t-esc="s.lodge_number"/></t></t>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:4px 6px; background:#faf0ee; font-weight:bold;">Date of Event</td>
+                            <td style="padding:4px 6px;"><t t-if="o.x_event_date"><span t-field="o.x_event_date"/></t></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:4px 6px; background:#faf0ee; font-weight:bold;">Time of Event</td>
+                            <td style="padding:4px 6px;">
+                                <t t-esc="o.x_event_start_time_text or ''"/>
+                                <t t-if="o.x_event_end_time_text"> to <t t-esc="o.x_event_end_time_text"/></t>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding:4px 6px; background:#faf0ee; font-weight:bold;">Estimated Attendance</td>
+                            <td style="padding:4px 6px;"><t t-esc="o.x_guest_count or ''"/></td>
+                        </tr>
+                    </table>
+
+                    <div style="background:#c0392b; color:#fff; font-weight:bold; padding:3px 6px; margin-top:10px;">ADMINISTRATOR / REQUESTOR (LODGE)</div>
+                    <table style="width:100%; border-collapse:collapse; font-size:11px; border:1px solid #e0b4ae; border-top:none;">
+                        <tr>
+                            <td style="padding:4px 6px; width:40%; background:#faf0ee; font-weight:bold;">Requestor Name</td>
+                            <td style="padding:4px 6px;"><t t-esc="user.name or ''"/></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:4px 6px; background:#faf0ee; font-weight:bold;">Elks Lodge Email Address</td>
+                            <td style="padding:4px 6px;"><t t-esc="user.email or user.company_id.email or ''"/></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:4px 6px; background:#faf0ee; font-weight:bold;">Additional / Optional Email</td>
+                            <td style="padding:4px 6px;">&#160;</td>
+                        </tr>
+                    </table>
+
+                    <t t-if="o.x_event_type == 'memorial' and o.x_col_is_elk">
+                        <div style="background:#c0392b; color:#fff; font-weight:bold; padding:3px 6px; margin-top:10px;">CELEBRATION OF LIFE - HONOREE</div>
+                        <table style="width:100%; border-collapse:collapse; font-size:11px; border:1px solid #e0b4ae; border-top:none;">
+                            <tr>
+                                <td style="padding:4px 6px; width:40%; background:#faf0ee; font-weight:bold;">Honoree was an Elk</td>
+                                <td style="padding:4px 6px;">Yes</td>
+                            </tr>
+                            <tr>
+                                <td style="padding:4px 6px; background:#faf0ee; font-weight:bold;">Honoree Member #</td>
+                                <td style="padding:4px 6px;"><t t-esc="o.x_col_member_number or ''"/></td>
+                            </tr>
+                            <tr>
+                                <td style="padding:4px 6px; background:#faf0ee; font-weight:bold;">Honoree Home Lodge</td>
+                                <td style="padding:4px 6px;"><t t-esc="o.x_col_home_lodge or ''"/></td>
+                            </tr>
+                        </table>
+                    </t>
+
+                    <div style="background:#c0392b; color:#fff; font-weight:bold; padding:3px 6px; margin-top:10px;">ELIGIBILITY - PROHIBITED ACTIVITIES</div>
+                    <table style="width:100%; border-collapse:collapse; font-size:10.5px; border:1px solid #e0b4ae; border-top:none;">
+                        <tr>
+                            <td style="padding:4px 6px;">
+                                The following are INELIGIBLE (no coverage). Confirm NONE apply:
+                                <ul style="margin:4px 0 0 16px;">
+                                    <li>An Elks function or Elks-sponsored activity</li>
+                                    <li>Motorized vehicles / motorcycles / watercraft</li>
+                                    <li>Fireworks</li>
+                                    <li>Gun and/or knife shows</li>
+                                    <li>Inflatable amusement devices/rides (bounce houses, slides, climbing towers)</li>
+                                    <li>Mechanical amusement rides</li>
+                                    <li>Organized athletic events and competitions (billiards, darts, shuffleboard, cornhole are OK)</li>
+                                </ul>
+                                <div style="margin-top:6px; font-weight:bold;">
+                                    Renter confirmed none of the above apply:
+                                    <t t-if="o.x_prohibited_ack">YES</t><t t-else=""><span style="color:#c0392b;">NOT CONFIRMED</span></t>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <p style="font-size:9px; color:#888; margin-top:12px;">
+                        Complete the application at the K&amp;K / Gallagher Affinity
+                        Elks Facility Rental Insurance site (link in Lodge Settings).
+                        Coverage is void if any ineligible activity is part of the event.
+                    </p>
+                </div>
+            </t>
+        </t>
+    </template>
+</odoo>

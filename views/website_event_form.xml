@@ -183,13 +183,34 @@
                                      and family gets the member rate. -->
                                 <div class="row mb-3" data-cond-group="evt_type"
                                      data-cond-show="memorial" style="display:none;">
-                                    <div class="col-md-6">
+                                    <div class="col-md-4">
                                         <label class="form-label">
-                                            Member's Number (Celebration of Life)
+                                            Is this Celebration of Life for an Elk?
+                                        </label>
+                                        <select name="col_is_elk" class="form-select"
+                                                data-cond-trigger="col_elk"
+                                                title="Was the person being honored an Elk member?">
+                                            <option value="no">No</option>
+                                            <option value="yes">Yes</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4" data-cond-group="col_elk"
+                                         data-cond-show="yes" style="display:none;">
+                                        <label class="form-label">
+                                            Honoree's Member Number
                                         </label>
                                         <input type="text" name="col_member_number"
                                                class="form-control" placeholder="e.g. 12345"
-                                               title="For a Celebration of Life, enter the member's number — the facility is no charge and family receives the member rate."/>
+                                               title="Member number of the person being honored — the facility is no charge and family receives the member rate."/>
+                                    </div>
+                                    <div class="col-md-4" data-cond-group="col_elk"
+                                         data-cond-show="yes" style="display:none;">
+                                        <label class="form-label">
+                                            Honoree's Home Lodge
+                                        </label>
+                                        <input type="text" name="col_home_lodge"
+                                               class="form-control" placeholder="e.g. Lewiston #896"
+                                               title="Home lodge name/number of the person being honored."/>
                                     </div>
                                 </div>
 
@@ -349,6 +370,36 @@
                                             <option value="lodge">I need the lodge to provide insurance (added to my quote)</option>
                                             <option value="renter">I will provide my own certificate (naming Lewiston Elks Lodge #896 as additional insured)</option>
                                         </select>
+                                    </div>
+                                </div>
+
+                                <!-- K&K rental-insurance prohibited activities -->
+                                <div class="row mb-3">
+                                    <div class="col-12">
+                                        <div class="alert alert-warning" role="alert">
+                                            <strong>Prohibited activities.</strong>
+                                            The facility-rental insurance does NOT
+                                            cover events that include any of the
+                                            following:
+                                            <ul class="mb-2 mt-2">
+                                                <li>An Elks function or Elks-sponsored activity</li>
+                                                <li>Motorized vehicles / motorcycles / watercraft</li>
+                                                <li>Fireworks</li>
+                                                <li>Gun and/or knife shows</li>
+                                                <li>Inflatable amusement devices/rides (bounce houses, slides, climbing towers)</li>
+                                                <li>Mechanical amusement rides</li>
+                                                <li>Organized athletic events and competitions (billiards, darts, shuffleboard, cornhole are OK)</li>
+                                            </ul>
+                                            <div class="form-check">
+                                                <input type="checkbox" name="prohibited_ack"
+                                                       value="1" required="required"
+                                                       class="form-check-input" id="cb_prohibited"/>
+                                                <label class="form-check-label" for="cb_prohibited">
+                                                    I confirm none of the above are part of this event.
+                                                    <span class="text-danger">*</span>
+                                                </label>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 

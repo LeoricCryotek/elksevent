@@ -129,6 +129,9 @@
                         <field name="worked_hours" widget="float_time"
                                string="Hours" sum="Total Hours" readonly="1"/>
                         <field name="x_event_role"/>
+                        <field name="x_event_id" column_invisible="1"/>
+                        <field name="x_event_cost_line_id" string="Charged As"
+                               options="{'no_create': True}" optional="show"/>
                         <field name="x_gratuity_share" sum="Total Gratuity"/>
                         <field name="x_coordinator_fee_share"
                                sum="Total Coordinator Fee" optional="show"/>
@@ -203,6 +206,13 @@
                         class="oe_stat_button"
                         icon="fa-bullhorn"
                         invisible="not x_is_event or not x_is_elks_event"/>
+                <button name="action_open_event_pl"
+                        string="Event P&amp;L"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-line-chart"
+                        groups="elksevent.group_event_coordinator"
+                        invisible="not x_is_event or not x_is_after_action"/>
                 <button name="action_receive_deposit"
                         string="Deposit Received"
                         type="object"
@@ -280,6 +290,13 @@
                                    invisible="not x_is_elks_event"
                                    required="x_is_elks_event"/>
                             <field name="x_event_type"/>
+                            <field name="x_col_is_elk"
+                                   string="Honoree was an Elk"
+                                   invisible="x_event_type != 'memorial'"/>
+                            <field name="x_col_member_number"
+                                   invisible="x_event_type != 'memorial' or not x_col_is_elk"/>
+                            <field name="x_col_home_lodge"
+                                   invisible="x_event_type != 'memorial' or not x_col_is_elk"/>
                             <field name="x_event_date" readonly="1"
                                    help="Set from the Event Date field at the top of the form."/>
                             <field name="x_event_start_sel"/>
@@ -430,6 +447,15 @@
                             <field name="x_insurance_on_file"
                                    string="Renter's Certificate on File"
                                    invisible="x_insurance_by != 'renter'"/>
+                            <field name="x_insurance_event_category"
+                                   invisible="x_insurance_by != 'lodge'"/>
+                            <field name="x_prohibited_ack"
+                                   invisible="x_insurance_by != 'lodge'"/>
+                            <button name="action_print_insurance_worksheet"
+                                    type="object" class="btn-link"
+                                    icon="fa-print"
+                                    string="Print Insurance Worksheet"
+                                    invisible="x_insurance_by != 'lodge'"/>
                         </group>
                     </group>
                     <group>
@@ -513,6 +539,12 @@
                             <field name="x_taxable"/>
                             <field name="x_line_cogs" string="COGS"
                                    sum="Total COGS"/>
+                            <field name="x_actual_labor_cost" string="Actual Labor"
+                                   optional="show"/>
+                            <field name="x_labor_variance" string="Billed - Actual"
+                                   decoration-danger="x_underbilled"
+                                   optional="show"/>
+                            <field name="x_underbilled" column_invisible="1"/>
                             <field name="purchase_order_id" optional="hide"/>
                             <field name="currency_id" column_invisible="1"/>
                         </list>
@@ -576,8 +608,11 @@
                     <field name="x_currency_id" invisible="1"/>
                     <group>
                         <group string="Billing Summary (what the customer pays)">
+                            <field name="x_room_retail" readonly="1"
+                                   string="Rooms (default/retail)"
+                                   invisible="x_room_retail == x_room_income"/>
                             <field name="x_room_income" readonly="1"
-                                   string="Rooms Subtotal"/>
+                                   string="Rooms Subtotal (charged)"/>
                             <field name="x_eventcosts_total" readonly="1"
                                    string="Event Costs Subtotal"/>
                             <label for="x_coordinator_fee"/>
@@ -595,20 +630,30 @@
                             <div class="o_row">
                                 <field name="x_discount_reason"
                                        placeholder="No discount"/>
-                                <field name="x_discount_pct"
+                                <field name="x_discount_type"
                                        invisible="not x_discount_reason"
                                        class="oe_inline"/>
-                                <span invisible="not x_discount_reason">%</span>
-                                <field name="x_discount_note"
-                                       invisible="x_discount_reason != 'other'"
-                                       placeholder="reason details"
+                                <field name="x_discount_pct"
+                                       invisible="not x_discount_reason or x_discount_type != 'percent'"
+                                       class="oe_inline"/>
+                                <span invisible="not x_discount_reason or x_discount_type != 'percent'">%</span>
+                                <field name="x_discount_value"
+                                       invisible="not x_discount_reason or x_discount_type != 'amount'"
                                        class="oe_inline"/>
                             </div>
+                            <field name="x_discount_note"
+                                   invisible="not x_discount_reason"
+                                   required="x_discount_reason"
+                                   placeholder="Explain why this discount is being given (required)"/>
                             <div class="alert alert-success" role="alert"
                                  invisible="not x_discount_amount"
                                  style="margin:2px 0; padding:4px 8px;">
                                 <strong>Discount applied: <field name="x_discount_amount" readonly="1" nolabel="1" class="oe_inline"/></strong>
                                 <span invisible="not x_discount_reason"> (<field name="x_discount_reason" readonly="1" nolabel="1" class="oe_inline"/>)</span>
+                                <div class="text-muted" invisible="x_room_retail == x_room_income">
+                                    Rooms: retail <field name="x_room_retail" readonly="1" nolabel="1" class="oe_inline"/>
+                                    &#8594; charged <field name="x_room_income" readonly="1" nolabel="1" class="oe_inline"/>
+                                </div>
                             </div>
                             <field name="x_total_billed" readonly="1"
                                    string="Event Rental (pre-tax)"/>
@@ -766,6 +811,11 @@
                                     string="Gratuity Distribution" class="btn-secondary" icon="fa-money"/>
                         </group>
                     </group>
+                    <group string="Department Managers (route the call-outs)">
+                        <field name="x_bar_manager_id"/>
+                        <field name="x_kitchen_manager_id"/>
+                        <field name="x_custodial_manager_id"/>
+                    </group>
                     <group string="Department Call-Outs (print or email a quote request)">
                         <div>
                             <button name="%(action_report_event_callout)d" type="action"
@@ -781,10 +831,77 @@
                                     invisible="not x_cleaning_use"/>
                         </div>
                     </group>
+                    <group string="Send Digital Call-Out (manager reviews &amp; certifies in their portal)">
+                        <div>
+                            <button name="action_send_bar_callout" type="object"
+                                    string="Send Bar" class="btn-primary" icon="fa-paper-plane"
+                                    invisible="not x_bar_use"/>
+                            <button name="action_send_kitchen_callout" type="object"
+                                    string="Send Kitchen" class="btn-primary" icon="fa-paper-plane"
+                                    invisible="not x_food_request"/>
+                            <button name="action_send_custodial_callout" type="object"
+                                    string="Send Custodial" class="btn-primary" icon="fa-paper-plane"
+                                    invisible="not x_cleaning_use"/>
+                        </div>
+                    </group>
+                    <field name="x_callout_ids" readonly="1">
+                        <list>
+                            <field name="department_label" string="Department"/>
+                            <field name="manager_partner_id"/>
+                            <field name="state"/>
+                            <field name="primary_count" string="Staff"/>
+                            <field name="primary_hours" string="Hrs Each"/>
+                            <field name="certified_on"/>
+                        </list>
+                    </field>
+                </page>
+
+                <!-- ===== After Action ===== -->
+                <page string="After Action" name="event_after_action"
+                      groups="elksevent.group_event_coordinator"
+                      invisible="not x_is_event">
+                    <div class="alert alert-info" role="alert"
+                         invisible="not x_is_after_action">
+                        This event is in the After-Action review. Add your notes
+                        below and review the Event P&amp;L (button up top). A
+                        feedback survey is sent to the customer automatically.
+                    </div>
+                    <group>
+                        <group string="Customer Feedback Survey">
+                            <field name="x_customer_survey_input_id" readonly="1"
+                                   options="{'no_open': False}"/>
+                            <field name="x_customer_survey_state" readonly="1"/>
+                        </group>
+                    </group>
+                    <separator string="After-Action Notes / Thoughts"/>
+                    <field name="x_after_action_notes"
+                           placeholder="What went well? Any issues, damages, or follow-ups? Would we host this again?"/>
                 </page>
 
             </xpath>
         </field>
+    </record>
+
+    <!-- ================================================================
+         After-Action queue: events in After Action / Completed
+         ================================================================ -->
+    <record id="action_event_after_action" model="ir.actions.act_window">
+        <field name="name">After-Action Review</field>
+        <field name="res_model">project.task</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[
+            ('x_is_event', '=', True),
+            ('parent_id', '=', False),
+            ('x_is_after_action', '=', True),
+        ]</field>
+        <field name="context">{}</field>
+    </record>
+
+    <record id="action_event_after_action_list" model="ir.actions.act_window.view">
+        <field name="sequence">1</field>
+        <field name="view_mode">list</field>
+        <field name="view_id" ref="view_event_task_list"/>
+        <field name="act_window_id" ref="action_event_after_action"/>
     </record>
 
     <!-- ================================================================

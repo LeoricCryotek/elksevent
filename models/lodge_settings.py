@@ -133,6 +133,53 @@ class ElksLodgeSettings(models.Model):
         "Exclusive Use Fee", currency_field='x_event_currency_id',
         help="Default fee for the 'Exclusive Use' Event Cost.",
     )
+    x_event_insurance_fee = fields.Monetary(
+        "Event Insurance Fee", currency_field='x_event_currency_id',
+        help="Default insurance charge auto-added to every non-lodge event. "
+             "Adjustable per event on the Event Costs list.",
+    )
+    x_customer_survey_id = fields.Many2one(
+        'survey.survey', string="Customer Feedback Survey",
+        help="Survey emailed to the customer when their event moves to the "
+             "After Action stage. When they finish it, the coordinator is "
+             "notified.",
+    )
+    x_insurance_program_url = fields.Char(
+        "Rental Insurance URL",
+        default="https://insure.kandkinsurance.com/sites/ElksLodge/Pages/"
+                "ELKSInEligibility.aspx",
+        help="Link to the K&K / Gallagher Affinity Elks facility-rental "
+             "insurance application. Used on the insurance to-do and the "
+             "printed worksheet.",
+    )
+
+    # ------------------------------------------------------------------
+    # Event invoice / billing options (deposit + final invoices)
+    # ------------------------------------------------------------------
+    x_invoice_terms_acceptance = fields.Boolean(
+        "Payment-Is-Acceptance Clause", default=True,
+        help="Print a clause on event invoices stating that paying any part "
+             "(including the deposit) accepts the Rental Terms & Conditions.")
+    x_invoice_terms_embed = fields.Boolean(
+        "Embed Full Terms on Invoices", default=True,
+        help="Include the full current Terms & Conditions text (from the "
+             "/event-terms page) on the invoice itself.")
+    x_invoice_terms_link = fields.Boolean(
+        "Link to Terms on Invoices", default=True,
+        help="Include a clickable link to the live Terms & Conditions page.")
+    x_invoice_attach_agreement = fields.Boolean(
+        "Attach Facility Agreement to Invoices", default=True,
+        help="On deposit/final invoice creation, attach the signable Facility "
+             "Usage Agreement PDF (full T&C + signature lines) to the invoice.")
+    x_invoice_signature_line = fields.Boolean(
+        "Signature Line on Invoices", default=False,
+        help="Add a Host / Elks-representative signature + date line on the "
+             "invoice itself (in addition to the attached agreement).")
+    x_invoice_show_discount = fields.Boolean(
+        "Show Member Discount Line on Invoices", default=True,
+        help="Bill the room at its retail rate and show the member / "
+             "Celebration-of-Life discount as its own line, so the invoice "
+             "reflects the discount (retail -> actual).")
 
     # ------------------------------------------------------------------
     # Pricing policy

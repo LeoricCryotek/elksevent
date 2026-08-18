@@ -55,6 +55,45 @@ EVENT_TYPE_CHOICES = [
     ('other', 'Other'),
 ]
 
+# The event categories offered by the K&K / Gallagher Affinity "Elks Lodge
+# Facility Rental Insurance" application. Our own event types are mapped onto
+# these so staff can complete the K&K form; the category is editable per event.
+INSURANCE_EVENT_CATEGORIES = [
+    ('baptism', 'Baptism, Christening, Communion, Confirmation'),
+    ('dinner', 'Dinner, Luncheon, Picnic'),
+    ('family', 'Family Event, Graduation, Birthday, Anniversary or Celebration'),
+    ('fundraiser', 'Fundraiser / Benefit'),
+    ('memorial', 'Funeral or Memorial Service'),
+    ('reunion', 'Reunion (class, family, military)'),
+    ('wedding', 'Wedding Ceremony, Reception and Rehearsal Dinner'),
+]
+
+# Our event type -> K&K category default (staff can override on the event).
+EVENT_TYPE_TO_INSURANCE = {
+    'wedding': 'wedding',
+    'birthday': 'family',
+    'anniversary': 'family',
+    'holiday': 'family',
+    'fundraiser': 'fundraiser',
+    'memorial': 'memorial',
+    'corporate': 'dinner',
+    'meeting': 'dinner',
+    # 'other' -> left blank so staff choose the right K&K category.
+}
+
+# Activities K&K deems INELIGIBLE — no facility-rental coverage is provided.
+# Shown as prohibited on the public form and printed on the worksheet.
+PROHIBITED_ACTIVITIES = [
+    "An Elks Function or Elks-Sponsored Activity",
+    "Events that include motorized vehicles / motorcycles / watercraft",
+    "Fireworks",
+    "Gun and/or knife shows",
+    "Inflatable amusement devices/rides (bounce houses, slides, climbing towers)",
+    "Mechanical amusement rides",
+    "Organized athletic events and competitions (does not apply to billiards, "
+    "darts, shuffleboard, bean bag toss/cornhole)",
+]
+
 EVENT_APPROVAL_STATES = [
     ('draft', 'Draft'),
     ('board', 'Board Review'),
@@ -93,8 +132,16 @@ class ProjectTask(models.Model):
         "Member Number", copy=False,
         help="Elks membership number — shown on the quote and invoice.",
     )
-    # Manual, reason-tagged discount applied under Financials. Replaces the old
-    # automatic member discount so staff choose when/why a discount applies.
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Manual discount (fields)
+    # HUMAN: Staff choose when/why a discount applies (no automatic member
+    #        discount). Pick a reason, then give it as either a percent or a
+    #        fixed dollar amount off the room + event-cost subtotal — the
+    #        coordinator fee is never discounted. A written note is required.
+    # AI: _discount_fraction() collapses either input to one fraction so the
+    #     pricing math stays proportional; _check_discount_note enforces the
+    #     note. member/nonprofit default to 50% via _onchange_discount_reason.
+    # ──────────────────────────────────────────────────────────────────
     x_discount_reason = fields.Selection([
         ('member', 'Member'),
         ('nonprofit', 'Non-Profit'),
@@ -102,12 +149,24 @@ class ProjectTask(models.Model):
         ('other', 'Other'),
     ], string="Discount Reason", tracking=True,
         help="Why a discount is applied. Leave blank for no discount.")
+    x_discount_type = fields.Selection([
+        ('percent', 'Percent (%)'),
+        ('amount', 'Amount ($)'),
+    ], string="Discount Type", default='percent', tracking=True,
+        help="Give the discount as a percent of the discountable subtotal, "
+             "or as a fixed dollar amount.")
     x_discount_pct = fields.Float(
         "Discount %", tracking=True,
-        help="Percent off the billable subtotal (rooms + event costs + "
-             "coordinator). Only applied when a Discount Reason is set.")
+        help="Percent off the billable subtotal (rooms + event costs). Only "
+             "applied when Discount Type is Percent and a Reason is set.")
+    x_discount_value = fields.Monetary(
+        "Discount Amount", currency_field='x_currency_id', tracking=True,
+        help="Fixed dollar discount off the room + event-cost subtotal "
+             "(coordinator fee is never discounted). Applied when Discount "
+             "Type is Amount and a Reason is set.")
     x_discount_note = fields.Char(
-        "Discount Note", help="Details when the reason is 'Other'.")
+        "Discount Note", tracking=True,
+        help="Required whenever a discount is applied — explain why.")
     # Elks (lodge's own) events — who owns it; not billed, no insurance needed.
     x_event_committee = fields.Char(
         "Committee",
@@ -221,6 +280,104 @@ class ProjectTask(models.Model):
     x_customer_name = fields.Char("Host Name", tracking=True)
     x_customer_phone = fields.Char("Host Phone")
     x_customer_email = fields.Char("Host Email")
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Celebration-of-Life (memorial) — honoree Elk details
+    # HUMAN: When the event is a Celebration of Life / memorial we ask
+    #        whether the person being honored was an Elk and, if so, their
+    #        member number and home lodge (for records + any member courtesy).
+    # AI: Only meaningful when x_event_type == 'memorial'; shown conditionally
+    #     on the backend + both public forms.
+    # ──────────────────────────────────────────────────────────────────
+    x_col_is_elk = fields.Boolean(
+        "Honoree was an Elk",
+        help="Celebration of Life: was the person being honored an Elk member?")
+    x_col_member_number = fields.Char(
+        "Honoree Member #",
+        help="Elk membership number of the person being honored.")
+    x_col_home_lodge = fields.Char(
+        "Honoree Home Lodge",
+        help="Home lodge name/number of the person being honored.")
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Facility-rental insurance (K&K / Gallagher Affinity)
+    # HUMAN: Every non-lodge event needs K&K rental insurance. We map the
+    #        event to K&K's category, confirm none of their prohibited
+    #        activities apply, and (on approval) get a to-do with the link.
+    # AI: x_insurance_event_category defaults from x_event_type via
+    #     EVENT_TYPE_TO_INSURANCE (editable). x_prohibited_ack must be true
+    #     to be eligible. The insurance to-do fires from action_floor_approve.
+    # ──────────────────────────────────────────────────────────────────
+    x_insurance_event_category = fields.Selection(
+        INSURANCE_EVENT_CATEGORIES, string="Insurance Event Category",
+        compute='_compute_insurance_event_category',
+        store=True, readonly=False,
+        help="K&K facility-rental insurance category. Defaults from the event "
+             "type; adjust if K&K classifies it differently.")
+    x_prohibited_ack = fields.Boolean(
+        "No Prohibited Activities",
+        help="Confirms NONE of the K&K-ineligible activities (fireworks, "
+             "motorized vehicles, inflatables, gun/knife shows, organized "
+             "athletics, etc.) are part of this event. Required for coverage.")
+
+    @api.depends('x_event_type')
+    def _compute_insurance_event_category(self):
+        for rec in self:
+            mapped = EVENT_TYPE_TO_INSURANCE.get(rec.x_event_type or '')
+            # Default from the mapping; for an unmapped type ('other') keep any
+            # existing manual pick. Always assign so the stored compute is happy.
+            if mapped:
+                rec.x_insurance_event_category = mapped
+            else:
+                rec.x_insurance_event_category = (
+                    rec.x_insurance_event_category or False)
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Department managers + digital call-outs
+    # HUMAN: Each event routes its Bar/Kitchen/Custodial call-out to a
+    #        manager. The manager defaults from Lodge Settings but can be
+    #        changed per event. Sending a call-out gives that manager a
+    #        portal item to review, adjust and certify (see elks.event.callout).
+    # AI: Per-event manager fields default from settings via compute
+    #     (readonly=False). x_callout_ids is the o2m of sent call-outs.
+    # ──────────────────────────────────────────────────────────────────
+    x_bar_manager_id = fields.Many2one(
+        'res.partner', string="Bar Manager (event)",
+        compute='_compute_event_dept_managers', store=True, readonly=False)
+    x_kitchen_manager_id = fields.Many2one(
+        'res.partner', string="Kitchen Manager (event)",
+        compute='_compute_event_dept_managers', store=True, readonly=False)
+    x_custodial_manager_id = fields.Many2one(
+        'res.partner', string="Custodial Manager (event)",
+        compute='_compute_event_dept_managers', store=True, readonly=False)
+    x_callout_ids = fields.One2many(
+        'elks.event.callout', 'event_id', string="Department Call-Outs")
+
+    @api.depends('x_is_event')
+    def _compute_event_dept_managers(self):
+        """Default each event's department manager from Lodge Settings; a
+        coordinator can override per event afterward."""
+        settings = self._event_settings()
+        s_bar = settings.x_bar_manager_id if settings else False
+        s_kit = settings.x_kitchen_manager_id if settings else False
+        s_cus = settings.x_custodial_manager_id if settings else False
+        for rec in self:
+            rec.x_bar_manager_id = rec.x_bar_manager_id or s_bar
+            rec.x_kitchen_manager_id = rec.x_kitchen_manager_id or s_kit
+            rec.x_custodial_manager_id = rec.x_custodial_manager_id or s_cus
+
+    def _callout_manager(self, dept):
+        """Manager partner for a department: the per-event field, else the
+        Lodge Settings default."""
+        self.ensure_one()
+        field = {'bar': 'x_bar_manager_id',
+                 'kitchen': 'x_kitchen_manager_id',
+                 'custodial': 'x_custodial_manager_id'}[dept]
+        partner = self[field]
+        if not partner:
+            settings = self._event_settings()
+            partner = settings[field] if settings else False
+        return partner or self.env['res.partner']
 
     # ------------------------------------------------------------------
     # Event Checklist — the 20-point worksheet answers (drive subtasks)
@@ -460,7 +617,15 @@ class ProjectTask(models.Model):
     x_room_income = fields.Monetary(
         "Room Income", currency_field='x_currency_id',
         compute='_compute_financials', store=True,
-        help="Total of all room booking subtotals (rate + cleaning + service).",
+        help="Total of all room booking subtotals (rate + cleaning + service) "
+             "as CHARGED (after any per-booking rate override).",
+    )
+    x_room_retail = fields.Monetary(
+        "Room Rental (default/retail)", currency_field='x_currency_id',
+        compute='_compute_financials', store=True,
+        help="Total of the room's DEFAULT (retail) rates + fees, before any "
+             "per-event override or member/COL discount. Drives the "
+             "coordinator fee base and the member-discount amount.",
     )
 
     # ------------------------------------------------------------------
@@ -658,6 +823,50 @@ class ProjectTask(models.Model):
         help="Public-facing listing in the Events app, auto-created when "
              "this is flagged as an Elks Event so it can be marketed.",
     )
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: After-action review (fields)
+    # HUMAN: Once an event is over it moves to After Action. There the
+    #        coordinator jots notes, reviews the P&L, and a feedback survey
+    #        goes to the customer. These fields back that tab + the menu
+    #        filter; the behaviour lives in the After-action methods section.
+    # AI: x_is_after_action is STORED (filterable by the After-Action action);
+    #     x_after_action_started guards the one-time survey/notes trigger.
+    # ──────────────────────────────────────────────────────────────────
+    x_is_after_action = fields.Boolean(
+        "In After-Action", compute='_compute_is_after_action',
+        store=True, index=True,
+        help="True once the event reaches the After Action or Completed "
+             "stage — drives the After-Action menu filter and P&L button.",
+    )
+    x_after_action_notes = fields.Text(
+        "After-Action Notes", copy=False,
+        help="Coordinator's notes/thoughts after the event — what went well, "
+             "issues, follow-ups.",
+    )
+    x_after_action_started = fields.Boolean(
+        "After-Action Triggered", copy=False, default=False,
+        help="Guard: set once the survey + notes prompt have fired so they "
+             "don't re-fire on later saves.",
+    )
+    x_customer_survey_input_id = fields.Many2one(
+        'survey.user_input', string="Customer Survey Response", copy=False,
+        help="The feedback survey sent to the customer for this event.",
+    )
+    x_customer_survey_state = fields.Selection(
+        related='x_customer_survey_input_id.state', string="Survey Status",
+        readonly=True,
+    )
+
+    @api.depends('stage_id')
+    def _compute_is_after_action(self):
+        aa = self.env.ref('elksevent.stage_after_action',
+                          raise_if_not_found=False)
+        done = self.env.ref('elksevent.stage_completed',
+                            raise_if_not_found=False)
+        stage_ids = {s.id for s in (aa, done) if s}
+        for rec in self:
+            rec.x_is_after_action = rec.stage_id.id in stage_ids
 
     # Labor PLANNING inputs — how long we expect each phase to take. These
     # drive the estimated hours (below), which drive the labor cost for the
@@ -889,6 +1098,14 @@ class ProjectTask(models.Model):
             self.with_context(_labor_sync=True)._sync_labor_cost_lines()
         if 'stage_id' in vals:
             self._close_children_on_fold()
+            aa = self.env.ref('elksevent.stage_after_action',
+                              raise_if_not_found=False)
+            if aa:
+                for rec in self:
+                    if (rec.x_is_event and not rec.parent_id
+                            and rec.stage_id.id == aa.id
+                            and not rec.x_after_action_started):
+                        rec._on_enter_after_action()
         # Resync the calendar.event window whenever any of the fields
         # that determine start/stop change. Without this the tentative
         # entry keeps whatever times it had at creation and drifts out
@@ -1322,9 +1539,14 @@ class ProjectTask(models.Model):
             g = rec.x_guest_count or 0
             rec.x_bartender_count = math.ceil(g / per) if g else 0
 
-    @api.depends('x_room_income', 'x_coordinator_fee_pct', 'x_coordinator_fee')
+    @api.depends('x_room_retail', 'x_coordinator_fee_pct', 'x_coordinator_fee')
     def _compute_coordinator_auto(self):
-        """Suggested coordinator fee from the configured rate + the variance."""
+        """Suggested coordinator fee from the configured rate + the variance.
+
+        The percentage is taken on the room's DEFAULT (retail) rental rate —
+        NOT the charged/discounted rate — so a member or COL discount never
+        shrinks the coordinator's pay.
+        """
         settings = self._event_settings()
         for rec in self:
             if settings and settings.x_coordinator_fee_type == 'fixed':
@@ -1333,19 +1555,64 @@ class ProjectTask(models.Model):
                 pct = rec.x_coordinator_fee_pct or 0.0
                 if settings and settings.x_coordinator_percentage:
                     pct = settings.x_coordinator_percentage
-                auto = (rec.x_room_income or 0.0) * (pct / 100.0)
+                auto = (rec.x_room_retail or 0.0) * (pct / 100.0)
             rec.x_coordinator_fee_auto = auto
             rec.x_coordinator_fee_variance = (rec.x_coordinator_fee or 0.0) - auto
 
     @api.onchange('x_discount_reason')
     def _onchange_discount_reason(self):
         """Member and Non-Profit default to 50% off (editable). Clearing the
-        reason clears the percent."""
+        reason clears the percent + amount."""
         if self.x_discount_reason in ('member', 'nonprofit'):
-            if not self.x_discount_pct:
+            if self.x_discount_type == 'percent' and not self.x_discount_pct:
                 self.x_discount_pct = 50.0
         elif not self.x_discount_reason:
             self.x_discount_pct = 0.0
+            self.x_discount_value = 0.0
+
+    def _discount_fraction(self):
+        """Effective discount as a fraction of the discountable base (rooms +
+        event costs; coordinator fee is never discounted). Works for both a
+        percent and a fixed-dollar discount so the rest of the pricing math
+        stays proportional (and the taxable/non-taxable split is preserved)."""
+        self.ensure_one()
+        if not self.x_discount_reason:
+            return 0.0
+        if self.x_discount_type == 'amount':
+            base = (sum(self.x_room_booking_ids.mapped('subtotal'))
+                    or self.x_room_rental_rate or 0.0) + (
+                        self.x_eventcosts_total or 0.0)
+            amt = min(self.x_discount_value or 0.0, base)
+            return (amt / base) if base else 0.0
+        return (self.x_discount_pct or 0.0) / 100.0
+
+    def _event_discount_label(self):
+        """Human label for the discount, for the invoice / Financials."""
+        self.ensure_one()
+        is_col = (self.x_event_type == 'memorial' and self.x_member_number
+                  and self.x_member_number != '000000000')
+        if is_col:
+            return _("Celebration of Life (member) - facility waived")
+        labels = {
+            'member': _("Member Discount"),
+            'nonprofit': _("Non-Profit Discount"),
+            'officer_board': _("Officer / Board Approved Discount"),
+            'other': _("Discount"),
+        }
+        return labels.get(self.x_discount_reason, _("Member Discount"))
+
+    @api.constrains('x_discount_reason', 'x_discount_note',
+                    'x_discount_pct', 'x_discount_value', 'x_discount_type')
+    def _check_discount_note(self):
+        """A discount always needs a written reason."""
+        for rec in self:
+            applied = rec.x_discount_reason and (
+                (rec.x_discount_type == 'amount' and rec.x_discount_value)
+                or (rec.x_discount_type == 'percent' and rec.x_discount_pct))
+            if applied and not (rec.x_discount_note or '').strip():
+                raise ValidationError(_(
+                    "Please add a Discount Note explaining why this event is "
+                    "getting a discount."))
 
     # ── Paid labor helpers (volunteers cost nothing) ───────────────────
     @staticmethod
@@ -1368,9 +1635,24 @@ class ProjectTask(models.Model):
             'custodial': settings.x_custodial_rate or 0.0,
         }
 
+    def _att_labor_rate(self, att, rates):
+        """Per-hour cost for one attendance shift.
+
+        Uses the employee's own payroll rate (hr.employee.hourly_cost — the
+        "Wage" on their profile) so the P&L reflects real labor cost. Falls
+        back to the role rate from Lodge Settings when the employee has no
+        rate set. Volunteers are handled by the caller (cost nothing).
+        """
+        emp = att.employee_id
+        rate = getattr(emp, 'hourly_cost', 0.0) or 0.0
+        if not rate:
+            rate = rates.get(att.x_event_role or 'event', 0.0)
+        return rate
+
     def _paid_labor_by_category(self):
-        """Actual PAID labor cost (non-volunteer timeclock hours x role rate)
-        grouped by P&L category. Volunteer hours are excluded (cost nothing)."""
+        """Actual PAID labor cost (non-volunteer timeclock hours x the
+        employee's payroll rate) grouped by P&L category. Volunteer hours are
+        excluded (they cost nothing)."""
         self.ensure_one()
         rates = self._event_role_rates(self._event_settings())
         role_cat = {'event': 'event', 'bartender': 'bar',
@@ -1379,10 +1661,10 @@ class ProjectTask(models.Model):
         for att in self.x_attendance_ids:
             if self._elks_is_volunteer_att(att):
                 continue
-            role = att.x_event_role or 'event'
-            cat = role_cat.get(role)
+            cat = role_cat.get(att.x_event_role or 'event')
             if cat:
-                out[cat] += (att.worked_hours or 0.0) * rates.get(role, 0.0)
+                out[cat] += (att.worked_hours or 0.0) * self._att_labor_rate(
+                    att, rates)
         return out
 
     @api.depends(
@@ -1400,6 +1682,7 @@ class ProjectTask(models.Model):
         'x_attendance_ids.employee_id',
         'x_is_member', 'x_event_type', 'x_member_number',
         'x_discount_reason', 'x_discount_pct',
+        'x_discount_type', 'x_discount_value',
     )
     def _compute_financials(self):
         settings = self._event_settings()
@@ -1411,11 +1694,22 @@ class ProjectTask(models.Model):
         disc_pct = (settings.x_member_discount_pct
                     if settings and settings.x_member_discount_pct else 0.0)
         for rec in self:
-            # Room income from room booking lines
+            # Room income from room booking lines (as CHARGED)
             room_income = sum(rec.x_room_booking_ids.mapped('subtotal'))
             if not room_income and rec.x_room_rental_rate:
                 room_income = rec.x_room_rental_rate
             rec.x_room_income = room_income
+            # Room RETAIL = the room master's default rate + fees, ignoring any
+            # per-booking override. Used for the coordinator fee base and the
+            # member/COL discount (retail vs actual).
+            room_retail = sum(
+                (b.room_id.x_room_rate or 0.0)
+                + (b.room_id.x_cleaning_fee or 0.0)
+                + (b.room_id.x_service_fee or 0.0)
+                for b in rec.x_room_booking_ids)
+            if not room_retail:
+                room_retail = room_income or rec.x_room_rental_rate or 0.0
+            rec.x_room_retail = room_retail
 
             # Event Costs are now customer CHARGES (roll into the price).
             rec.x_eventcosts_total = sum(rec.x_cost_line_ids.mapped('total'))
@@ -1430,8 +1724,7 @@ class ProjectTask(models.Model):
                 rec.x_event_type == 'memorial'
                 and rec.x_member_number
                 and rec.x_member_number != '000000000')
-            disc = ((rec.x_discount_pct or 0.0) / 100.0
-                    if rec.x_discount_reason else 0.0)
+            disc = rec._discount_fraction()
             rooms_net = 0.0 if is_col else room_income * (1.0 - disc)
             factor = 1.0 - disc
 
@@ -1493,9 +1786,11 @@ class ProjectTask(models.Model):
             rec.x_total_costs = (rec.x_cogs or 0.0) + po_total
             rec.x_net_income = rec.x_total_billed - rec.x_total_costs
 
-            # Discount dollar value = full list price minus what was billed.
+            # Discount dollar value = full LIST price minus what was billed.
+            # The room uses its RETAIL (default) rate here, so a member/COL
+            # room reduction or waiver shows as the discount (retail -> actual).
             rec.x_discount_amount = (
-                room_income + rec.x_eventcosts_total
+                room_retail + rec.x_eventcosts_total
                 + (rec.x_coordinator_fee or 0.0)) - rec.x_total_billed
 
             # UBI: non-member room rentals are Unrelated Business Income.
@@ -1777,6 +2072,39 @@ class ProjectTask(models.Model):
         self._promote_calendar()
         # Notify the customer
         self._send_event_mail('elksevent.tmpl_event_approved')
+        # Remind the coordinator to purchase K&K rental insurance
+        self._schedule_insurance_todo()
+
+    def _schedule_insurance_todo(self):
+        """On final approval, drop a to-do to buy the K&K facility-rental
+        insurance, due 4 days before the event. Skipped for the lodge's own
+        (Elks) events and when the renter is bringing their own certificate."""
+        self.ensure_one()
+        if self.x_is_elks_event or self.x_insurance_by == 'renter':
+            return
+        settings = self._event_settings()
+        url = (settings.x_insurance_program_url if settings else '') or (
+            'https://insure.kandkinsurance.com/sites/ElksLodge/Pages/'
+            'ELKSInEligibility.aspx')
+        deadline = False
+        if self.x_event_date:
+            deadline = self.x_event_date - timedelta(days=4)
+        try:
+            self.activity_schedule(
+                'mail.mail_activity_data_todo',
+                date_deadline=deadline or None,
+                user_id=self._after_action_user().id,
+                summary=_("Purchase event rental insurance (K&K)"),
+                note=_(
+                    "Buy the facility-rental insurance for this event through "
+                    "the Elks program. Due 4 days before the event.<br/>"
+                    "<a href=\"%(url)s\" target=\"_blank\">Open the insurance "
+                    "application</a>",
+                    url=url),
+            )
+        except Exception as e:  # noqa: BLE001 - never block approval
+            _logger.warning(
+                "Insurance to-do failed for task %s: %s", self.id, e)
 
     def action_record_floor_rejected(self, notes=""):
         """Called by the reject wizard (board or floor) on a rejection."""
@@ -2031,8 +2359,7 @@ class ProjectTask(models.Model):
             and self.x_member_number
             and self.x_member_number != '000000000'
         )
-        disc = ((self.x_discount_pct or 0.0) / 100.0
-                if self.x_discount_reason else 0.0)
+        disc = self._discount_fraction()
 
         rooms = sum(self.x_room_booking_ids.mapped('subtotal'))
         rooms_net = 0.0 if is_col else rooms * (1.0 - disc)
@@ -2192,7 +2519,8 @@ class ProjectTask(models.Model):
         'x_est_cook_hours', 'x_est_kitchen_support_hours',
         'x_bar_gratuity', 'x_kitchen_gratuity',
         'x_marketing_signage', 'x_exclusive_use',
-        'x_bar_use', 'x_food_request'))
+        'x_bar_use', 'x_food_request', 'x_is_elks_event',
+        'x_insurance_by'))
 
     def _sync_labor_cost_lines(self):
         """(Re)build the auto service cost lines from the planned hours and the
@@ -2286,6 +2614,35 @@ class ProjectTask(models.Model):
                         'x_taxable': False,
                         'x_auto_source': src,
                     })
+
+            # Insurance — the lodge charges a general liability-insurance fee on
+            # every event it hosts for someone else (NOT an Elks/lodge event)
+            # WHEN the lodge is providing the coverage (Insurance Provided By =
+            # Lodge). If the renter brings their own certificate, no charge.
+            # Seeded from Lodge Settings but managed idempotently (NOT tagged
+            # x_auto_source) so a per-event amount the coordinator types in
+            # survives later cost-line rebuilds.
+            ins_type = tid('insurance')
+            if ins_type:
+                ins_lines = rec.x_cost_line_ids.filtered(
+                    lambda c: c.cost_type_id.id == ins_type)
+                lodge_covers = (
+                    not rec.x_is_elks_event
+                    and rec.x_insurance_by == 'lodge')
+                if not lodge_covers:
+                    ins_lines.unlink()
+                elif not ins_lines:
+                    ins_fee = settings.x_event_insurance_fee or 0.0
+                    if ins_fee:
+                        Line.create({
+                            'event_id': rec.id,
+                            'cost_type_id': ins_type,
+                            'name': _("Event Insurance"),
+                            'quantity': 1,
+                            'unit_cost': round(ins_fee, 2),
+                            'x_line_cogs': 0.0,
+                            'x_taxable': False,
+                        })
 
             # Gratuity — a pass-through: charged to the customer AND paid out to
             # staff, so Amount = COGS = the pool (net-zero to the lodge).
@@ -2433,6 +2790,51 @@ class ProjectTask(models.Model):
     def action_email_custodial_callout(self):
         return self._email_callout('custodial')
 
+    # ── Digital call-outs (portal) ─────────────────────────────────────
+    def _send_digital_callout(self, dept):
+        """Create/refresh the department call-out, mark it Sent, and email the
+        manager a link to review + certify it in their portal (/my)."""
+        self.ensure_one()
+        Callout = self.env['elks.event.callout']
+        co = Callout._get_or_create(self, dept)
+        mgr = co.manager_partner_id or self._callout_manager(dept)
+        if not mgr:
+            raise UserError(_(
+                "Set the %s Manager (on this event or in Lodge Settings) "
+                "before sending the call-out.", co.department_label))
+        # Refresh the estimate from the event, then mark as sent.
+        co._seed_from_event()
+        co.write({'manager_partner_id': mgr.id, 'state': 'sent'})
+        base = self.get_base_url()
+        link = '%s/my/callout/%s' % (base, co.id)
+        if mgr.email:
+            self.env['mail.mail'].sudo().create({
+                'subject': _('%(dept)s Call-Out to review - %(name)s',
+                             dept=co.department_label, name=self.name or 'Event'),
+                'body_html': _(
+                    '<p>Hello %(mgr)s,</p><p>Please review the %(dept)s '
+                    'call-out for <strong>%(name)s</strong>, adjust the staff '
+                    'counts/hours as needed, add any notes, and certify it.</p>'
+                    '<p><a href="%(link)s">Open the call-out</a></p>',
+                    mgr=mgr.name, dept=co.department_label,
+                    name=self.name or 'the event', link=link),
+                'email_to': mgr.email,
+            }).send()
+        self.message_post(
+            body=_("%(dept)s digital call-out sent to %(mgr)s for review.",
+                   dept=co.department_label, mgr=mgr.name),
+            subtype_xmlid='mail.mt_note')
+        return co
+
+    def action_send_bar_callout(self):
+        self._send_digital_callout('bar')
+
+    def action_send_kitchen_callout(self):
+        self._send_digital_callout('kitchen')
+
+    def action_send_custodial_callout(self):
+        self._send_digital_callout('custodial')
+
     def action_build_labor_costs(self):
         """Button: rebuild the auto service cost lines and refresh the quote."""
         self.ensure_one()
@@ -2524,9 +2926,15 @@ class ProjectTask(models.Model):
                 'officer_board': 'Officer / Board Approved', 'other': 'Other',
             }
             if evt.x_discount_reason:
+                # Show "(50%)" for a percent discount; the dollar amount is
+                # already on the line, so an amount-type discount needs no
+                # extra qualifier.
+                qualifier = (
+                    ' (%.0f%%)' % (evt.x_discount_pct or 0.0)
+                    if evt.x_discount_type == 'percent' else '')
                 discount_label = 'Less: %s discount%s' % (
                     _reason_labels.get(evt.x_discount_reason, 'Discount'),
-                    ' (%.0f%%)' % (evt.x_discount_pct or 0.0),
+                    qualifier,
                 )
             elif discount:
                 discount_label = 'Less: Celebration of Life (room waived)'
@@ -2792,6 +3200,102 @@ class ProjectTask(models.Model):
         }
 
     # ──────────────────────────────────────────────────────────────────
+    # SECTION: After-action review
+    # HUMAN: When an event moves to the After Action stage we (1) prompt the
+    #        coordinator to jot notes and review the P&L, and (2) email the
+    #        customer a feedback-survey link. When the customer finishes the
+    #        survey the coordinator gets an activity + email (see
+    #        survey_user_input.py). A P&L button rides the form in these
+    #        stages, and the After-Action menu filters to these events.
+    # AI: _on_enter_after_action() fires once (guarded by
+    #     x_after_action_started); _send_customer_survey() creates a
+    #     survey.user_input and mails its link.
+    # ──────────────────────────────────────────────────────────────────
+    def _on_enter_after_action(self):
+        self.ensure_one()
+        if self.x_after_action_started:
+            return
+        self.x_after_action_started = True
+        self._create_after_action_activity()
+        self._send_customer_survey()
+
+    def _after_action_user(self):
+        """Best pick for the coordinator user to notify / assign."""
+        self.ensure_one()
+        emp = self.x_coordinator_employee_id
+        if emp and emp.user_id:
+            return emp.user_id
+        if 'user_ids' in self._fields and self.user_ids:
+            return self.user_ids[0]
+        return self.env.user
+
+    def _create_after_action_activity(self):
+        """Prompt the coordinator to add notes and review the P&L."""
+        self.ensure_one()
+        try:
+            self.activity_schedule(
+                'mail.mail_activity_data_todo',
+                summary=_("After-action: add notes & review Event P&L"),
+                note=_("This event has moved to After Action. Add your "
+                       "notes/thoughts on the After-Action tab and review the "
+                       "Event P&L."),
+                user_id=self._after_action_user().id)
+        except Exception as e:  # noqa: BLE001 - never block the workflow
+            _logger.warning(
+                "After-action activity failed for task %s: %s", self.id, e)
+
+    def _send_customer_survey(self):
+        """Create a feedback-survey response for the customer and email the
+        link. No-op if Surveys isn't installed or no survey is configured."""
+        self.ensure_one()
+        if 'survey.user_input' not in self.env:
+            return
+        settings = self._event_settings()
+        survey = settings.x_customer_survey_id if settings else False
+        # Skip if unset or archived — an inactive survey's public link 404s.
+        if not survey or not survey.active:
+            return
+        email = self.x_customer_email or (
+            self.partner_id.email if self.partner_id else False)
+        if not email:
+            return
+        try:
+            answer = self.x_customer_survey_input_id
+            if not answer:
+                answer = self.env['survey.user_input'].sudo().create({
+                    'survey_id': survey.id,
+                    'partner_id': self.partner_id.id if self.partner_id else False,
+                    'email': email,
+                    'x_event_id': self.id,
+                })
+                self.x_customer_survey_input_id = answer.id
+            base = self.get_base_url()
+            link = '%s/survey/start/%s?answer_token=%s' % (
+                base, survey.access_token, answer.access_token)
+            template = self.env.ref(
+                'elksevent.mail_template_customer_survey',
+                raise_if_not_found=False)
+            if template:
+                template.sudo().with_context(
+                    survey_link=link).send_mail(self.id, force_send=True)
+        except Exception as e:  # noqa: BLE001 - never block the workflow
+            _logger.warning(
+                "Customer survey send failed for task %s: %s", self.id, e)
+
+    def action_open_event_pl(self):
+        """Print the single-event P&L (used by the After-Action button)."""
+        self.ensure_one()
+        return self.env.ref(
+            'elksevent.action_report_event_pl_single').report_action(self)
+
+    def action_print_insurance_worksheet(self):
+        """Print the K&K rental-insurance application worksheet, pre-filled
+        from the event so staff can complete the online form for someone."""
+        self.ensure_one()
+        return self.env.ref(
+            'elksevent.action_report_event_insurance').report_action(self)
+
+    # ──────────────────────────────────────────────────────────────────
     # SECTION: Board agenda (Secretary)
     # HUMAN: One consolidated list of every event awaiting board / floor
     #        review, so the Secretary can print it for the meeting or email
@@ -2949,8 +3453,10 @@ class ProjectTask(models.Model):
         """
         self.ensure_one()
         s = self._event_settings()
-        disc = ((self.x_discount_pct or 0.0) / 100.0
-                if self.x_discount_reason else 0.0)
+        # Honour either a percent OR a fixed-amount discount (via the shared
+        # helper) so the itemized charges net down to x_total_billed and the
+        # GL breakout reconciles for both discount types.
+        disc = self._discount_fraction()
         factor = 1.0 - disc
         is_col = (self.x_event_type == 'memorial' and self.x_member_number
                   and self.x_member_number != '000000000')
@@ -3084,6 +3590,66 @@ class ProjectTask(models.Model):
             note += "<br/>" + self.x_contract_notes
         return note
 
+    def _event_invoice_narration(self):
+        """Assemble the invoice Terms block from the Lodge Settings billing
+        options: an acceptance-by-payment clause, the deposit receipt, a media
+        reminder, a link to the Terms page, and the full embedded Terms text.
+        All payments (deposit or final) are acceptance of the Terms."""
+        self.ensure_one()
+        s = self._event_settings()
+        parts = []
+        if not s or s.x_invoice_terms_acceptance:
+            parts.append(Markup(
+                '<p><strong>Acceptance of Terms:</strong> Payment of any '
+                'portion of this invoice, including the reservation fee / '
+                'deposit, constitutes acceptance of the Rental Terms &amp; '
+                'Conditions.</p>'))
+        receipt = self._event_deposit_receipt_note()
+        if receipt:
+            parts.append(Markup('<p>%s</p>') % receipt)
+        media = self._event_media_note()
+        if media:
+            parts.append(Markup('<p>%s</p>') % media)
+        if not s or s.x_invoice_terms_link:
+            parts.append(Markup('<p>%s</p>') % Markup(self._event_invoice_terms()))
+        if not s or s.x_invoice_terms_embed:
+            body = self._event_terms_body_html()
+            if body:
+                parts.append(Markup(
+                    '<hr/><h4>Rental Terms &amp; Conditions</h4>'))
+                parts.append(body)
+        if s and s.x_invoice_signature_line:
+            parts.append(Markup(
+                '<hr/><table style="width:100%; margin-top:16px;">'
+                '<tr><td style="width:60%;">Host signature: '
+                '______________________________</td>'
+                '<td>Date: __________</td></tr>'
+                '<tr><td style="padding-top:14px;">Elks representative: '
+                '____________________</td>'
+                '<td style="padding-top:14px;">Date: __________</td></tr>'
+                '</table>'))
+        return Markup('').join(parts)
+
+    def _attach_event_agreement(self, move):
+        """Attach the signable Facility Usage Agreement PDF to an invoice."""
+        self.ensure_one()
+        try:
+            pdf, _dummy = self.env['ir.actions.report']._render_qweb_pdf(
+                'elksevent.report_event_contract', self.ids)
+            self.env['ir.attachment'].create({
+                'name': 'Facility Usage Agreement - %s.pdf' % (
+                    self.name or 'Event'),
+                'type': 'binary',
+                'datas': base64.b64encode(pdf),
+                'res_model': 'account.move',
+                'res_id': move.id,
+                'mimetype': 'application/pdf',
+            })
+        except Exception as e:  # noqa: BLE001 - never block invoicing
+            _logger.warning(
+                "Agreement attach failed for invoice of task %s: %s",
+                self.id, e)
+
     def _event_media_note(self):
         """When signage/projector media is involved, the invoice reminds the
         host to deliver the media to the office 4 days prior."""
@@ -3182,13 +3748,25 @@ class ProjectTask(models.Model):
 
         base, _disc, deposit_pct = self._event_invoice_base()
         deposit_gross = base * deposit_pct / 100.0
+        # Member / COL discount to surface on the invoice (retail -> actual).
+        disc_total = max(self.x_discount_amount or 0.0, 0.0)
+        show_disc = (disc_total > 0.005
+                     and (not settings or settings.x_invoice_show_discount))
+        disc_label = self._event_discount_label()
         lines = []
         if kind == 'final' and self.x_deposit_received:
             # Show the FULL rental, then credit the deposit already paid so the
             # customer sees: total − deposit = balance. (Net revenue = balance;
             # the deposit invoice carries the deposit portion, no double count.)
             facility = settings.x_facility_product_id if settings else False
-            lines.append(_line(_("Facility Usage and Rental"), base, facility))
+            if show_disc:
+                lines.append(_line(_("Facility Usage and Rental (retail)"),
+                                   base + disc_total, facility))
+                lines.append(_line(_("Less: %s", disc_label),
+                                   -disc_total, facility))
+            else:
+                lines.append(_line(_("Facility Usage and Rental"), base,
+                                   facility))
             dep_label = _("Less: Reservation Fee / Deposit paid")
             if self.x_deposit_date:
                 dep_label = _("Less: Reservation Fee / Deposit paid %s",
@@ -3198,15 +3776,20 @@ class ProjectTask(models.Model):
             label = _("Final")
         else:
             gross, _d, product, label = self._event_invoice_portion(kind)
-            lines.append(_line(label, gross, product))
+            if show_disc:
+                # This invoice covers a portion of the event (deposit % or the
+                # remaining %); show the discount pro-rated to that portion so
+                # the net still equals `gross`.
+                portion = (deposit_pct / 100.0) if kind == 'deposit' else (
+                    1.0 - deposit_pct / 100.0)
+                disc_portion = disc_total * portion
+                lines.append(_line(_("%s (retail)", label),
+                                   gross + disc_portion, product))
+                lines.append(_line(_("Less: %s", disc_label),
+                                   -disc_portion, product))
+            else:
+                lines.append(_line(label, gross, product))
 
-        narration = self._event_invoice_terms() or ''
-        receipt = self._event_deposit_receipt_note()
-        if receipt:
-            narration = (receipt + "\n\n" + narration) if narration else receipt
-        media = self._event_media_note()
-        if media:
-            narration = (narration + "<br/>" + media) if narration else media
         move = self.env['account.move'].create({
             'move_type': 'out_invoice',
             'partner_id': partner.id,
@@ -3215,9 +3798,12 @@ class ProjectTask(models.Model):
             'invoice_origin': (
                 self.x_sale_order_id.name if self.x_sale_order_id
                 else self.name),
-            'narration': narration,
+            'narration': self._event_invoice_narration(),
             'invoice_line_ids': lines,
         })
+        # Attach the signable Facility Usage Agreement (T&C + signatures).
+        if not settings or settings.x_invoice_attach_agreement:
+            self._attach_event_agreement(move)
         self.message_post(
             body=_("<b>%(label)s invoice created</b>: %(link)s",
                    label=label, link=move._get_html_link()),
@@ -3272,7 +3858,7 @@ class ProjectTask(models.Model):
                     'discount': disc,
                     'name': self._event_invoice_line_name(label),
                 })
-            mv.narration = self._event_invoice_terms()
+            mv.narration = self._event_invoice_narration()
         self.message_post(
             body=_("Refreshed %s draft invoice(s) from the quote.", len(drafts)),
             subtype_xmlid='mail.mt_note',
