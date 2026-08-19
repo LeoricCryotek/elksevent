@@ -307,7 +307,8 @@ class ProjectTask(models.Model):
     #        activities apply, and (on approval) get a to-do with the link.
     # AI: x_insurance_event_category defaults from x_event_type via
     #     EVENT_TYPE_TO_INSURANCE (editable). x_prohibited_ack must be true
-    #     to be eligible. The insurance to-do fires from action_floor_approve.
+    #     to be eligible. The insurance to-do fires on Board approval
+    #     (_finalize_event_approval).
     # ──────────────────────────────────────────────────────────────────
     x_insurance_event_category = fields.Selection(
         INSURANCE_EVENT_CATEGORIES, string="Insurance Event Category",
@@ -1966,15 +1967,15 @@ class ProjectTask(models.Model):
                     ))
 
     # ──────────────────────────────────────────────────────────────────
-    # SECTION: Board / Floor approval workflow  (mirrors elkspurchase)
-    # HUMAN: The path every event walks: Draft -> Board -> Floor ->
-    #        Approved (or Rejected). A Coordinator can submit but can't
-    #        approve; an Event Officer does the Board approval AND records the
-    #        Floor vote (and holds the budget / double-booking overrides).
-    # AI: state = x_approval_state. Each action calls _ensure_approver(group)
-    #     (server-side has_group, in addition to view groups=). Floor approval
-    #     fans out: checklist subtasks, calendar promote, approval email.
-    #     Wizards call action_record_floor_approved / _rejected back here.
+    # SECTION: Board approval workflow
+    # HUMAN: The path every event walks: Draft -> Board -> Approved (or
+    #        Rejected). A Coordinator can submit but can't approve; an Event
+    #        Officer does the Board approval (which is FINAL) and holds the
+    #        budget / double-booking overrides. (There is no Floor vote step.)
+    # AI: state = x_approval_state ('floor' retained in the enum only for
+    #     legacy data). action_board_approve -> _finalize_event_approval, which
+    #     fans out: booked stage, checklist subtasks, calendar promote,
+    #     approval email, insurance to-do.
     # ──────────────────────────────────────────────────────────────────
     def _ensure_approver(self, group_xmlid, action_label):
         """Raise unless the current user belongs to the approver group."""
@@ -2055,18 +2056,13 @@ class ProjectTask(models.Model):
         )
 
     def action_board_approve(self):
-        """Board approves -> advance to the Floor vote."""
+        """Board approval is FINAL — approve + book the event (no Floor vote)."""
         self._ensure_approver(
             'elksevent.group_event_officer', _("approve at the Board level"))
         for rec in self:
             if rec.x_approval_state != 'board':
                 raise UserError(_("This event is not in the Board queue."))
-            rec.x_approval_state = 'floor'
-            rec.message_post(
-                body=_("<b>Board Approved</b> by %s. Advanced to Floor vote.",
-                       self.env.user.name),
-                subtype_xmlid='mail.mt_comment',
-            )
+            rec._finalize_event_approval()
 
     def action_board_reject(self):
         """Open the reject-reason wizard for a Board rejection."""
@@ -2076,31 +2072,6 @@ class ProjectTask(models.Model):
         if self.x_approval_state != 'board':
             raise UserError(_("This event is not in the Board queue."))
         return self._open_reject_wizard('board')
-
-    def action_floor_approve(self):
-        """Open the Floor Vote wizard (motion #, vote counts, notes)."""
-        self.ensure_one()
-        self._ensure_approver(
-            'elksevent.group_event_officer', _("record the Floor vote"))
-        if self.x_approval_state != 'floor':
-            raise UserError(_("This event is not in the Floor queue."))
-        return {
-            'type': 'ir.actions.act_window',
-            'name': _("Record Floor Vote"),
-            'res_model': 'elks.event.floor.vote.wizard',
-            'view_mode': 'form',
-            'target': 'new',
-            'context': {'default_event_id': self.id},
-        }
-
-    def action_floor_reject(self):
-        """Open the reject-reason wizard for a Floor rejection."""
-        self.ensure_one()
-        self._ensure_approver(
-            'elksevent.group_event_officer', _("reject at the Floor level"))
-        if self.x_approval_state != 'floor':
-            raise UserError(_("This event is not in the Floor queue."))
-        return self._open_reject_wizard('floor')
 
     def _open_reject_wizard(self, stage):
         return {
@@ -2115,8 +2086,10 @@ class ProjectTask(models.Model):
             },
         }
 
-    def action_record_floor_approved(self, notes=""):
-        """Called by the Floor Vote wizard on an approval result."""
+    def _finalize_event_approval(self, notes=""):
+        """Approve + book the event: set approved, move to the Booked stage,
+        build checklist subtasks, promote the calendar, email the customer, and
+        drop the insurance to-do. Board approval is final."""
         self.ensure_one()
         vals = {
             'x_approval_state': 'approved',
@@ -2132,7 +2105,7 @@ class ProjectTask(models.Model):
             vals['stage_id'] = booked_stage.id
         self.write(vals)
         self.message_post(
-            body=_("<b>Floor Approved</b> on %(date)s.%(notes)s",
+            body=_("<b>Board Approved &amp; Booked</b> on %(date)s.%(notes)s",
                    date=self.x_board_approval_date,
                    notes=(f"<br/>{notes}" if notes else "")),
             subtype_xmlid='mail.mt_comment',
@@ -2145,6 +2118,10 @@ class ProjectTask(models.Model):
         self._send_event_mail('elksevent.tmpl_event_approved')
         # Remind the coordinator to purchase K&K rental insurance
         self._schedule_insurance_todo()
+
+    def action_record_floor_approved(self, notes=""):
+        """Back-compat shim for the retired Floor Vote wizard."""
+        self._finalize_event_approval(notes)
 
     def _schedule_insurance_todo(self):
         """On final approval, drop a to-do to buy the K&K facility-rental
@@ -3369,11 +3346,11 @@ class ProjectTask(models.Model):
     # ──────────────────────────────────────────────────────────────────
     @api.model
     def _board_agenda_events(self):
-        """Events currently pending board or floor review, date-ordered."""
+        """Events currently pending Board review, date-ordered."""
         return self.search([
             ('x_is_event', '=', True),
             ('parent_id', '=', False),
-            ('x_approval_state', 'in', ('board', 'floor')),
+            ('x_approval_state', '=', 'board'),
         ], order='x_event_date, name')
 
     @api.model
@@ -3781,6 +3758,94 @@ class ProjectTask(models.Model):
             label = _("Facility Usage and Rental")
         return gross, disc, product, label
 
+    def _event_invoice_lines(self, kind):
+        """Build the invoice_line_ids commands for a deposit / final invoice.
+
+        DEPOSIT = the reservation-fee portion (deposit %, half by default).
+        FINAL   = the FULL event total, less any deposit already PAID = the
+                  remaining balance owed at that moment.
+        Both itemize the room at retail + the discount line so the customer
+        sees it, split taxable / non-taxable exactly like the quote so the tax
+        matches. A paid deposit is flagged on the deposit invoice and credited
+        on the final.
+        """
+        self.ensure_one()
+        settings = self._event_settings()
+        tax_cmd = self._event_invoice_tax_cmd()
+        facility = settings.x_facility_product_id if settings else False
+        dep_product = settings.x_deposit_product_id if settings else False
+
+        def _line(label, amount, product, taxable=True):
+            vals = {
+                'name': self._event_invoice_line_name(label),
+                'quantity': 1,
+                'price_unit': amount,
+                'discount': 0.0,
+                'tax_ids': tax_cmd if taxable else [(5, 0, 0)],
+            }
+            if product:
+                vals['product_id'] = product.id
+            acc = self._event_income_account(product)
+            if acc:
+                vals['account_id'] = acc.id
+            return (0, 0, vals)
+
+        _base, _d, deposit_pct = self._event_invoice_base()
+        rooms_net, room_disc = self._event_room_discount()
+        room_retail = self.x_room_retail or 0.0
+        ec_taxable = sum(c.total for c in self.x_cost_line_ids if c.x_taxable)
+        ec_nontax = (self.x_eventcosts_total or 0.0) - ec_taxable
+        coord = self.x_coordinator_fee or 0.0
+        taxable_net = rooms_net + ec_taxable          # taxed
+        nontax_net = ec_nontax + coord                # exempt
+        disc_label = self._event_discount_label()
+
+        if kind == 'deposit':
+            portion, line_prod = deposit_pct / 100.0, dep_product
+        else:  # final = the whole total
+            portion, line_prod = 1.0, facility
+
+        show_disc = (room_disc > 0.005
+                     and (not settings or settings.x_invoice_show_discount))
+
+        lines = []
+        # ---- TAXABLE side (goods): room at retail + the discount ----
+        if show_disc:
+            if room_retail:
+                lines.append(_line(_("Facility / Room Rental (retail)"),
+                                   room_retail * portion, line_prod, True))
+            if ec_taxable:
+                lines.append(_line(_("Taxable Event Costs"),
+                                   ec_taxable * portion, line_prod, True))
+            lines.append(_line(_("Less: %s", disc_label),
+                               -room_disc * portion, line_prod, True))
+        elif taxable_net:
+            tlabel = (_("Reservation Fee") if kind == 'deposit'
+                      else _("Facility Usage and Rental"))
+            lines.append(_line(tlabel, taxable_net * portion, line_prod, True))
+        # ---- NON-TAXABLE side (services + coordinator) ----
+        if nontax_net:
+            slabel = (_("Reservation Fee - services") if kind == 'deposit'
+                      else _("Event Services (non-taxable)"))
+            lines.append(_line(slabel, nontax_net * portion, line_prod, False))
+
+        # Deposit handling.
+        dep_paid = self.x_deposit_amount or 0.0
+        date_txt = (_(" on %s", self.x_deposit_date)
+                    if self.x_deposit_date else "")
+        if kind == 'final' and self.x_deposit_received and dep_paid > 0:
+            # FULL total less the deposit already paid = remaining balance.
+            lines.append(_line(_("Less: Deposit PAID%s", date_txt),
+                               -dep_paid, dep_product, False))
+        if kind == 'deposit' and self.x_deposit_received and dep_paid > 0:
+            # Flag the reservation fee as paid on the deposit invoice.
+            lines.append((0, 0, {
+                'display_type': 'line_note',
+                'name': _("*** DEPOSIT PAID%(when)s - $%(amt).2f ***",
+                          when=date_txt, amt=dep_paid),
+            }))
+        return lines
+
     def _build_event_invoice(self, kind):
         self.ensure_one()
         if self.x_is_elks_event:
@@ -3808,91 +3873,7 @@ class ProjectTask(models.Model):
                 "or cancel it before creating a new one.", kind=kind))
 
         settings = self._event_settings()
-        tax_cmd = self._event_invoice_tax_cmd()
         partner = self._get_event_partner()
-
-        def _line(label, amount, product, taxable=True):
-            vals = {
-                'name': self._event_invoice_line_name(label),
-                'quantity': 1,
-                'price_unit': amount,
-                'discount': 0.0,
-                'tax_ids': tax_cmd if taxable else [(5, 0, 0)],
-            }
-            if product:
-                vals['product_id'] = product.id
-            acc = self._event_income_account(product)
-            if acc:
-                vals['account_id'] = acc.id
-            return (0, 0, vals)
-
-        base, _disc, deposit_pct = self._event_invoice_base()
-        facility = settings.x_facility_product_id if settings else False
-        dep_product = settings.x_deposit_product_id if settings else False
-
-        # Split by TAX exactly like the quote: only GOODS are taxed (the room +
-        # any event-cost line flagged Taxable). Services (non-taxable event
-        # costs + the coordinator fee) are exempt. This keeps the invoice tax
-        # equal to the quote tax.
-        rooms_net, room_disc = self._event_room_discount()
-        room_retail = self.x_room_retail or 0.0
-        ec_taxable = sum(c.total for c in self.x_cost_line_ids if c.x_taxable)
-        ec_nontax = (self.x_eventcosts_total or 0.0) - ec_taxable
-        coord = self.x_coordinator_fee or 0.0
-        taxable_net = rooms_net + ec_taxable          # what gets taxed
-        nontax_net = ec_nontax + coord                # exempt
-        disc_label = self._event_discount_label()
-
-        # Which portion of the event this invoice bills, and its product.
-        if kind == 'final' and self.x_deposit_received:
-            portion, line_prod = 1.0, facility
-        elif kind == 'deposit':
-            portion, line_prod = deposit_pct / 100.0, dep_product
-        else:  # final, no deposit on file
-            portion, line_prod = 1.0 - deposit_pct / 100.0, facility
-
-        # The FINAL invoice itemizes the room at retail + the discount line;
-        # the deposit is a plain reservation-fee split.
-        show_disc = (kind == 'final' and room_disc > 0.005
-                     and (not settings or settings.x_invoice_show_discount))
-
-        lines = []
-        # ---- TAXABLE side (goods) ----
-        if show_disc:
-            if room_retail:
-                lines.append(_line(_("Facility / Room Rental (retail)"),
-                                   room_retail * portion, line_prod, True))
-            if ec_taxable:
-                lines.append(_line(_("Taxable Event Costs"),
-                                   ec_taxable * portion, line_prod, True))
-            lines.append(_line(_("Less: %s", disc_label),
-                               -room_disc * portion, line_prod, True))
-        elif taxable_net:
-            tlabel = (_("Reservation Fee") if kind == 'deposit'
-                      else _("Facility Usage and Rental"))
-            lines.append(_line(tlabel, taxable_net * portion, line_prod, True))
-        # ---- NON-TAXABLE side (services + coordinator) ----
-        if nontax_net:
-            slabel = (_("Reservation Fee - services")
-                      if kind == 'deposit'
-                      else _("Event Services (non-taxable)"))
-            lines.append(_line(slabel, nontax_net * portion, line_prod, False))
-
-        # Final invoice after a deposit: credit the deposit already paid,
-        # split by tax so the tax still nets out correctly.
-        if kind == 'final' and self.x_deposit_received:
-            dp = deposit_pct / 100.0
-            suffix = (_(" %s", self.x_deposit_date) if self.x_deposit_date
-                      else "")
-            if taxable_net:
-                lines.append(_line(
-                    _("Less: Deposit paid%s", suffix),
-                    -taxable_net * dp, dep_product, True))
-            if nontax_net:
-                lines.append(_line(
-                    _("Less: Deposit paid - services%s", suffix),
-                    -nontax_net * dp, dep_product, False))
-
         move = self.env['account.move'].create({
             'move_type': 'out_invoice',
             'partner_id': partner.id,
@@ -3902,7 +3883,7 @@ class ProjectTask(models.Model):
                 self.x_sale_order_id.name if self.x_sale_order_id
                 else self.name),
             'narration': self._event_invoice_narration(),
-            'invoice_line_ids': lines,
+            'invoice_line_ids': self._event_invoice_lines(kind),
         })
         # Attach the signable Facility Usage Agreement (T&C + signatures).
         if not settings or settings.x_invoice_attach_agreement:
@@ -3945,8 +3926,19 @@ class ProjectTask(models.Model):
         return self._build_event_invoice('final')
 
     def action_refresh_invoice_from_quote(self):
-        """Rewrite the single line on any DRAFT event invoice to current amounts."""
+        """Rebuild the lines on every DRAFT event invoice to current amounts.
+
+        Rebuilds the quote first, then fully re-lays each draft deposit/final
+        invoice (deposit % or full-minus-deposit) so the amounts owed reflect
+        the latest room, event costs, coordinator, discount, and deposit paid.
+        """
         self.ensure_one()
+        if self.x_sale_order_id:
+            try:
+                self._sync_quote_lines()
+            except Exception as e:  # noqa: BLE001
+                _logger.warning(
+                    "Quote refresh failed for %s: %s", self.id, e)
         drafts = self.x_invoice_ids.filtered(lambda m: m.state == 'draft')
         if not drafts:
             raise UserError(_(
@@ -3954,16 +3946,10 @@ class ProjectTask(models.Model):
                 "cancelled and recreated."))
         for mv in drafts:
             kind = mv.x_event_invoice_kind or 'final'
-            gross, disc, product, label = self._event_invoice_portion(kind)
-            line = mv.invoice_line_ids.filtered(
-                lambda l: l.display_type == 'product')[:1]
-            if line:
-                line.write({
-                    'price_unit': gross,
-                    'discount': disc,
-                    'name': self._event_invoice_line_name(label),
-                })
-            mv.narration = self._event_invoice_narration()
+            mv.write({
+                'invoice_line_ids': [(5, 0, 0)] + self._event_invoice_lines(kind),
+                'narration': self._event_invoice_narration(),
+            })
         self.message_post(
             body=_("Refreshed %s draft invoice(s) from the quote.", len(drafts)),
             subtype_xmlid='mail.mt_note',

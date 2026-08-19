@@ -171,6 +171,7 @@
                         class="oe_stat_button"
                         icon="fa-check-circle"
                         groups="elksevent.group_event_officer"
+                        confirm="Board-approve and book this event?"
                         invisible="not x_is_event or x_approval_state != 'board'"/>
                 <button name="action_board_reject"
                         string="Board Reject"
@@ -179,20 +180,6 @@
                         icon="fa-times-circle"
                         groups="elksevent.group_event_officer"
                         invisible="not x_is_event or x_approval_state != 'board'"/>
-                <button name="action_floor_approve"
-                        string="Record Floor Vote"
-                        type="object"
-                        class="oe_stat_button"
-                        icon="fa-gavel"
-                        groups="elksevent.group_event_officer"
-                        invisible="not x_is_event or x_approval_state != 'floor'"/>
-                <button name="action_floor_reject"
-                        string="Floor Reject"
-                        type="object"
-                        class="oe_stat_button"
-                        icon="fa-times-circle"
-                        groups="elksevent.group_event_officer"
-                        invisible="not x_is_event or x_approval_state != 'floor'"/>
                 <button name="action_reset_to_draft"
                         string="Reset to Draft"
                         type="object"
@@ -568,10 +555,6 @@
                         <field name="x_board_submitted_date" readonly="1" nolabel="1"
                                class="d-inline"/>.
                     </div>
-                    <div class="alert alert-warning" role="alert"
-                         invisible="x_approval_state != 'floor'">
-                        <strong>Board approved — awaiting Floor vote.</strong>
-                    </div>
                     <div class="alert alert-success" role="alert"
                          invisible="x_approval_state != 'approved'">
                         <strong>Approved</strong> on
@@ -592,7 +575,7 @@
                             <field name="x_board_approval_date" readonly="1"/>
                             <field name="x_board_approved_by" readonly="1"/>
                         </group>
-                        <group string="Board / Floor Notes">
+                        <group string="Board Notes">
                             <field name="x_board_notes" nolabel="1"
                                    placeholder="Notes or conditions from the vote..."/>
                             <field name="x_board_denial_reason" nolabel="1"
@@ -922,7 +905,7 @@
                 <field name="x_guest_count" string="Guests" optional="show"/>
                 <field name="x_approval_state" string="Approval"
                        widget="badge"
-                       decoration-info="x_approval_state in ('board', 'floor')"
+                       decoration-info="x_approval_state == 'board'"
                        decoration-success="x_approval_state == 'approved'"
                        decoration-danger="x_approval_state == 'rejected'"/>
                 <field name="x_room_income" string="Room Income" optional="show"/>
@@ -956,9 +939,6 @@
                 <filter name="filter_pending_board"
                         string="Pending Board Review"
                         domain="[('x_approval_state', '=', 'board')]"/>
-                <filter name="filter_pending_floor"
-                        string="Pending Floor Vote"
-                        domain="[('x_approval_state', '=', 'floor')]"/>
                 <filter name="filter_approved"
                         string="Approved"
                         domain="[('x_approval_state', '=', 'approved')]"/>
@@ -1044,7 +1024,7 @@
         <field name="domain">[
             ('x_is_event', '=', True),
             ('parent_id', '=', False),
-            ('x_approval_state', 'in', ('board', 'floor')),
+            ('x_approval_state', '=', 'board'),
         ]</field>
         <!-- See note above: %(xmlid)d in an action context isn't substituted in
              Odoo 19 and breaks the client. Project default handled by

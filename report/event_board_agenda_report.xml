@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- =========================================================================
      HUMAN: Board Agenda for the Secretary. One consolidated list of every
-     event awaiting board / floor review (the "Present to Board" queue), so
+     event awaiting Board review (the "Present to Board" queue), so
      the Secretary can print it for the meeting or email it out ahead of
      time instead of hand-collating each request. Columns: Title, Type,
      Date, Elk (member?), Event Total. Driven from Reports menu -> Board
@@ -64,8 +64,8 @@
                 <hr style="border-top:2px solid #46166a; margin:2px 0 8px 0;"/>
 
                 <p style="font-size:10px; color:#555; margin:0 0 8px 0;">
-                    All events currently in the Present-to-Board / Floor-Vote
-                    queue, awaiting approval.
+                    All events currently in the Present-to-Board queue,
+                    awaiting Board approval.
                 </p>
 
                 <table style="width:100%; border-collapse:collapse; font-size:10.5px; border:1px solid #cbb8dd;">
@@ -82,9 +82,6 @@
                         <td style="padding:4px 6px; border-top:1px solid #e3d9ee;"><t t-esc="o_index + 1"/></td>
                         <td style="padding:4px 6px; border-top:1px solid #e3d9ee;">
                             <strong><t t-esc="o.name or ''"/></strong>
-                            <t t-if="o.x_approval_state == 'floor'">
-                                <span style="font-size:8.5px; color:#8a6d1a;"> (Floor Vote)</span>
-                            </t>
                         </td>
                         <td style="padding:4px 6px; border-top:1px solid #e3d9ee;"><span t-field="o.x_event_type"/></td>
                         <td style="padding:4px 6px; border-top:1px solid #e3d9ee;">
@@ -106,8 +103,7 @@
                 <p style="font-size:9px; color:#888; margin-top:12px;">
                     "Elk?" indicates whether the requesting host is a member.
                     Event Total is the customer-facing total (after any member
-                    discount). Events marked "Floor Vote" have cleared the board
-                    and await the membership floor vote.
+                    discount).
                 </p>
             </div>
         </t>
