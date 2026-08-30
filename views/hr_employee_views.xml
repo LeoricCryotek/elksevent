@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Tag an employee as a department manager for event call-outs. One
+         person can hold any/all departments (overlap is fine). Whoever holds
+         a department gets its call-sheet link and certifies the staffing. -->
+    <record id="view_employee_form_event_dept_role" model="ir.ui.view">
+        <field name="name">hr.employee.form.event.dept.role</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr.view_employee_form"/>
+        <field name="arch" type="xml">
+            <field name="department_id" position="after">
+                <field name="x_is_event_bar_mgr"/>
+                <field name="x_is_event_kitchen_mgr"/>
+                <field name="x_is_event_custodial_mgr"/>
+            </field>
+        </field>
+    </record>
+
+    <!-- Filters + group-by so you can pull up the event department managers. -->
+    <record id="view_employee_filter_event_dept_role" model="ir.ui.view">
+        <field name="name">hr.employee.search.event.dept.role</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr.view_employee_filter"/>
+        <field name="arch" type="xml">
+            <!-- Insert the quick filters just before the first Group By group
+                 (filters must precede groups in a search view), and add the
+                 group-by options into that existing group. -->
+            <xpath expr="(//search/group)[1]" position="before">
+                <separator/>
+                <filter name="event_dept_managers" string="Event Dept Managers"
+                        domain="['|', '|',
+                                 ('x_is_event_bar_mgr', '=', True),
+                                 ('x_is_event_kitchen_mgr', '=', True),
+                                 ('x_is_event_custodial_mgr', '=', True)]"/>
+                <filter name="event_bar_mgr" string="Bar / Lounge Manager"
+                        domain="[('x_is_event_bar_mgr', '=', True)]"/>
+                <filter name="event_kitchen_mgr" string="Kitchen Manager"
+                        domain="[('x_is_event_kitchen_mgr', '=', True)]"/>
+                <filter name="event_custodial_mgr" string="Custodial Manager"
+                        domain="[('x_is_event_custodial_mgr', '=', True)]"/>
+            </xpath>
+            <xpath expr="(//search/group)[1]" position="inside">
+                <filter name="group_event_bar_mgr" string="Bar / Lounge Manager"
+                        context="{'group_by': 'x_is_event_bar_mgr'}"/>
+                <filter name="group_event_kitchen_mgr" string="Kitchen Manager"
+                        context="{'group_by': 'x_is_event_kitchen_mgr'}"/>
+                <filter name="group_event_custodial_mgr"
+                        string="Custodial Manager"
+                        context="{'group_by': 'x_is_event_custodial_mgr'}"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

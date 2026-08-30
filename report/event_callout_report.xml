@@ -156,16 +156,21 @@
             <div style="font-size:14px; font-weight:bold; color:#46166a;">BAR CALL-OUT &amp; QUOTE REQUEST</div>
             <hr style="border-top:2px solid #46166a; margin:2px 0 10px 0;"/>
             <t t-call="elksevent.callout_summary"/>
-            <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd;">REQUESTED</div>
+            <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd;">REQUESTED BY THE CUSTOMER</div>
             <table style="width:100%; font-size:10px; border:1px solid #cbb8dd; border-top:none;">
                 <tr><td style="padding:2px 6px; width:45%;">Number of bars</td><td style="padding:2px 6px;"><t t-esc="o.x_num_bars or 0"/></td></tr>
                 <tr><td style="padding:2px 6px;">Bartenders requested</td><td style="padding:2px 6px;"><t t-esc="o.x_bartender_count or 0"/> x <t t-esc="'%g' % (o.x_plan_bar_hours or 0)"/> hrs each</td></tr>
                 <tr t-if="o.x_need_beer_tub"><td style="padding:2px 6px;">Beer tub</td><td style="padding:2px 6px;">Yes</td></tr>
                 <tr t-if="o.x_bar_gratuity"><td style="padding:2px 6px;">Bar gratuity pool</td><td style="padding:2px 6px;">$<t t-esc="'{:,.2f}'.format(o.x_bar_gratuity)"/></td></tr>
             </table>
+            <div style="font-size:9px; color:#666; padding:2px 0;">These are the customer's requests. The manager sets the actual staffing below.</div>
             <t t-if="o.x_bar_drink_requests">
-                <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd; margin-top:6px;">DRINK REQUESTS</div>
+                <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd; margin-top:6px;">DRINK REQUESTS (from customer)</div>
                 <div style="font-size:10px; border:1px solid #cbb8dd; border-top:none; padding:4px 6px; white-space:pre-line;"><t t-esc="o.x_bar_drink_requests"/></div>
+            </t>
+            <t t-if="o.x_bar_customer_request">
+                <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd; margin-top:6px;">OTHER CUSTOMER REQUESTS</div>
+                <div style="font-size:10px; border:1px solid #cbb8dd; border-top:none; padding:4px 6px; white-space:pre-line;"><t t-esc="o.x_bar_customer_request"/></div>
             </t>
             <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin-top:8px;">BAR CHECKLIST</div>
             <table style="width:100%; font-size:10px; border:1px solid #ccc; border-top:none;">
@@ -174,8 +179,12 @@
                     <td style="padding:4px 6px; border-bottom:1px solid #eee;"><t t-out="item"/></td>
                 </tr>
             </table>
-            <t t-set="rows" t-value="[('Bartender', o.x_plan_bar_hours)] * (o.x_bartender_count or 0)"/>
-            <t t-call="elksevent.report_event_callout_quote"/>
+            <t t-set="co" t-value="o._callout_for('bar')"/>
+            <t t-if="co and co.line_ids" t-call="elksevent.callout_certified_roster"/>
+            <t t-else="">
+                <t t-set="rows" t-value="[('Bartender', o.x_plan_bar_hours)] * (o.x_bartender_count or 0)"/>
+                <t t-call="elksevent.report_event_callout_quote"/>
+            </t>
         </div>
     </template>
 
@@ -188,7 +197,7 @@
             <div style="font-size:14px; font-weight:bold; color:#46166a;">KITCHEN CALL-OUT &amp; QUOTE REQUEST</div>
             <hr style="border-top:2px solid #46166a; margin:2px 0 10px 0;"/>
             <t t-call="elksevent.callout_summary"/>
-            <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd;">REQUESTED</div>
+            <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd;">REQUESTED BY THE CUSTOMER</div>
             <table style="width:100%; font-size:10px; border:1px solid #cbb8dd; border-top:none;">
                 <tr><td style="padding:2px 6px; width:45%;">Cooks requested</td><td style="padding:2px 6px;"><t t-esc="o.x_cook_count or 0"/> x <t t-esc="'%g' % (o.x_cook_hours or 0)"/> hrs each</td></tr>
                 <tr><td style="padding:2px 6px;">Kitchen support requested</td><td style="padding:2px 6px;"><t t-esc="o.x_kitchen_support_count or 0"/> x <t t-esc="'%g' % (o.x_kitchen_support_hours or 0)"/> hrs each</td></tr>
@@ -196,9 +205,14 @@
                 <tr t-if="o.x_caterer_id"><td style="padding:2px 6px;">Catered by</td><td style="padding:2px 6px;"><t t-esc="o.x_caterer_id.name"/></td></tr>
                 <tr t-if="o.x_kitchen_gratuity"><td style="padding:2px 6px;">Kitchen gratuity pool</td><td style="padding:2px 6px;">$<t t-esc="'{:,.2f}'.format(o.x_kitchen_gratuity)"/></td></tr>
             </table>
+            <div style="font-size:9px; color:#666; padding:2px 0;">These are the customer's requests. The manager sets the actual staffing below.</div>
             <t t-if="o.x_catering_details or o.x_food_menu">
                 <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd; margin-top:6px;">MENU / CATERING DETAILS</div>
                 <div style="font-size:10px; border:1px solid #cbb8dd; border-top:none; padding:4px 6px; white-space:pre-line;"><t t-esc="o.x_catering_details or ''"/><t t-if="o.x_food_menu"> <t t-esc="o.x_food_menu"/></t></div>
+            </t>
+            <t t-if="o.x_kitchen_customer_request">
+                <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd; margin-top:6px;">OTHER CUSTOMER REQUESTS</div>
+                <div style="font-size:10px; border:1px solid #cbb8dd; border-top:none; padding:4px 6px; white-space:pre-line;"><t t-esc="o.x_kitchen_customer_request"/></div>
             </t>
             <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin-top:8px;">KITCHEN CHECKLIST</div>
             <table style="width:100%; font-size:10px; border:1px solid #ccc; border-top:none;">
@@ -207,8 +221,12 @@
                     <td style="padding:4px 6px; border-bottom:1px solid #eee;"><t t-out="item"/></td>
                 </tr>
             </table>
-            <t t-set="rows" t-value="[('Cook', o.x_cook_hours)] * (o.x_cook_count or 0) + [('Kitchen Support', o.x_kitchen_support_hours)] * (o.x_kitchen_support_count or 0)"/>
-            <t t-call="elksevent.report_event_callout_quote"/>
+            <t t-set="co" t-value="o._callout_for('kitchen')"/>
+            <t t-if="co and co.line_ids" t-call="elksevent.callout_certified_roster"/>
+            <t t-else="">
+                <t t-set="rows" t-value="[('Cook', o.x_cook_hours)] * (o.x_cook_count or 0) + [('Kitchen Support', o.x_kitchen_support_hours)] * (o.x_kitchen_support_count or 0)"/>
+                <t t-call="elksevent.report_event_callout_quote"/>
+            </t>
         </div>
     </template>
 
@@ -221,12 +239,17 @@
             <div style="font-size:14px; font-weight:bold; color:#46166a;">CUSTODIAL CALL-OUT</div>
             <hr style="border-top:2px solid #46166a; margin:2px 0 10px 0;"/>
             <t t-call="elksevent.callout_summary"/>
-            <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd;">REQUESTED</div>
+            <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd;">REQUESTED BY THE CUSTOMER</div>
             <table style="width:100%; font-size:10px; border:1px solid #cbb8dd; border-top:none;">
                 <tr><td style="padding:2px 6px; width:45%;">Cleaners requested</td><td style="padding:2px 6px;"><t t-esc="o.x_cleaner_count or 0"/> x <t t-esc="'%g' % (o.x_cleaner_hours or 0)"/> hrs each</td></tr>
                 <tr t-if="o.x_need_garbage"><td style="padding:2px 6px;">Garbage / haul-out</td><td style="padding:2px 6px;">Yes</td></tr>
                 <tr t-if="o.x_cleanup_scheduled and o.x_cleanup_datetime"><td style="padding:2px 6px;">Cleanup scheduled</td><td style="padding:2px 6px;"><span t-field="o.x_cleanup_datetime" t-options='{"widget":"datetime","format":"MM/dd h:mm a"}'/></td></tr>
             </table>
+            <div style="font-size:9px; color:#666; padding:2px 0;">These are the customer's requests. The manager sets the actual staffing below.</div>
+            <t t-if="o.x_custodial_customer_request">
+                <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd; margin-top:6px;">OTHER CUSTOMER REQUESTS</div>
+                <div style="font-size:10px; border:1px solid #cbb8dd; border-top:none; padding:4px 6px; white-space:pre-line;"><t t-esc="o.x_custodial_customer_request"/></div>
+            </t>
             <div style="border:2px solid #46166a; padding:6px 8px; margin-top:8px; font-size:11px;">
                 <strong>REQUIRED:</strong> The building must be fully cleaned and the
                 bathrooms restocked by
@@ -243,9 +266,46 @@
                     <td style="padding:4px 6px; border-bottom:1px solid #eee;"><t t-out="item"/></td>
                 </tr>
             </table>
-            <t t-set="rows" t-value="[('Cleaner', o.x_cleaner_hours)] * (o.x_cleaner_count or 0)"/>
-            <t t-call="elksevent.report_event_callout_quote"/>
+            <t t-set="co" t-value="o._callout_for('custodial')"/>
+            <t t-if="co and co.line_ids" t-call="elksevent.callout_certified_roster"/>
+            <t t-else="">
+                <t t-set="rows" t-value="[('Cleaner', o.x_cleaner_hours)] * (o.x_cleaner_count or 0)"/>
+                <t t-call="elksevent.report_event_callout_quote"/>
+            </t>
         </div>
+    </template>
+
+    <!-- Certified roster: the named staff the manager submitted in the portal
+         (Name, role, hours, cost) + gratuity. Expects `co` (the call-out). -->
+    <template id="callout_certified_roster">
+        <div style="background:#2e7d32; color:#fff; font-weight:bold; padding:3px 6px; margin-top:10px;">CERTIFIED STAFF ROSTER (submitted by the manager)</div>
+        <table style="width:100%; font-size:10px; border-collapse:collapse; border:1px solid #b7d7b9; border-top:none;">
+            <tr style="background:#eef7ee;">
+                <th style="padding:3px 6px; text-align:left; width:34%;">Name</th>
+                <th style="padding:3px 6px; text-align:left; width:22%;">Role / Shift</th>
+                <th style="padding:3px 6px; text-align:center; width:12%;">Start</th>
+                <th style="padding:3px 6px; text-align:center; width:12%;">End</th>
+                <th style="padding:3px 6px; text-align:right; width:8%;">Hours</th>
+                <th style="padding:3px 6px; text-align:right; width:12%;">Cost</th>
+            </tr>
+            <tr t-foreach="co.line_ids" t-as="ln">
+                <td style="padding:3px 6px; border-top:1px solid #eee;"><t t-esc="ln.employee_id.name or ln.person_name or ''"/></td>
+                <td style="padding:3px 6px; border-top:1px solid #eee;"><t t-esc="ln.role or ''"/></td>
+                <td style="padding:3px 6px; border-top:1px solid #eee; text-align:center;"><t t-esc="ln.start_str or ''"/></td>
+                <td style="padding:3px 6px; border-top:1px solid #eee; text-align:center;"><t t-esc="ln.end_str or ''"/></td>
+                <td style="padding:3px 6px; border-top:1px solid #eee; text-align:right;"><t t-esc="'%g' % (ln.hours or 0)"/></td>
+                <td style="padding:3px 6px; border-top:1px solid #eee; text-align:right;">$<t t-esc="'{:,.2f}'.format(ln.cost or 0)"/></td>
+            </tr>
+            <tr style="background:#eef7ee; font-weight:bold;">
+                <td colspan="4" style="padding:3px 6px; text-align:right;"><t t-esc="co.staff_count"/> people - totals:</td>
+                <td style="padding:3px 6px; text-align:right;"><t t-esc="'%g' % co.hours_total"/></td>
+                <td style="padding:3px 6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(co.cost_total)"/></td>
+            </tr>
+            <tr t-if="co.gratuity">
+                <td colspan="5" style="padding:3px 6px; text-align:right; font-weight:bold;">Gratuity (total):</td>
+                <td style="padding:3px 6px; text-align:right; font-weight:bold;">$<t t-esc="'{:,.2f}'.format(co.gratuity)"/></td>
+            </tr>
+        </table>
     </template>
 
     <!-- Manager quote box: one pre-filled row per REQUESTED position (role +

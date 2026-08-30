@@ -270,6 +270,7 @@
                             <field name="x_member_number"
                                    invisible="not x_is_member"
                                    required="x_is_member"/>
+                            <field name="x_is_nonprofit"/>
                             <field name="x_event_committee"
                                    invisible="not x_is_elks_event"
                                    required="x_is_elks_event"/>
@@ -357,13 +358,22 @@
                     <div>
                         <button name="action_email_bar_callout" type="object"
                                 string="Email Bar Call-Out" class="btn-secondary"
-                                icon="fa-envelope" invisible="not x_bar_use"/>
+                                icon="fa-envelope" invisible="not x_bar_use or x_bar_callout_certified"/>
+                        <button name="action_email_bar_callout" type="object"
+                                string="Bar Certified" class="btn-success"
+                                icon="fa-check" invisible="not x_bar_use or not x_bar_callout_certified"/>
                         <button name="action_email_kitchen_callout" type="object"
                                 string="Email Kitchen Call-Out" class="btn-secondary"
-                                icon="fa-envelope" invisible="not x_food_request"/>
+                                icon="fa-envelope" invisible="not x_food_request or x_kitchen_callout_certified"/>
+                        <button name="action_email_kitchen_callout" type="object"
+                                string="Kitchen Certified" class="btn-success"
+                                icon="fa-check" invisible="not x_food_request or not x_kitchen_callout_certified"/>
                         <button name="action_email_custodial_callout" type="object"
                                 string="Email Custodial Call-Out" class="btn-secondary"
-                                icon="fa-envelope" invisible="not x_cleaning_use"/>
+                                icon="fa-envelope" invisible="not x_cleaning_use or x_custodial_callout_certified"/>
+                        <button name="action_email_custodial_callout" type="object"
+                                string="Custodial Certified" class="btn-success"
+                                icon="fa-check" invisible="not x_cleaning_use or not x_custodial_callout_certified"/>
                         <span class="text-muted" style="margin-left:8px;">
                             Or use Print &gt; Department Call-Out for a printable copy.
                         </span>
@@ -401,30 +411,52 @@
                                    string="Hours per Worker"
                                    invisible="not x_event_workers_use"/>
                         </group>
-                        <group string="Cleaning">
+                        <group string="Cleaning (as requested by the customer)">
+                            <div colspan="2" class="text-muted"
+                                 invisible="not x_cleaning_use">
+                                What the customer asked for. The custodial
+                                manager confirms the actual staffing on the
+                                call sheet.
+                            </div>
                             <field name="x_cleaning_use"/>
                             <field name="x_cleaner_count"
-                                   string="Number of Cleaners"
+                                   string="Cleaners requested"
                                    invisible="not x_cleaning_use"/>
                             <field name="x_cleaner_hours"
-                                   string="Hours per Cleaner"
+                                   string="Hours per Cleaner (requested)"
                                    invisible="not x_cleaning_use"/>
+                            <field name="x_custodial_customer_request"
+                                   string="Other Cleaning Requests"
+                                   invisible="not x_cleaning_use"
+                                   placeholder="Anything else the customer requested for cleaning / setup..."/>
                         </group>
                     </group>
                     <group>
-                        <group string="Bar">
+                        <group string="Bar (as requested by the customer)">
+                            <div colspan="2" class="text-muted"
+                                 invisible="not x_bar_use">
+                                What the customer asked for. The bar manager
+                                confirms the actual staffing on the call sheet.
+                            </div>
                             <field name="x_bar_use"/>
-                            <field name="x_num_bars" invisible="not x_bar_use"/>
+                            <field name="x_num_bars"
+                                   string="Bars requested"
+                                   invisible="not x_bar_use"/>
                             <field name="x_bartender_count"
+                                   string="Bartenders requested"
                                    invisible="not x_bar_use"/>
                             <field name="x_plan_bar_hours"
-                                   string="Hours per Bartender"
+                                   string="Hours per Bartender (requested)"
                                    invisible="not x_bar_use"/>
                             <field name="x_need_beer_tub"
                                    invisible="not x_bar_use"/>
                             <field name="x_bar_drink_requests"
                                    invisible="not x_bar_use"
                                    placeholder="Signature cocktails, wine, kegs, specific requests..."/>
+                            <field name="x_bar_customer_request"
+                                   string="Other Bar Requests"
+                                   invisible="not x_bar_use"
+                                   placeholder="Anything else the customer requested for the bar..."/>
                             <field name="x_bar_gratuity"
                                    invisible="not x_bar_use"/>
                         </group>
@@ -446,15 +478,27 @@
                         </group>
                     </group>
                     <group>
-                        <group string="Food">
+                        <group string="Food (as requested by the customer)">
+                            <div colspan="2" class="text-muted"
+                                 invisible="not x_food_request">
+                                What the customer asked for. The kitchen manager
+                                confirms the actual staffing on the call sheet.
+                            </div>
                             <field name="x_food_request"/>
                             <field name="x_catering_details"
                                    invisible="not x_food_request"/>
+                            <field name="x_kitchen_customer_request"
+                                   string="Other Food Requests"
+                                   invisible="not x_food_request"
+                                   placeholder="Anything else the customer requested for food / catering..."/>
                             <field name="x_cook_count"
+                                   string="Cooks requested"
                                    invisible="not x_food_request"/>
                             <field name="x_cook_hours"
+                                   string="Hours per Cook (requested)"
                                    invisible="not x_food_request or not x_cook_count"/>
                             <field name="x_kitchen_support_count"
+                                   string="Kitchen Support requested"
                                    invisible="not x_food_request"/>
                             <field name="x_kitchen_support_hours"
                                    invisible="not x_food_request or not x_kitchen_support_count"/>
@@ -589,6 +633,11 @@
                 <page string="Financials" name="event_financials" groups="elksevent.group_event_coordinator"
                       invisible="not x_is_event">
                     <field name="x_currency_id" invisible="1"/>
+                    <div class="mb-2">
+                        <button name="action_print_bookkeeper_report" type="object"
+                                string="Print Bookkeeper Summary" class="btn-secondary"
+                                icon="fa-print"/>
+                    </div>
                     <group>
                         <group string="Billing Summary (what the customer pays)">
                             <field name="x_room_retail" readonly="1"
@@ -819,15 +868,31 @@
                     </group>
                     <group string="Send Digital Call-Out (manager reviews &amp; certifies in their portal)">
                         <div>
+                            <!-- Bar: green once the manager certifies -->
                             <button name="action_send_bar_callout" type="object"
                                     string="Send Bar" class="btn-primary" icon="fa-paper-plane"
-                                    invisible="not x_bar_use"/>
+                                    invisible="not x_bar_use or x_bar_callout_certified"/>
+                            <button name="action_send_bar_callout" type="object"
+                                    string="Bar Certified" class="btn-success" icon="fa-check"
+                                    invisible="not x_bar_use or not x_bar_callout_certified"/>
+                            <!-- Kitchen -->
                             <button name="action_send_kitchen_callout" type="object"
                                     string="Send Kitchen" class="btn-primary" icon="fa-paper-plane"
-                                    invisible="not x_food_request"/>
+                                    invisible="not x_food_request or x_kitchen_callout_certified"/>
+                            <button name="action_send_kitchen_callout" type="object"
+                                    string="Kitchen Certified" class="btn-success" icon="fa-check"
+                                    invisible="not x_food_request or not x_kitchen_callout_certified"/>
+                            <!-- Custodial -->
                             <button name="action_send_custodial_callout" type="object"
                                     string="Send Custodial" class="btn-primary" icon="fa-paper-plane"
-                                    invisible="not x_cleaning_use"/>
+                                    invisible="not x_cleaning_use or x_custodial_callout_certified"/>
+                            <button name="action_send_custodial_callout" type="object"
+                                    string="Custodial Certified" class="btn-success" icon="fa-check"
+                                    invisible="not x_cleaning_use or not x_custodial_callout_certified"/>
+                            <button name="action_remind_pending_callouts" type="object"
+                                    string="Remind Pending Managers" class="btn-secondary"
+                                    icon="fa-bell"
+                                    help="Email a reminder to every manager whose call-out is still awaiting certification."/>
                         </div>
                     </group>
                     <field name="x_callout_ids" readonly="1">
@@ -835,10 +900,40 @@
                             <field name="department_label" string="Department"/>
                             <field name="manager_partner_id"/>
                             <field name="state"/>
-                            <field name="primary_count" string="Staff"/>
-                            <field name="primary_hours" string="Hrs Each"/>
+                            <field name="staff_count" string="People"/>
+                            <field name="hours_total" string="Hours"/>
+                            <field name="cost_total" string="Labor Cost"/>
+                            <field name="gratuity"/>
                             <field name="certified_on"/>
+                            <field name="currency_id" column_invisible="1"/>
                         </list>
+                        <form>
+                            <group>
+                                <group>
+                                    <field name="department_label" string="Department"/>
+                                    <field name="manager_partner_id"/>
+                                    <field name="state"/>
+                                </group>
+                                <group>
+                                    <field name="gratuity"/>
+                                    <field name="cost_total"/>
+                                    <field name="certified_on"/>
+                                    <field name="currency_id" column_invisible="1"/>
+                                </group>
+                            </group>
+                            <separator string="Staff Roster"/>
+                            <field name="line_ids">
+                                <list editable="bottom">
+                                    <field name="employee_id"/>
+                                    <field name="person_name"/>
+                                    <field name="role"/>
+                                    <field name="hours"/>
+                                    <field name="cost"/>
+                                    <field name="currency_id" column_invisible="1"/>
+                                </list>
+                            </field>
+                            <field name="manager_notes" placeholder="Manager notes..."/>
+                        </form>
                     </field>
                 </page>
 

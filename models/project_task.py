@@ -128,6 +128,11 @@ class ProjectTask(models.Model):
         help="The renter is an Elks member (gets the member discount). "
              "Member rentals are not unrelated business income (UBI).",
     )
+    x_is_nonprofit = fields.Boolean(
+        "Non-Profit", tracking=True,
+        help="The renter is a non-profit organization. Non-profit and member "
+             "rentals get an automatic 50% discount on the room rate.",
+    )
     x_member_number = fields.Char(
         "Member Number", copy=False,
         help="Elks membership number — shown on the quote and invoice.",
@@ -354,32 +359,83 @@ class ProjectTask(models.Model):
         compute='_compute_event_dept_managers', store=True, readonly=False)
     x_callout_ids = fields.One2many(
         'elks.event.callout', 'event_id', string="Department Call-Outs")
+    x_bar_callout_certified = fields.Boolean(
+        compute='_compute_callout_certified', string="Bar Call-Out Certified")
+    x_kitchen_callout_certified = fields.Boolean(
+        compute='_compute_callout_certified',
+        string="Kitchen Call-Out Certified")
+    x_custodial_callout_certified = fields.Boolean(
+        compute='_compute_callout_certified',
+        string="Custodial Call-Out Certified")
+
+    @api.depends('x_callout_ids.state', 'x_callout_ids.department')
+    def _compute_callout_certified(self):
+        for rec in self:
+            done = {c.department for c in rec.x_callout_ids
+                    if c.state == 'certified'}
+            rec.x_bar_callout_certified = 'bar' in done
+            rec.x_kitchen_callout_certified = 'kitchen' in done
+            rec.x_custodial_callout_certified = 'custodial' in done
 
     @api.depends('x_is_event')
     def _compute_event_dept_managers(self):
-        """Default each event's department manager from Lodge Settings; a
-        coordinator can override per event afterward."""
-        settings = self._event_settings()
-        s_bar = settings.x_bar_manager_id if settings else False
-        s_kit = settings.x_kitchen_manager_id if settings else False
-        s_cus = settings.x_custodial_manager_id if settings else False
+        """Default each event's department manager from the employee who holds
+        that Event Department Role; a coordinator can override per event."""
+        Emp = self.env['hr.employee']
+        m_bar = Emp._event_dept_manager_partner('bar')
+        m_kit = Emp._event_dept_manager_partner('kitchen')
+        m_cus = Emp._event_dept_manager_partner('custodial')
         for rec in self:
-            rec.x_bar_manager_id = rec.x_bar_manager_id or s_bar
-            rec.x_kitchen_manager_id = rec.x_kitchen_manager_id or s_kit
-            rec.x_custodial_manager_id = rec.x_custodial_manager_id or s_cus
+            rec.x_bar_manager_id = rec.x_bar_manager_id or m_bar
+            rec.x_kitchen_manager_id = rec.x_kitchen_manager_id or m_kit
+            rec.x_custodial_manager_id = rec.x_custodial_manager_id or m_cus
 
     def _callout_manager(self, dept):
-        """Manager partner for a department: the per-event field, else the
-        Lodge Settings default."""
+        """Manager partner for a department: the per-event override field, else
+        the employee holding that Event Department Role."""
         self.ensure_one()
         field = {'bar': 'x_bar_manager_id',
                  'kitchen': 'x_kitchen_manager_id',
                  'custodial': 'x_custodial_manager_id'}[dept]
         partner = self[field]
         if not partner:
-            settings = self._event_settings()
-            partner = settings[field] if settings else False
+            partner = self.env['hr.employee']._event_dept_manager_partner(dept)
         return partner or self.env['res.partner']
+
+    def _callout_for(self, dept):
+        """The department call-out record for this event (for the PDF roster)."""
+        self.ensure_one()
+        return self.env['elks.event.callout'].sudo().search([
+            ('event_id', '=', self.id), ('department', '=', dept),
+        ], limit=1)
+
+    # department -> the event flag that means "this department is in use"
+    _DEPT_USED_FIELD = {'bar': 'x_bar_use',
+                        'kitchen': 'x_food_request',
+                        'custodial': 'x_cleaning_use'}
+
+    def _kickoff_department_callouts(self):
+        """Send each in-use department's digital call-out to its manager — the
+        checklist kickoff. Everything entered on the event (counts, hours,
+        drink/customer requests, gratuity) is carried on the call-out that is
+        emailed. Idempotent: skips call-outs already sent/certified, and skips
+        departments with no manager set (nothing to email)."""
+        self.ensure_one()
+        Callout = self.env['elks.event.callout']
+        for dept, used_field in self._DEPT_USED_FIELD.items():
+            if not self[used_field]:
+                continue
+            existing = Callout.sudo().search([
+                ('event_id', '=', self.id), ('department', '=', dept),
+            ], limit=1)
+            if existing and existing.state in ('sent', 'certified'):
+                continue
+            if not self._callout_manager(dept):
+                continue
+            try:
+                self._send_digital_callout(dept)
+            except Exception:  # noqa: BLE001 - never block the kickoff
+                pass
 
     # ------------------------------------------------------------------
     # Event Checklist — the 20-point worksheet answers (drive subtasks)
@@ -422,6 +478,22 @@ class ProjectTask(models.Model):
         "Drink Requests",
         help="Specific drinks / bar requests for the bartender (signature "
              "cocktails, wine, kegs, etc.). Printed on the Bar call-out.")
+    # Customer requests / thoughts, captured per department. These are what the
+    # CUSTOMER asked for (not a directive to staff); they print on that
+    # department's call sheet under "Requested by the customer" so the manager
+    # decides the actual staffing.
+    x_bar_customer_request = fields.Text(
+        "Bar - Customer Requests",
+        help="What the customer requested for the bar (their thoughts / asks). "
+             "Prints on the Bar call sheet as requested by the customer.")
+    x_kitchen_customer_request = fields.Text(
+        "Kitchen - Customer Requests",
+        help="What the customer requested for food / catering. Prints on the "
+             "Kitchen call sheet as requested by the customer.")
+    x_custodial_customer_request = fields.Text(
+        "Cleaning - Customer Requests",
+        help="What the customer requested for cleaning / setup. Prints on the "
+             "Custodial call sheet as requested by the customer.")
     # Event workers — mirrors the bar: a checkbox to include event-staff labor,
     # a worker count and hours each, priced at the event-staff rate + event
     # service fee (Lodge Settings). Drives the Event Service cost line.
@@ -1635,11 +1707,16 @@ class ProjectTask(models.Model):
         # the room discount decision (set it to $0 to give the space away for
         # a Celebration of Life, or to a reduced rate for a member courtesy).
         # An optional manual reason/percent/amount reduces the set price on top.
+        # Member Rental or Non-Profit gives an automatic 50% off the room rate.
+        # A manual discount reason (if set) overrides the automatic one.
+        auto_half = self.x_is_member or self.x_is_nonprofit
         if self.x_discount_reason and self.x_discount_type == 'amount':
             rooms_net = max(room_income - (self.x_discount_value or 0.0), 0.0)
         elif self.x_discount_reason:
             rooms_net = room_income * (
                 1.0 - (self.x_discount_pct or 0.0) / 100.0)
+        elif auto_half:
+            rooms_net = room_income * 0.5
         else:
             rooms_net = room_income
         # Discount = the room's retail default minus what we actually charge
@@ -1658,6 +1735,11 @@ class ProjectTask(models.Model):
         }
         if self.x_discount_reason:
             return labels[self.x_discount_reason]
+        # Automatic 50% for member / non-profit (no manual reason set).
+        if self.x_is_member:
+            return _("Member Discount (50%)")
+        if self.x_is_nonprofit:
+            return _("Non-Profit Discount (50%)")
         is_col = (self.x_event_type == 'memorial' and self.x_member_number
                   and self.x_member_number != '000000000')
         if is_col:
@@ -1748,7 +1830,7 @@ class ProjectTask(models.Model):
         'x_purchase_order_ids.state',
         'x_attendance_ids.worked_hours', 'x_attendance_ids.x_event_role',
         'x_attendance_ids.employee_id',
-        'x_is_member', 'x_event_type', 'x_member_number',
+        'x_is_member', 'x_is_nonprofit', 'x_event_type', 'x_member_number',
         'x_discount_reason', 'x_discount_pct',
         'x_discount_type', 'x_discount_value',
     )
@@ -2290,6 +2372,12 @@ class ProjectTask(models.Model):
                 body=_("Generated %s checklist subtask(s).", len(created)),
                 subtype_xmlid='mail.mt_note',
             )
+        # Checklist kickoff: alert the in-use department leads with their
+        # call-out (best-effort; never block checklist generation).
+        try:
+            self._kickoff_department_callouts()
+        except Exception:  # noqa: BLE001
+            pass
         return created
 
     def action_generate_checklist_tasks(self):
@@ -2634,6 +2722,56 @@ class ProjectTask(models.Model):
                     'x_taxable': False,
                     'x_auto_source': src,
                 })
+            # A CERTIFIED department call-out roster supersedes the plan
+            # estimate for that department's labor COGS: the plan line keeps its
+            # billed charge (unit_cost) but hands its COGS to a dedicated
+            # "… Staff (certified roster)" line carrying the manager's committed
+            # cost (hours x rate). Single COGS source, so no double counting;
+            # gratuity is handled separately via x_*_gratuity.
+            dept_srcs = {'bar': ('labor_bar',),
+                         'kitchen': ('labor_cook', 'labor_kitchen_support'),
+                         'custodial': ('labor_clean',)}
+            dept_code = {'bar': 'bar_service',
+                         'kitchen': 'catering_service',
+                         'custodial': 'cleaning_service'}
+            for co in rec.x_callout_ids.filtered(
+                    lambda c: c.state == 'certified'):
+                srcs = dept_srcs.get(co.department)
+                if not srcs:
+                    continue
+                for pl in rec.x_cost_line_ids.filtered(
+                        lambda x: x.x_auto_source in srcs):
+                    pl.x_line_cogs = 0.0
+                ctype = tid(dept_code.get(co.department))
+                if ctype and co.cost_total:
+                    Line.create({
+                        'event_id': rec.id,
+                        'cost_type_id': ctype,
+                        'name': _("%s Staff (certified roster)")
+                        % co.department_label,
+                        'quantity': 1,
+                        'unit_cost': 0.0,
+                        'x_line_cogs': round(co.cost_total, 2),
+                        'x_taxable': False,
+                        'x_auto_source': 'roster_%s' % co.department,
+                    })
+                # Gratuity is a pass-through: charged to the customer (revenue)
+                # and paid out to staff (COGS), so it nets to zero for the lodge
+                # but appears on both sides of the books.
+                gtype = tid('gratuity') or tid('other')
+                if gtype and co.gratuity:
+                    Line.create({
+                        'event_id': rec.id,
+                        'cost_type_id': gtype,
+                        'name': _("%s Gratuity (pass-through)")
+                        % co.department_label,
+                        'quantity': 1,
+                        'unit_cost': round(co.gratuity, 2),
+                        'x_line_cogs': round(co.gratuity, 2),
+                        'x_taxable': False,
+                        'x_auto_source': 'roster_grat_%s' % co.department,
+                    })
+
             # Add-on fees toggled by checkbox (fee from Lodge Settings).
             for flag, code, fee, name, src in (
                     (rec.x_marketing_signage, 'marketing_signage',
@@ -2780,18 +2918,24 @@ class ProjectTask(models.Model):
 
     def _email_callout(self, dept):
         """Render the department call-out PDF for `dept` and email it to that
-        manager (from Lodge Settings). Also usable to just attach the PDF."""
+        department's manager (the employee tagged with the role, or a per-event
+        override). Also usable to just attach the PDF."""
         self.ensure_one()
-        settings = self._event_settings()
         field, label = self._CALLOUT_DEPTS[dept]
-        partner = settings[field] if settings else False
+        # Manager comes from the employee tagged with this department role
+        # (Event Bar/Kitchen/Custodial Manager on their HR record), or a
+        # per-event override.
+        partner = self._callout_manager(dept)
         if not partner:
             raise UserError(_(
-                "Set the %s Manager under Lodge Settings > Department Managers "
-                "first.", label))
+                "No %s Manager found. On an employee's HR record (Work tab), "
+                "tick 'Event %s Manager' so they receive this call-out.",
+                label, label))
         if not partner.email:
             raise UserError(_(
-                "%s has no email address on their contact.", partner.name))
+                "%(name)s is the %(dept)s Manager but has no email. Add an "
+                "email (or a Related User) on their employee record so the "
+                "call-out can be sent.", name=partner.name, dept=label))
         pdf, _dummy = self.env['ir.actions.report']._render_qweb_pdf(
             'elksevent.report_event_callout_%s' % dept, self.ids)
         fname = '%s Call-Out - %s.pdf' % (label, self.name or 'Event')
@@ -2865,6 +3009,66 @@ class ProjectTask(models.Model):
                    dept=co.department_label, mgr=mgr.name),
             subtype_xmlid='mail.mt_note')
         return co
+
+    def _remind_pending_callouts(self):
+        """Bump every department manager whose call-out is still awaiting
+        certification (state 'sent')."""
+        self.ensure_one()
+        pending = self.env['elks.event.callout'].sudo().search([
+            ('event_id', '=', self.id), ('state', '=', 'sent')])
+        for co in pending:
+            co._send_reminder()
+        return len(pending)
+
+    def action_remind_pending_callouts(self):
+        """Button: remind the managers who haven't certified their call-out."""
+        self.ensure_one()
+        n = self._remind_pending_callouts()
+        if not n:
+            self.message_post(
+                body=_("No pending call-outs to remind — all are certified or "
+                       "none have been sent yet."),
+                subtype_xmlid='mail.mt_note')
+        return True
+
+    def _bookkeeper_pl_rows(self):
+        """Revenue vs cost by P&L category for the bookkeeper report. Revenue
+        rows reconcile to x_total_billed (pre-tax); cost rows to x_total_costs."""
+        self.ensure_one()
+        rev = {'catering': 0.0, 'bar': 0.0, 'event': 0.0,
+               'cleaning': 0.0, 'other': 0.0, 'coordinator': 0.0}
+        for c in self.x_cost_line_ids:
+            cat = c.cost_type_id.category
+            rev[cat if cat in rev else 'other'] += (c.total or 0.0)
+        po_total = sum(self.x_purchase_order_ids.filtered(
+            lambda p: p.state != 'cancel').mapped('amount_total'))
+        rows = [
+            {'name': 'Room Rental', 'revenue': self.x_room_net or 0.0,
+             'cogs': 0.0},
+            {'name': 'Catering', 'revenue': rev['catering'],
+             'cogs': self.x_cat_catering or 0.0},
+            {'name': 'Bar', 'revenue': rev['bar'],
+             'cogs': self.x_cat_bar or 0.0},
+            {'name': 'Event Services', 'revenue': rev['event'],
+             'cogs': self.x_cat_event or 0.0},
+            {'name': 'Cleaning', 'revenue': rev['cleaning'],
+             'cogs': self.x_cat_cleaning or 0.0},
+            {'name': 'Coordinator Fee',
+             'revenue': (self.x_coordinator_fee or 0.0) + rev['coordinator'],
+             'cogs': 0.0},
+            {'name': 'Other / Gratuity', 'revenue': rev['other'],
+             'cogs': self.x_cat_other or 0.0},
+            {'name': 'Vendor Purchases (POs)', 'revenue': 0.0,
+             'cogs': po_total},
+        ]
+        for r in rows:
+            r['net'] = r['revenue'] - r['cogs']
+        return rows
+
+    def action_print_bookkeeper_report(self):
+        self.ensure_one()
+        return self.env.ref(
+            'elksevent.action_report_event_bookkeeper').report_action(self)
 
     def action_send_bar_callout(self):
         self._send_digital_callout('bar')

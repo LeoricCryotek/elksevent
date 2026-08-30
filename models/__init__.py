@@ -15,5 +15,6 @@ from . import account_move
 from . import sale_order
 from . import calendar_event
 from . import hr_attendance
+from . import hr_employee
 from . import survey_user_input
 from . import lodge_settings

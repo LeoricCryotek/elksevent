@@ -119,9 +119,15 @@
                         <field name="x_custodial_service_fee"/>
                     </group>
                     <group string="Department Managers (Call-Outs)">
-                        <field name="x_bar_manager_id"/>
-                        <field name="x_kitchen_manager_id"/>
-                        <field name="x_custodial_manager_id"/>
+                        <div colspan="2" class="text-muted">
+                            Set department managers on the employee record:
+                            open the employee and choose their
+                            <strong>Event Department Role</strong>
+                            (Bar / Kitchen / Custodial). That person receives
+                            the digital call-sheet link and certifies the
+                            staffing. A coordinator can still override the
+                            manager on an individual event.
+                        </div>
                     </group>
                     <group string="Terms &amp; Checklist">
                         <field name="x_event_terms_url" widget="url"/>

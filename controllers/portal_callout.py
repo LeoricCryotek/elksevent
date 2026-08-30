@@ -18,7 +18,7 @@ AI
 """
 import pytz
 
-from odoo import fields, http
+from odoo import _, fields, http
 from odoo.http import request
 from odoo.addons.portal.controllers.portal import CustomerPortal
 
@@ -82,9 +82,12 @@ class CalloutPortal(CustomerPortal):
         if co.ready_datetime:
             ready_local = fields.Datetime.context_timestamp(
                 co, co.ready_datetime).strftime('%Y-%m-%dT%H:%M')
+        employees = request.env['hr.employee'].sudo().search(
+            [], order='name')
         return request.render('elksevent.portal_callout_page', {
             'callout': co,
             'ready_local': ready_local,
+            'employees': employees,
             'page_name': 'callout',
             'saved': kw.get('saved'),
             'error': kw.get('error'),
@@ -111,37 +114,77 @@ class CalloutPortal(CustomerPortal):
             except (TypeError, ValueError):
                 return 0.0
 
-        # Only accept the fields this department actually shows, so saving
-        # never zeroes another department's stored values. Notes always apply.
-        allowed = _DEPT_POST_FIELDS.get(co.department, ())
+        # The portal now captures actual staffing in the roster below; the
+        # requested counts stay on the event (read-only here). So only the
+        # manager notes and (bar/kitchen) gratuity are written from the header.
         vals = {'manager_notes': post.get('manager_notes') or ''}
-        if 'num_bars' in allowed:
-            vals['num_bars'] = _int(post.get('num_bars'))
-        if 'primary_count' in allowed:
-            vals['primary_count'] = _int(post.get('primary_count'))
-        if 'primary_hours' in allowed:
-            vals['primary_hours'] = _float(post.get('primary_hours'))
-        if 'secondary_count' in allowed:
-            vals['secondary_count'] = _int(post.get('secondary_count'))
-        if 'secondary_hours' in allowed:
-            vals['secondary_hours'] = _float(post.get('secondary_hours'))
-        if 'drink_requests' in allowed:
-            vals['drink_requests'] = post.get('drink_requests') or ''
-        if 'ready_datetime' in allowed:
-            raw_ready = post.get('ready_datetime')
-            if raw_ready:
-                # datetime-local ("2026-08-14T17:00") is LOCAL wall-clock;
-                # convert to naive UTC for storage.
-                naive = raw_ready.replace('T', ' ')
-                if len(naive) == 16:
-                    naive += ':00'
-                local = self._user_tz().localize(
-                    fields.Datetime.to_datetime(naive))
-                vals['ready_datetime'] = local.astimezone(
-                    pytz.utc).replace(tzinfo=None)
-            else:
-                vals['ready_datetime'] = False
+        if co.department in ('bar', 'kitchen'):
+            vals['gratuity'] = _float(post.get('gratuity'))
         co.sudo().write(vals)
+
+        # Rebuild the named staff roster from the submitted rows (stateless:
+        # whatever is in the rows becomes the roster). The employee <select>
+        # posts for every rendered row, so iterate while it's present. A row is
+        # kept only if it names someone (employee or free-text) or has a value.
+        def _hhmm(v):
+            """Parse an <input type='time'> value ('HH:MM') to float hours."""
+            if not v or ':' not in v:
+                return 0.0
+            try:
+                hh, mm = v.split(':')[:2]
+                return int(hh) + int(mm) / 60.0
+            except (TypeError, ValueError):
+                return 0.0
+
+        line_cmds = [(5, 0, 0)]
+        i = 0
+        while ('emp_%d' % i) in post:
+            emp_raw = (post.get('emp_%d' % i) or '').strip()
+            pname = (post.get('pname_%d' % i) or '').strip()
+            role = (post.get('role_%d' % i) or '').strip()
+            start = _hhmm(post.get('start_%d' % i))
+            end = _hhmm(post.get('end_%d' % i))
+            rate = _float(post.get('rate_%d' % i))
+            # Hours: computed from start/end when both set (span midnight ->
+            # +24), else the directly-typed hours value.
+            if start and end:
+                hours = end - start
+                if hours < 0:
+                    hours += 24.0
+            else:
+                hours = _float(post.get('hours_%d' % i))
+            emp_id = int(emp_raw) if emp_raw.isdigit() else False
+            if emp_id or pname or hours or rate or start or end:
+                line_cmds.append((0, 0, {
+                    'employee_id': emp_id or False,
+                    'person_name': pname,
+                    'role': role,
+                    'start_time': start,
+                    'end_time': end,
+                    'hours': hours,
+                    'rate': rate,
+                }))
+            i += 1
+        co.sudo().write({'line_ids': line_cmds})
+
         if post.get('certify'):
             co.sudo().action_certify()
         return request.redirect('/my/callout/%s?saved=1' % co.id)
+
+    @http.route(['/my/callout/<int:callout_id>/reopen'],
+                type='http', auth='user', methods=['POST'], website=True)
+    def portal_callout_reopen(self, callout_id, **post):
+        """Let the manager reopen a certified call-out to make edits."""
+        co = self._callout_owned(callout_id)
+        if not co:
+            return request.redirect('/my')
+        if co.state == 'certified':
+            co.sudo().write({'state': 'sent'})
+            # Drop the roster labor line while it's back in draft.
+            co.event_id.sudo()._sync_labor_cost_lines()
+            co.event_id.message_post(
+                body=_("%(dept)s call-out reopened for editing by %(who)s.",
+                       dept=co.department_label,
+                       who=request.env.user.name),
+                subtype_xmlid='mail.mt_note')
+        return request.redirect('/my/callout/%s' % co.id)

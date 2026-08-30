@@ -13,6 +13,7 @@
               name="Portal My Home: Call-Outs" priority="30">
         <xpath expr="//div[hasclass('o_portal_docs')]" position="inside">
             <t t-call="portal.portal_docs_entry">
+                <t t-set="icon" t-value="'/elksevent/static/src/img/callout_icon.svg'"/>
                 <t t-set="title">Department Call-Outs</t>
                 <t t-set="url" t-value="'/my/callouts'"/>
                 <t t-set="text">Review and certify staffing for your events</t>
@@ -25,9 +26,7 @@
     <template id="portal_my_callouts" name="My Department Call-Outs">
         <t t-call="portal.portal_layout">
             <t t-set="breadcrumbs_searchbar" t-value="True"/>
-            <t t-call="portal.portal_page_title">
-                <t t-set="title">Department Call-Outs</t>
-            </t>
+            <h4 class="mt-3 mb-3">Department Call-Outs</h4>
             <t t-if="not callouts">
                 <div class="alert alert-info">You have no call-outs to review right now.</div>
             </t>
@@ -67,9 +66,7 @@
     <!-- Detail page: review, edit, certify -->
     <template id="portal_callout_page" name="Department Call-Out">
         <t t-call="portal.portal_layout">
-            <t t-call="portal.portal_page_title">
-                <t t-set="title">Call-Out</t>
-            </t>
+            <h4 class="mt-3 mb-3">Call-Out</h4>
 
             <t t-if="saved">
                 <div class="alert alert-success">Saved.
@@ -77,112 +74,238 @@
                 </div>
             </t>
 
+            <t t-set="evt" t-value="callout.event_id"/>
             <div class="card">
                 <div class="card-body">
-                    <h4>
+                    <h4 class="mb-1">
                         <t t-esc="callout.department_label"/> Call-Out —
                         <t t-esc="callout.event_name"/>
                     </h4>
-                    <p class="text-muted">
-                        Event date: <span t-field="callout.event_date"/>.
-                        Adjust the estimated resources you will commit, add any
-                        notes, then certify.
+                    <p class="text-muted mb-3">
+                        Confirm the staffing you will commit, add any notes, then
+                        certify.
                     </p>
 
                     <t t-if="callout.state == 'certified'">
-                        <div class="alert alert-success">
-                            Certified<t t-if="callout.certified_on"> on
-                            <span t-field="callout.certified_on"/></t>. Contact the
-                            event coordinator if anything needs to change.
+                        <div class="alert alert-success d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <span>
+                                Certified<t t-if="callout.certified_on"> on
+                                <span t-field="callout.certified_on"/></t>. Need to
+                                change something? Reopen it to edit and re-certify.
+                            </span>
+                            <form t-attf-action="/my/callout/{{callout.id}}/reopen" method="post" class="m-0">
+                                <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                                <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                    <i class="fa fa-unlock"/> Reopen to Edit
+                                </button>
+                            </form>
                         </div>
                     </t>
+
+                    <!-- ===== Event details (read-only, responsive) ===== -->
+                    <div class="border rounded p-3 mb-3 bg-light">
+                        <h6 class="fw-bold text-uppercase small text-muted mb-2">Event Details</h6>
+                        <div class="row g-3">
+                            <div class="col-6 col-md-3">
+                                <div class="small text-muted">Date</div>
+                                <div class="fw-semibold"><span t-field="evt.x_event_date"/></div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="small text-muted">Time</div>
+                                <div class="fw-semibold">
+                                    <t t-esc="evt.x_event_start_time_text or '--'"/> – <t t-esc="evt.x_event_end_time_text or '--'"/>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="small text-muted">Expected Guests</div>
+                                <div class="fw-semibold"><t t-esc="evt.x_guest_count or 0"/></div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="small text-muted">Event Type</div>
+                                <div class="fw-semibold"><span t-field="evt.x_event_type"/></div>
+                            </div>
+                            <div class="col-6 col-md-3" t-if="evt.x_booked_room_ids">
+                                <div class="small text-muted">Rooms</div>
+                                <div class="fw-semibold"><t t-esc="', '.join(evt.x_booked_room_ids.mapped('name'))"/></div>
+                            </div>
+                            <div class="col-6 col-md-3" t-if="evt.x_requested_setup">
+                                <div class="small text-muted">Requested Setup</div>
+                                <div class="fw-semibold"><span t-field="evt.x_requested_setup" t-options='{"widget": "datetime", "format": "MMM d, h:mm a"}'/></div>
+                            </div>
+                            <div class="col-6 col-md-3" t-if="evt.x_requested_entry">
+                                <div class="small text-muted">Requested Entry</div>
+                                <div class="fw-semibold"><span t-field="evt.x_requested_entry" t-options='{"widget": "datetime", "format": "MMM d, h:mm a"}'/></div>
+                            </div>
+                            <div class="col-6 col-md-3" t-if="evt.x_cleanup_scheduled and evt.x_cleanup_datetime">
+                                <div class="small text-muted">Cleanup By</div>
+                                <div class="fw-semibold"><span t-field="evt.x_cleanup_datetime" t-options='{"widget": "datetime", "format": "MMM d, h:mm a"}'/></div>
+                            </div>
+                            <div class="col-6 col-md-3" t-if="evt.x_customer_name">
+                                <div class="small text-muted">Host</div>
+                                <div class="fw-semibold"><t t-esc="evt.x_customer_name"/></div>
+                            </div>
+                            <div class="col-6 col-md-3" t-if="evt.x_customer_phone">
+                                <div class="small text-muted">Host Phone</div>
+                                <div class="fw-semibold"><t t-esc="evt.x_customer_phone"/></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ===== Requested by the customer (read-only) ===== -->
+                    <div class="border rounded p-3 mb-3">
+                        <h6 class="fw-bold text-uppercase small text-muted mb-2">Requested by the Customer</h6>
+                        <div class="row g-3">
+                            <t t-if="callout.department == 'bar'">
+                                <div class="col-6 col-md-3">
+                                    <div class="small text-muted">Bars</div>
+                                    <div class="fw-semibold"><t t-esc="evt.x_num_bars or 0"/></div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="small text-muted">Bartenders</div>
+                                    <div class="fw-semibold"><t t-esc="evt.x_bartender_count or 0"/></div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="small text-muted">Hours each</div>
+                                    <div class="fw-semibold"><t t-esc="'%g' % (evt.x_plan_bar_hours or 0)"/></div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="small text-muted">Beer Tub</div>
+                                    <div class="fw-semibold"><t t-esc="'Yes' if evt.x_need_beer_tub else 'No'"/></div>
+                                </div>
+                                <div class="col-12" t-if="evt.x_bar_drink_requests">
+                                    <div class="small text-muted">Drink Requests</div>
+                                    <div style="white-space:pre-line;"><t t-esc="evt.x_bar_drink_requests"/></div>
+                                </div>
+                                <div class="col-12" t-if="evt.x_bar_customer_request">
+                                    <div class="small text-muted">Other Requests</div>
+                                    <div style="white-space:pre-line;"><t t-esc="evt.x_bar_customer_request"/></div>
+                                </div>
+                            </t>
+                            <t t-if="callout.department == 'kitchen'">
+                                <div class="col-6 col-md-3">
+                                    <div class="small text-muted">Cooks</div>
+                                    <div class="fw-semibold"><t t-esc="evt.x_cook_count or 0"/></div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="small text-muted">Cook hrs each</div>
+                                    <div class="fw-semibold"><t t-esc="'%g' % (evt.x_cook_hours or 0)"/></div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="small text-muted">Kitchen Support</div>
+                                    <div class="fw-semibold"><t t-esc="evt.x_kitchen_support_count or 0"/></div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="small text-muted">Support hrs each</div>
+                                    <div class="fw-semibold"><t t-esc="'%g' % (evt.x_kitchen_support_hours or 0)"/></div>
+                                </div>
+                                <div class="col-12" t-if="evt.x_catering_details or evt.x_food_menu">
+                                    <div class="small text-muted">Menu / Catering</div>
+                                    <div style="white-space:pre-line;"><t t-esc="evt.x_catering_details or ''"/> <t t-esc="evt.x_food_menu or ''"/></div>
+                                </div>
+                                <div class="col-12" t-if="evt.x_kitchen_customer_request">
+                                    <div class="small text-muted">Other Requests</div>
+                                    <div style="white-space:pre-line;"><t t-esc="evt.x_kitchen_customer_request"/></div>
+                                </div>
+                            </t>
+                            <t t-if="callout.department == 'custodial'">
+                                <div class="col-6 col-md-3">
+                                    <div class="small text-muted">Cleaners</div>
+                                    <div class="fw-semibold"><t t-esc="evt.x_cleaner_count or 0"/></div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="small text-muted">Hours each</div>
+                                    <div class="fw-semibold"><t t-esc="'%g' % (evt.x_cleaner_hours or 0)"/></div>
+                                </div>
+                                <div class="col-6 col-md-3" t-if="evt.x_cleanup_datetime">
+                                    <div class="small text-muted">Building Ready By</div>
+                                    <div class="fw-semibold"><span t-field="evt.x_cleanup_datetime" t-options='{"widget": "datetime", "format": "MMM d, h:mm a"}'/></div>
+                                </div>
+                                <div class="col-12" t-if="evt.x_custodial_customer_request">
+                                    <div class="small text-muted">Other Requests</div>
+                                    <div style="white-space:pre-line;"><t t-esc="evt.x_custodial_customer_request"/></div>
+                                </div>
+                            </t>
+                        </div>
+                    </div>
 
                     <form t-attf-action="/my/callout/{{callout.id}}/submit" method="post">
                         <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
                         <t t-set="ro" t-value="callout.state == 'certified'"/>
 
-                        <!-- Bar -->
-                        <t t-if="callout.department == 'bar'">
-                            <div class="row mb-3">
-                                <div class="col-md-4">
-                                    <label class="form-label">Number of Bars</label>
-                                    <input type="number" name="num_bars" class="form-control"
-                                           t-att-value="callout.num_bars" t-att-readonly="ro"/>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Bartenders</label>
-                                    <input type="number" name="primary_count" class="form-control"
-                                           t-att-value="callout.primary_count" t-att-readonly="ro"/>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Hours each</label>
-                                    <input type="number" step="0.25" name="primary_hours" class="form-control"
-                                           t-att-value="callout.primary_hours" t-att-readonly="ro"/>
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Drink Requests</label>
-                                <textarea name="drink_requests" class="form-control" rows="2"
-                                          t-att-readonly="ro"><t t-esc="callout.drink_requests or ''"/></textarea>
-                            </div>
-                        </t>
+                        <!-- ===== Staff roster: assign people, start/end -> hours, cost ===== -->
+                        <h6 class="fw-bold">Staff Roster — assign by name</h6>
+                        <p class="text-muted small">Pick a lodge employee, or type a name for outside help. Enter each person's start &amp; end time (hours total automatically) and cost.</p>
+                        <t t-set="rows" t-value="list(callout.line_ids)"/>
+                        <t t-set="row_count" t-value="len(rows) + 6"/>
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle" id="callout_roster">
+                                <thead>
+                                    <tr>
+                                        <th style="min-width:150px">Employee</th>
+                                        <th style="min-width:120px">or Name</th>
+                                        <th style="min-width:120px">Role / Shift</th>
+                                        <th style="min-width:90px">Start</th>
+                                        <th style="min-width:90px">End</th>
+                                        <th style="min-width:70px">Hours</th>
+                                        <th style="min-width:90px">Rate / hr</th>
+                                        <th style="min-width:90px">Cost</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr t-foreach="range(row_count)" t-as="i" class="roster-row">
+                                        <t t-set="line" t-value="rows[i] if i &lt; len(rows) else None"/>
+                                        <td>
+                                            <select t-attf-name="emp_{{i}}" class="form-select form-select-sm" t-att-disabled="ro">
+                                                <option value="">--</option>
+                                                <option t-foreach="employees" t-as="emp" t-att-value="emp.id"
+                                                        t-att-selected="line and line.employee_id.id == emp.id">
+                                                    <t t-esc="emp.name"/>
+                                                </option>
+                                            </select>
+                                        </td>
+                                        <td><input type="text" t-attf-name="pname_{{i}}" class="form-control form-control-sm"
+                                                   t-att-value="line.person_name if line else ''" t-att-readonly="ro"/></td>
+                                        <td><input type="text" t-attf-name="role_{{i}}" class="form-control form-control-sm"
+                                                   t-att-value="line.role if line else ''" t-att-readonly="ro"/></td>
+                                        <td><input type="time" t-attf-name="start_{{i}}" class="form-control form-control-sm roster-start"
+                                                   t-att-value="line.start_str if line else ''" t-att-readonly="ro"/></td>
+                                        <td><input type="time" t-attf-name="end_{{i}}" class="form-control form-control-sm roster-end"
+                                                   t-att-value="line.end_str if line else ''" t-att-readonly="ro"/></td>
+                                        <td><input type="number" step="0.25" t-attf-name="hours_{{i}}" class="form-control form-control-sm roster-hours"
+                                                   t-att-value="('%g' % line.hours) if (line and line.hours) else ''" t-att-readonly="ro"/></td>
+                                        <td><input type="number" step="0.01" t-attf-name="rate_{{i}}" class="form-control form-control-sm roster-rate"
+                                                   t-att-value="line.rate if line else ''" t-att-readonly="ro"/></td>
+                                        <td class="text-end align-middle">$<span class="roster-cost">0.00</span></td>
+                                    </tr>
+                                </tbody>
+                                <tfoot>
+                                    <tr class="fw-bold">
+                                        <td colspan="5" class="text-end">Totals:</td>
+                                        <td><span id="roster_total_hours">0</span></td>
+                                        <td/>
+                                        <td class="text-end">$<span id="roster_total_cost">0.00</span></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
 
-                        <!-- Kitchen -->
-                        <t t-if="callout.department == 'kitchen'">
-                            <div class="row mb-3">
-                                <div class="col-md-3">
-                                    <label class="form-label">Cooks</label>
-                                    <input type="number" name="primary_count" class="form-control"
-                                           t-att-value="callout.primary_count" t-att-readonly="ro"/>
+                        <div class="row g-3 mb-3">
+                            <t t-if="callout.department in ('bar', 'kitchen')">
+                                <div class="col-12 col-md-4">
+                                    <label class="form-label">Gratuity (total for this department)</label>
+                                    <input type="number" step="0.01" name="gratuity" class="form-control"
+                                           t-att-value="callout.gratuity or ''" t-att-readonly="ro"/>
                                 </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">Cook hours each</label>
-                                    <input type="number" step="0.25" name="primary_hours" class="form-control"
-                                           t-att-value="callout.primary_hours" t-att-readonly="ro"/>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">Kitchen Support</label>
-                                    <input type="number" name="secondary_count" class="form-control"
-                                           t-att-value="callout.secondary_count" t-att-readonly="ro"/>
-                                </div>
-                                <div class="col-md-3">
-                                    <label class="form-label">Support hours each</label>
-                                    <input type="number" step="0.25" name="secondary_hours" class="form-control"
-                                           t-att-value="callout.secondary_hours" t-att-readonly="ro"/>
-                                </div>
+                            </t>
+                            <div class="col-12 col-md-8">
+                                <label class="form-label">Notes / other pertinent information</label>
+                                <textarea name="manager_notes" class="form-control" rows="3"
+                                          t-att-readonly="ro"><t t-esc="callout.manager_notes or ''"/></textarea>
                             </div>
-                        </t>
-
-                        <!-- Custodial -->
-                        <t t-if="callout.department == 'custodial'">
-                            <div class="row mb-3">
-                                <div class="col-md-4">
-                                    <label class="form-label">Cleaners</label>
-                                    <input type="number" name="primary_count" class="form-control"
-                                           t-att-value="callout.primary_count" t-att-readonly="ro"/>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Hours each</label>
-                                    <input type="number" step="0.25" name="primary_hours" class="form-control"
-                                           t-att-value="callout.primary_hours" t-att-readonly="ro"/>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label">Building ready by</label>
-                                    <input type="datetime-local" name="ready_datetime" class="form-control"
-                                           t-att-value="ready_local"
-                                           t-att-readonly="ro"/>
-                                </div>
-                            </div>
-                        </t>
-
-                        <div class="mb-3">
-                            <label class="form-label">Notes / other pertinent information</label>
-                            <textarea name="manager_notes" class="form-control" rows="3"
-                                      t-att-readonly="ro"><t t-esc="callout.manager_notes or ''"/></textarea>
                         </div>
 
                         <t t-if="not ro">
-                            <div class="d-flex gap-2">
+                            <div class="d-flex gap-2 flex-wrap">
                                 <button type="submit" name="save" value="1" class="btn btn-secondary">Save</button>
                                 <button type="submit" name="certify" value="1" class="btn btn-success"
                                         onclick="return confirm('Certify these resources? This locks the numbers and notifies the coordinator.');">
@@ -197,6 +320,43 @@
                     </form>
                 </div>
             </div>
+
+            <script type="text/javascript">
+                (function () {
+                    var table = document.getElementById('callout_roster');
+                    if (!table) { return; }
+                    function toHours(v) {
+                        if (!v || v.indexOf(':') === -1) { return null; }
+                        var p = v.split(':');
+                        return parseInt(p[0], 10) + parseInt(p[1], 10) / 60.0;
+                    }
+                    function recalc() {
+                        var rows = table.querySelectorAll('tbody tr.roster-row');
+                        var totalH = 0, totalC = 0;
+                        rows.forEach(function (row) {
+                            var s = toHours((row.querySelector('.roster-start') || {}).value);
+                            var e = toHours((row.querySelector('.roster-end') || {}).value);
+                            var hEl = row.querySelector('.roster-hours');
+                            if (s !== null &amp;&amp; e !== null) {
+                                var d = e - s; if (d &lt; 0) { d += 24; }
+                                if (hEl) { hEl.value = (Math.round(d * 100) / 100); }
+                            }
+                            var h = parseFloat((hEl || {}).value) || 0;
+                            var r = parseFloat((row.querySelector('.roster-rate') || {}).value) || 0;
+                            var c = h * r;
+                            var cEl = row.querySelector('.roster-cost');
+                            if (cEl) { cEl.textContent = c.toFixed(2); }
+                            totalH += h; totalC += c;
+                        });
+                        var th = document.getElementById('roster_total_hours');
+                        var tc = document.getElementById('roster_total_cost');
+                        if (th) { th.textContent = (Math.round(totalH * 100) / 100); }
+                        if (tc) { tc.textContent = totalC.toFixed(2); }
+                    }
+                    table.addEventListener('input', recalc);
+                    recalc();
+                })();
+            </script>
         </t>
     </template>
 

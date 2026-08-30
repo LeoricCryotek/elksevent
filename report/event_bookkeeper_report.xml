@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Bookkeeper summary: revenue vs cost by P&L category, for entering the
+         event into the books. -->
+    <record id="action_report_event_bookkeeper" model="ir.actions.report">
+        <field name="name">Event Bookkeeper Summary</field>
+        <field name="model">project.task</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_event_bookkeeper</field>
+        <field name="report_file">elksevent.report_event_bookkeeper</field>
+        <field name="print_report_name">'Bookkeeper Summary - %s' % (object.name or 'Event')</field>
+        <field name="binding_model_id" ref="project.model_project_task"/>
+        <field name="binding_type">report</field>
+    </record>
+
+    <template id="report_event_bookkeeper">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="s" t-value="o._event_settings()"/>
+                <t t-set="rows" t-value="o._bookkeeper_pl_rows()"/>
+                <t t-call="web.external_layout">
+                    <div class="page" style="font-size:12px; color:#222;">
+                        <div style="font-size:16px; font-weight:bold;">
+                            <t t-if="s"><t t-esc="s.name"/></t><t t-else="">Elks Lodge</t>
+                            <t t-if="s and s.lodge_number"> #<t t-esc="s.lodge_number"/></t>
+                        </div>
+                        <div style="font-size:15px; font-weight:bold; color:#46166a;">EVENT BOOKKEEPER SUMMARY</div>
+                        <hr style="border-top:2px solid #46166a; margin:2px 0 8px 0;"/>
+                        <table style="width:100%; font-size:12px; margin-bottom:10px;">
+                            <tr>
+                                <td style="width:50%;"><strong>Event:</strong> <t t-esc="o.name or ''"/></td>
+                                <td style="width:25%;"><strong>Date:</strong> <span t-field="o.x_event_date"/></td>
+                                <td style="width:25%;"><strong>Host:</strong> <t t-esc="o.x_customer_name or ''"/></td>
+                            </tr>
+                        </table>
+
+                        <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                            <tr style="background:#46166a; color:#fff;">
+                                <th style="text-align:left; padding:4px 8px;">P&amp;L Category</th>
+                                <th style="text-align:right; padding:4px 8px;">Revenue</th>
+                                <th style="text-align:right; padding:4px 8px;">Cost (COGS)</th>
+                                <th style="text-align:right; padding:4px 8px;">Net</th>
+                            </tr>
+                            <tr t-foreach="rows" t-as="r" t-att-style="'background:#f6f2fa;' if r_index % 2 else ''">
+                                <td style="padding:3px 8px; border-bottom:1px solid #eee;"><t t-esc="r['name']"/></td>
+                                <td style="padding:3px 8px; text-align:right; border-bottom:1px solid #eee;">$<t t-esc="'{:,.2f}'.format(r['revenue'])"/></td>
+                                <td style="padding:3px 8px; text-align:right; border-bottom:1px solid #eee;">$<t t-esc="'{:,.2f}'.format(r['cogs'])"/></td>
+                                <td style="padding:3px 8px; text-align:right; border-bottom:1px solid #eee;">$<t t-esc="'{:,.2f}'.format(r['net'])"/></td>
+                            </tr>
+                            <tr style="font-weight:bold; border-top:2px solid #46166a;">
+                                <td style="padding:4px 8px;">Totals (pre-tax)</td>
+                                <td style="padding:4px 8px; text-align:right;">$<t t-esc="'{:,.2f}'.format(o.x_total_billed or 0)"/></td>
+                                <td style="padding:4px 8px; text-align:right;">$<t t-esc="'{:,.2f}'.format(o.x_total_costs or 0)"/></td>
+                                <td style="padding:4px 8px; text-align:right; color:#2e7d32;">$<t t-esc="'{:,.2f}'.format(o.x_net_income or 0)"/></td>
+                            </tr>
+                        </table>
+
+                        <table style="width:60%; margin-top:12px; font-size:12px;">
+                            <tr>
+                                <td style="padding:2px 8px;">Subtotal (pre-tax)</td>
+                                <td style="padding:2px 8px; text-align:right;">$<t t-esc="'{:,.2f}'.format(o.x_total_billed or 0)"/></td>
+                            </tr>
+                            <tr>
+                                <td style="padding:2px 8px;">Sales tax collected (to remit)</td>
+                                <td style="padding:2px 8px; text-align:right;">$<t t-esc="'{:,.2f}'.format(o.x_event_tax_amount or 0)"/></td>
+                            </tr>
+                            <tr style="font-weight:bold; border-top:1px solid #ccc;">
+                                <td style="padding:2px 8px;">Grand Total (customer pays)</td>
+                                <td style="padding:2px 8px; text-align:right;">$<t t-esc="'{:,.2f}'.format(o.x_event_grand_total or 0)"/></td>
+                            </tr>
+                            <tr t-if="o.x_deposit_received">
+                                <td style="padding:2px 8px;">Less deposit received</td>
+                                <td style="padding:2px 8px; text-align:right;">- $<t t-esc="'{:,.2f}'.format(o.x_deposit_amount or 0)"/></td>
+                            </tr>
+                            <tr style="font-weight:bold;">
+                                <td style="padding:2px 8px;">Balance Due</td>
+                                <td style="padding:2px 8px; text-align:right;">$<t t-esc="'{:,.2f}'.format(o.x_balance_due or 0)"/></td>
+                            </tr>
+                        </table>
+
+                        <p style="font-size:10px; color:#777; margin-top:10px;">
+                            Revenue is what the customer is charged; Cost (COGS) is the lodge's cost including certified staff labor and vendor POs. Net is Revenue minus Cost per category. Post revenue to the matching income accounts and costs to the matching expense accounts for each category.
+                        </p>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+</odoo>

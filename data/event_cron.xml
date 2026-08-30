@@ -16,6 +16,18 @@
             <field name="active">False</field>
         </record>
 
+        <!-- Daily bump for department managers who haven't certified their
+             call-out yet (only for events that haven't happened). -->
+        <record id="cron_callout_remind_pending" model="ir.cron">
+            <field name="name">Elks Events: Remind Pending Call-Outs</field>
+            <field name="model_id" ref="model_elks_event_callout"/>
+            <field name="state">code</field>
+            <field name="code">env['elks.event.callout']._cron_remind_pending()</field>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <field name="active">True</field>
+        </record>
+
         <!-- Balance-due reminder emails -->
         <record id="cron_event_balance_due" model="ir.cron">
             <field name="name">Elks Events: Balance Due Reminders</field>
