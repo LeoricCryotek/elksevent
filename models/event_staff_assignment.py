@@ -17,6 +17,9 @@ AI
 - ROLE_TO_ATTENDANCE maps a planned role to the hr.attendance x_event_role
   ('kitchen' covers both cook and support since the timeclock has one kitchen
   role). Used by the clock-in auto-link and the requested-vs-assigned tallies.
+- The elksvolunteer module adds a `position_id` (elks.volunteer.role) picker
+  that sets `role` from the position's event_role, so the coordinator can pick
+  from the configurable position catalogue instead of the fixed list.
 """
 from odoo import fields, models
 
