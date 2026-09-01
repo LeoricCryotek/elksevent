@@ -275,8 +275,8 @@ class ProjectTask(models.Model):
     )
     x_guest_count = fields.Integer("Expected Guests", tracking=True)
     x_event_description = fields.Text(
-        "Event Description",
-        help="Customer's description of what they're planning.",
+        "Calendar Event Details",
+        help="The event details that appear on the lodge calendar entry.",
     )
     x_special_requests = fields.Text("Special Requests")
 
@@ -286,6 +286,18 @@ class ProjectTask(models.Model):
     x_customer_name = fields.Char("Host Name", tracking=True)
     x_customer_phone = fields.Char("Host Phone")
     x_customer_email = fields.Char("Host Email")
+
+    # Wedding party contacts — shown only when the event type is a wedding.
+    x_wedding_bride_name = fields.Char("Bride Name")
+    x_wedding_bride_phone = fields.Char("Bride Phone")
+    x_wedding_bride_email = fields.Char("Bride Email")
+    x_wedding_groom_name = fields.Char("Groom Name")
+    x_wedding_groom_phone = fields.Char("Groom Phone")
+    x_wedding_groom_email = fields.Char("Groom Email")
+    x_wedding_extra_contacts = fields.Text(
+        "Coordinator / Additional Contacts",
+        help="Wedding planner or day-of coordinator and any other contacts "
+             "(name, phone, email).")
 
     # ──────────────────────────────────────────────────────────────────
     # SECTION: Celebration-of-Life (memorial) — honoree Elk details
@@ -3338,7 +3350,7 @@ class ProjectTask(models.Model):
                 'start': start,
                 'stop': stop,
                 'show_as': 'free',
-                'description': self.description or '',
+                'description': self.x_event_description or self.description or '',
                 'x_event_task_id': self.id,
             })
             self.x_calendar_event_id = ev.id
@@ -3361,7 +3373,8 @@ class ProjectTask(models.Model):
         if self.x_calendar_event_id:
             start, stop = self._event_calendar_window()
             vals = {'name': self.name or 'Event', 'show_as': 'busy',
-                    'description': self.description or ''}
+                    'description': (self.x_event_description
+                                    or self.description or '')}
             if start:
                 vals.update({'start': start, 'stop': stop})
             settings = self._event_settings()

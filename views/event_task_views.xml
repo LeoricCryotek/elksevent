@@ -18,15 +18,15 @@
                 <attribute name="string">Event Date</attribute>
             </xpath>
 
-            <!-- Calendar Description: the task description feeds the lodge
-                 calendar / newsletter, so surface it at the top (under
-                 Assignees) with a note, and hide the standard Description tab. -->
+            <!-- Event Description: the internal working description of the
+                 event (the calendar entry is fed by "Calendar Event Details"
+                 further down). Surface it at the top under Assignees. -->
             <xpath expr="//field[@name='user_ids']" position="after">
-                <label for="description" string="Calendar Description"
+                <label for="description" string="Event Description"
                        invisible="not x_is_event"/>
                 <div invisible="not x_is_event">
                     <field name="description"
-                           placeholder="Shown on the lodge calendar and in the newsletter — keep it short and public-facing."/>
+                           placeholder="Working description of the event."/>
                 </div>
             </xpath>
             <xpath expr="//page[@name='description_page']" position="attributes">
@@ -307,6 +307,17 @@
                                    options="{'color_field': 'color'}"
                                    placeholder="Add tags..."/>
                         </group>
+                        <group string="Wedding Party"
+                               invisible="x_event_type != 'wedding'">
+                            <field name="x_wedding_bride_name"/>
+                            <field name="x_wedding_bride_phone" widget="phone"/>
+                            <field name="x_wedding_bride_email" widget="email"/>
+                            <field name="x_wedding_groom_name"/>
+                            <field name="x_wedding_groom_phone" widget="phone"/>
+                            <field name="x_wedding_groom_email" widget="email"/>
+                            <field name="x_wedding_extra_contacts"
+                                   placeholder="Wedding planner / day-of coordinator, other contacts (name, phone, email)..."/>
+                        </group>
                     </group>
                     <group>
                         <group string="Access &amp; Setup">
@@ -332,10 +343,10 @@
                         </list>
                     </field>
                     <group>
-                        <group string="Event Description">
+                        <group string="Calendar Event Details">
                             <field name="x_event_description" nolabel="1"
                                    colspan="2"
-                                   placeholder="Customer's description of their event..."/>
+                                   placeholder="What shows on the lodge calendar for this event — keep it short and public-facing."/>
                         </group>
                         <group string="Special Requests">
                             <field name="x_special_requests" nolabel="1"
