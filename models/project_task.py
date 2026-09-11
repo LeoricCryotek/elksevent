@@ -1855,7 +1855,8 @@ class ProjectTask(models.Model):
         'x_purchase_order_ids.state',
         'x_attendance_ids.worked_hours', 'x_attendance_ids.x_event_role',
         'x_attendance_ids.employee_id',
-        'x_is_member', 'x_is_nonprofit', 'x_event_type', 'x_member_number',
+        'x_is_member', 'x_is_nonprofit', 'x_is_elks_event',
+        'x_event_type', 'x_member_number',
         'x_discount_reason', 'x_discount_pct',
         'x_discount_type', 'x_discount_value',
     )
@@ -1869,22 +1870,30 @@ class ProjectTask(models.Model):
         disc_pct = (settings.x_member_discount_pct
                     if settings and settings.x_member_discount_pct else 0.0)
         for rec in self:
-            # Room income from room booking lines (as CHARGED)
-            room_income = sum(rec.x_room_booking_ids.mapped('subtotal'))
-            if not room_income and rec.x_room_rental_rate:
-                room_income = rec.x_room_rental_rate
-            rec.x_room_income = room_income
-            # Room RETAIL = the room master's default rate + fees, ignoring any
-            # per-booking override. Used for the coordinator fee base and the
-            # member/COL discount (retail vs actual).
-            room_retail = sum(
-                (b.room_id.x_room_rate or 0.0)
-                + (b.room_id.x_cleaning_fee or 0.0)
-                + (b.room_id.x_service_fee or 0.0)
-                for b in rec.x_room_booking_ids)
-            if not room_retail:
-                room_retail = room_income or rec.x_room_rental_rate or 0.0
-            rec.x_room_retail = room_retail
+            # Room income from room booking lines (as CHARGED). An Elks Event is
+            # the lodge's own — the lodge does not charge itself for the space,
+            # so there is no room income or retail on it.
+            if rec.x_is_elks_event:
+                rec.x_room_income = 0.0
+                rec.x_room_retail = 0.0
+                room_income = 0.0
+                room_retail = 0.0
+            else:
+                room_income = sum(rec.x_room_booking_ids.mapped('subtotal'))
+                if not room_income and rec.x_room_rental_rate:
+                    room_income = rec.x_room_rental_rate
+                rec.x_room_income = room_income
+                # Room RETAIL = the room master's default rate + fees, ignoring
+                # any per-booking override. Used for the coordinator fee base
+                # and the member/COL discount (retail vs actual).
+                room_retail = sum(
+                    (b.room_id.x_room_rate or 0.0)
+                    + (b.room_id.x_cleaning_fee or 0.0)
+                    + (b.room_id.x_service_fee or 0.0)
+                    for b in rec.x_room_booking_ids)
+                if not room_retail:
+                    room_retail = room_income or rec.x_room_rental_rate or 0.0
+                rec.x_room_retail = room_retail
 
             # Event Costs are now customer CHARGES (roll into the price).
             rec.x_eventcosts_total = sum(rec.x_cost_line_ids.mapped('total'))

@@ -64,8 +64,14 @@ class EventRoomBooking(models.Model):
 
     @api.onchange('room_id')
     def _onchange_room_id(self):
-        """Pre-fill rates from the selected room's defaults."""
+        """Pre-fill rates from the selected room's defaults — but an Elks Event
+        is the lodge's own, so it is not charged for the space (fees stay $0)."""
         if self.room_id:
-            self.rate = self.room_id.x_room_rate
-            self.cleaning_fee = self.room_id.x_cleaning_fee
-            self.service_fee = self.room_id.x_service_fee
+            if self.event_id.x_is_elks_event:
+                self.rate = 0.0
+                self.cleaning_fee = 0.0
+                self.service_fee = 0.0
+            else:
+                self.rate = self.room_id.x_room_rate
+                self.cleaning_fee = self.room_id.x_cleaning_fee
+                self.service_fee = self.room_id.x_service_fee
