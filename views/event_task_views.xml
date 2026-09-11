@@ -223,19 +223,22 @@
                         type="object"
                         class="oe_stat_button"
                         icon="fa-file-text-o"
+                        help="Open the deposit invoice to view or print it (creates it the first time). Use 'Refresh from Quote' to update amounts."
                         invisible="not x_is_event or x_is_elks_event or x_quote_total &lt;= 0"/>
                 <button name="action_create_final_invoice"
                         string="Final Invoice"
                         type="object"
                         class="oe_stat_button"
                         icon="fa-file-text"
+                        help="Open the final invoice to view or print it (creates it the first time). Use 'Refresh from Quote' to update amounts."
                         invisible="not x_is_event or x_is_elks_event or x_quote_total &lt;= 0"/>
                 <button name="action_refresh_invoice_from_quote"
-                        string="Refresh from Quote"
+                        string="Refresh Invoices"
                         type="object"
                         class="oe_stat_button"
                         icon="fa-refresh"
-                        invisible="not x_is_event or x_invoice_count == 0"/>
+                        help="Refresh the numbers: updates the P&amp;L and bookkeeper breakdown, re-lays any DRAFT invoice to the new totals, and leaves confirmed invoices unchanged."
+                        invisible="not x_is_event or x_is_elks_event or x_quote_total &lt;= 0"/>
                 <button name="action_view_invoices"
                         type="object"
                         class="oe_stat_button"
@@ -422,42 +425,31 @@
                                    string="Hours per Worker"
                                    invisible="not x_event_workers_use"/>
                         </group>
-                        <group string="Cleaning (as requested by the customer)">
+                        <group string="Cleaning">
                             <div colspan="2" class="text-muted"
                                  invisible="not x_cleaning_use">
-                                What the customer asked for. The custodial
-                                manager confirms the actual staffing on the
-                                call sheet.
+                                Check the box and note any requests. The
+                                custodial manager sets how many, who, and the
+                                rate on their call sheet.
                             </div>
                             <field name="x_cleaning_use"/>
-                            <field name="x_cleaner_count"
-                                   string="Cleaners requested"
-                                   invisible="not x_cleaning_use"/>
-                            <field name="x_cleaner_hours"
-                                   string="Hours per Cleaner (requested)"
-                                   invisible="not x_cleaning_use"/>
                             <field name="x_custodial_customer_request"
                                    string="Other Cleaning Requests"
                                    invisible="not x_cleaning_use"
-                                   placeholder="Anything else the customer requested for cleaning / setup..."/>
+                                   placeholder="Anything to pass to the custodian — setup, teardown, special areas..."/>
                         </group>
                     </group>
                     <group>
-                        <group string="Bar (as requested by the customer)">
+                        <group string="Bar">
                             <div colspan="2" class="text-muted"
                                  invisible="not x_bar_use">
-                                What the customer asked for. The bar manager
-                                confirms the actual staffing on the call sheet.
+                                Check the box and note the requests. The bar
+                                manager sets bartenders, hours, and rates on
+                                their call sheet.
                             </div>
                             <field name="x_bar_use"/>
                             <field name="x_num_bars"
-                                   string="Bars requested"
-                                   invisible="not x_bar_use"/>
-                            <field name="x_bartender_count"
-                                   string="Bartenders requested"
-                                   invisible="not x_bar_use"/>
-                            <field name="x_plan_bar_hours"
-                                   string="Hours per Bartender (requested)"
+                                   string="Number of Bars"
                                    invisible="not x_bar_use"/>
                             <field name="x_need_beer_tub"
                                    invisible="not x_bar_use"/>
@@ -467,7 +459,7 @@
                             <field name="x_bar_customer_request"
                                    string="Other Bar Requests"
                                    invisible="not x_bar_use"
-                                   placeholder="Anything else the customer requested for the bar..."/>
+                                   placeholder="Anything else to pass to the bar manager..."/>
                             <field name="x_bar_gratuity"
                                    invisible="not x_bar_use"/>
                         </group>
@@ -489,30 +481,20 @@
                         </group>
                     </group>
                     <group>
-                        <group string="Food (as requested by the customer)">
+                        <group string="Food">
                             <div colspan="2" class="text-muted"
                                  invisible="not x_food_request">
-                                What the customer asked for. The kitchen manager
-                                confirms the actual staffing on the call sheet.
+                                Check the box and note the menu / requests. The
+                                kitchen manager sets cooks, hours, and rates on
+                                their call sheet.
                             </div>
                             <field name="x_food_request"/>
                             <field name="x_catering_details"
                                    invisible="not x_food_request"/>
                             <field name="x_kitchen_customer_request"
-                                   string="Other Food Requests"
+                                   string="Other Food / Menu Requests"
                                    invisible="not x_food_request"
-                                   placeholder="Anything else the customer requested for food / catering..."/>
-                            <field name="x_cook_count"
-                                   string="Cooks requested"
-                                   invisible="not x_food_request"/>
-                            <field name="x_cook_hours"
-                                   string="Hours per Cook (requested)"
-                                   invisible="not x_food_request or not x_cook_count"/>
-                            <field name="x_kitchen_support_count"
-                                   string="Kitchen Support requested"
-                                   invisible="not x_food_request"/>
-                            <field name="x_kitchen_support_hours"
-                                   invisible="not x_food_request or not x_kitchen_support_count"/>
+                                   placeholder="Menu, dietary needs, service times — anything to pass to the kitchen manager..."/>
                             <field name="x_food_by_us"
                                    invisible="not x_food_request"/>
                             <field name="x_food_menu"
@@ -759,81 +741,6 @@
                             <field name="x_cat_other" readonly="1"
                                    string="Other / Gratuity"/>
                         </group>
-                    </group>
-                    <group string="Labor (internal estimate for P&amp;L — not charged to the customer)">
-                        <group string="Event Staff — planned">
-                            <field name="x_event_workers_use"/>
-                            <field name="x_event_worker_count"
-                                   string="Number of Workers"
-                                   invisible="not x_event_workers_use"/>
-                            <field name="x_event_worker_hours"
-                                   string="Hours per Worker"
-                                   invisible="not x_event_workers_use"/>
-                            <field name="x_plan_setup_hours"
-                                   invisible="x_event_worker_count"/>
-                            <field name="x_plan_event_hours"
-                                   invisible="x_event_worker_count"/>
-                            <field name="x_plan_teardown_hours"
-                                   invisible="x_event_worker_count"/>
-                            <field name="x_est_event_hours"
-                                   string="= Est. Event-Staff Hours"/>
-                            <field name="x_actual_event_hours"/>
-                            <field name="x_event_hours_variance"
-                                   decoration-danger="x_event_hours_variance &lt; 0"
-                                   decoration-success="x_event_hours_variance &gt;= 0"/>
-                        </group>
-                        <group string="Bartender — planned">
-                            <field name="x_num_bars"/>
-                            <field name="x_bartender_count"/>
-                            <field name="x_plan_bar_hours"/>
-                            <field name="x_est_bartender_hours"
-                                   string="= Est. Bartender Hours"/>
-                            <field name="x_actual_bartender_hours"/>
-                        </group>
-                        <group string="Kitchen / Catering — planned">
-                            <field name="x_cook_count"/>
-                            <field name="x_cook_hours"/>
-                            <field name="x_est_cook_hours"
-                                   string="= Est. Cook Hours"/>
-                            <field name="x_kitchen_support_count"/>
-                            <field name="x_kitchen_support_hours"/>
-                            <field name="x_est_kitchen_support_hours"
-                                   string="= Est. Kitchen Support Hours"/>
-                            <field name="x_actual_kitchen_hours"/>
-                        </group>
-                        <group string="Cleaning / Custodial — planned">
-                            <field name="x_cleaning_use"/>
-                            <field name="x_cleaner_count"
-                                   string="Number of Cleaners"
-                                   invisible="not x_cleaning_use"/>
-                            <field name="x_cleaner_hours"
-                                   string="Hours per Cleaner"
-                                   invisible="not x_cleaning_use"/>
-                            <field name="x_plan_cleaning_hours"
-                                   invisible="x_cleaner_count"/>
-                            <field name="x_est_cleaning_hours"
-                                   string="= Est. Cleaning Hours"/>
-                            <field name="x_actual_cleaning_hours"/>
-                            <field name="x_cleaning_hours_variance"
-                                   decoration-danger="x_cleaning_hours_variance &lt; 0"
-                                   decoration-success="x_cleaning_hours_variance &gt;= 0"/>
-                        </group>
-                        <group string="Labor Cost (P&amp;L)">
-                            <field name="x_est_labor_cost"
-                                   string="Billed Labor (basis)"/>
-                            <field name="x_actual_labor_cost"
-                                   string="Actual Paid Labor (in P&amp;L)"/>
-                        </group>
-                        <button name="action_build_labor_costs" type="object"
-                                string="Build Cost Lines from Plan" class="btn-primary"
-                                help="Rebuild the Bar / Event / Cleaning / Catering service lines on the Event Costs tab from the planned hours x the Lodge Settings rates (charge = cost + markup + service fee; COGS = cost)."/>
-                        <button name="action_trueup_labor_hours" type="object"
-                                string="True-up to Actual Hours" class="btn-secondary"
-                                help="Sets estimated hours to the actual timeclock hours per role and rolls the actual labor cost into the P&amp;L."/>
-                    </group>
-                    <group string="Contract / Agreement Notes">
-                        <field name="x_contract_notes" nolabel="1" colspan="2"
-                               placeholder="Terms, conditions, and agreement details for the invoice..."/>
                     </group>
                 </page>
 

@@ -97,6 +97,9 @@
                         <field name="x_marketing_signage_fee"/>
                         <field name="x_exclusive_use_fee"/>
                         <field name="x_event_insurance_fee"/>
+                        <field name="x_linen_price_30"/>
+                        <field name="x_linen_price_60"/>
+                        <field name="x_linen_price_100"/>
                     </group>
                     <group string="Invoice / Billing Options (Terms &amp; Acceptance)">
                         <field name="x_invoice_terms_acceptance"/>
@@ -137,6 +140,9 @@
                         <field name="x_event_checklist_template_id"/>
                         <field name="x_event_project_id"/>
                         <field name="x_event_calendar_user_id"/>
+                        <field name="x_new_request_notify_user_ids"
+                               widget="many2many_tags"
+                               placeholder="Users to email + chat on a new website request..."/>
                         <field name="x_customer_survey_id"/>
                         <field name="x_insurance_program_url"/>
                         <field name="x_event_floor_plan" widget="image"

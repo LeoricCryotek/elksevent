@@ -234,6 +234,13 @@ class WebsiteEventRequest(http.Controller):
             subtype_xmlid='mail.mt_note',
         )
 
+        # Notify the configured staff of the new request — by Odoo chat/inbox
+        # AND by email. Best-effort: never break the submission.
+        try:
+            task.sudo()._notify_new_website_request(post)
+        except Exception:  # noqa: BLE001
+            pass
+
         # Best-effort: start a draft quote, a tentative calendar entry,
         # and send the confirmation email. Never break the submission.
         try:

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Elks Event Bookings',
-    'version': '19.0.9.38.0',
+    'version': '19.0.9.42.0',
     'category': 'Services/Project',
     'summary': 'Facility event booking, board approval, room billing, and P&L reporting',
     'description': """
@@ -37,6 +37,16 @@ Key features
   description) for the Elks Calendar / newsletter.
 - Assessor / UBI reporting and AP GL breakout by FRS account; per-event and
   date-range P&L reports with the Elks lodge header.
+- Digital department call-outs (Bar / Kitchen / Custodial): the manager gets a
+  portal call-sheet, assigns staff by name with start/end times, hours, rate
+  and gratuity, and certifies it; the certified roster labor + gratuity post
+  back to the event's COGS and the coordinator is notified.
+- Auto-charges: Event Insurance (default $187, non-lodge events the lodge
+  insures) and tiered Linens (by guest count) added to the event costs.
+- Wedding contacts (bride / groom / coordinator), a Non-Profit 50% room
+  discount (alongside Member), and configurable "notify on new website
+  request" users (email + chat).
+- Bookkeeper P&L-by-category summary report.
 - All events file into one global "Events" project.
     """,
     'author': 'Lewiston Clarkston Elks Lodge #896',

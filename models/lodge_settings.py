@@ -134,10 +134,23 @@ class ElksLodgeSettings(models.Model):
         help="Default fee for the 'Exclusive Use' Event Cost.",
     )
     x_event_insurance_fee = fields.Monetary(
-        "Event Insurance Fee", currency_field='x_event_currency_id',
-        help="Default insurance charge auto-added to every non-lodge event. "
-             "Adjustable per event on the Event Costs list.",
+        "Event Rental Insurance Default", currency_field='x_event_currency_id',
+        default=187.0,
+        help="Default event-rental insurance charge added to the costs of "
+             "every non-lodge event the lodge insures. Adjustable per event on "
+             "the Event Costs list.",
     )
+    # Linen charge tiers by guest count (charged whenever Linen is ticked,
+    # even when the lodge supplies them in-house).
+    x_linen_price_30 = fields.Monetary(
+        "Linens - up to 30 guests", currency_field='x_event_currency_id',
+        default=300.0, help="Linen charge for 30 guests or fewer.")
+    x_linen_price_60 = fields.Monetary(
+        "Linens - 31 to 60 guests", currency_field='x_event_currency_id',
+        default=600.0, help="Linen charge for 31-60 guests.")
+    x_linen_price_100 = fields.Monetary(
+        "Linens - 61+ guests", currency_field='x_event_currency_id',
+        default=900.0, help="Linen charge for 61 guests and up.")
     x_customer_survey_id = fields.Many2one(
         'survey.survey', string="Customer Feedback Survey",
         help="Survey emailed to the customer when their event moves to the "
@@ -236,6 +249,12 @@ class ElksLodgeSettings(models.Model):
         help="Approved events publish onto THIS user's calendar. Set the Elks "
              "Calendar publication's 'Source User Calendar' to the same user "
              "so approved events populate the printed calendar automatically.",
+    )
+    x_new_request_notify_user_ids = fields.Many2many(
+        'res.users', 'elks_event_new_request_notify_rel',
+        'settings_id', 'user_id', string="Notify on New Website Request",
+        help="These users are emailed AND sent an Odoo chat/inbox message "
+             "whenever a new event request is submitted from the website.",
     )
 
     # ------------------------------------------------------------------

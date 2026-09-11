@@ -1736,6 +1736,19 @@ class ProjectTask(models.Model):
         discount = max(room_retail - rooms_net, 0.0)
         return rooms_net, discount
 
+    def _linen_charge(self, settings=None):
+        """Tiered linen charge from Lodge Settings, by guest count."""
+        self.ensure_one()
+        settings = settings or self._event_settings()
+        if not settings:
+            return 0.0
+        guests = self.x_guest_count or 0
+        if guests <= 30:
+            return settings.x_linen_price_30 or 0.0
+        if guests <= 60:
+            return settings.x_linen_price_60 or 0.0
+        return settings.x_linen_price_100 or 0.0
+
     def _event_discount_label(self):
         """Human label for the room-rental discount (invoice / Financials)."""
         self.ensure_one()
@@ -2767,22 +2780,9 @@ class ProjectTask(models.Model):
                         'x_taxable': False,
                         'x_auto_source': 'roster_%s' % co.department,
                     })
-                # Gratuity is a pass-through: charged to the customer (revenue)
-                # and paid out to staff (COGS), so it nets to zero for the lodge
-                # but appears on both sides of the books.
-                gtype = tid('gratuity') or tid('other')
-                if gtype and co.gratuity:
-                    Line.create({
-                        'event_id': rec.id,
-                        'cost_type_id': gtype,
-                        'name': _("%s Gratuity (pass-through)")
-                        % co.department_label,
-                        'quantity': 1,
-                        'unit_cost': round(co.gratuity, 2),
-                        'x_line_cogs': round(co.gratuity, 2),
-                        'x_taxable': False,
-                        'x_auto_source': 'roster_grat_%s' % co.department,
-                    })
+                # NOTE: gratuity is handled once, below, from x_bar_gratuity /
+                # x_kitchen_gratuity (which certify populates) — do NOT add a
+                # gratuity line here too or it double-counts.
 
             # Add-on fees toggled by checkbox (fee from Lodge Settings).
             for flag, code, fee, name, src in (
@@ -2832,6 +2832,27 @@ class ProjectTask(models.Model):
                             'unit_cost': round(ins_fee, 2),
                             'x_line_cogs': 0.0,
                             'x_taxable': False,
+                        })
+
+            # Linens — charged whenever "Linen" is ticked (even when the lodge
+            # supplies them in-house), tiered by guest count from Lodge
+            # Settings. Tagged so a rebuild refreshes it to the current tier.
+            lin_type = tid('linens')
+            if lin_type:
+                rec.x_cost_line_ids.filtered(
+                    lambda c: c.x_auto_source == 'linen_auto').unlink()
+                if rec.x_need_linen:
+                    price = rec._linen_charge(settings)
+                    if price:
+                        Line.create({
+                            'event_id': rec.id,
+                            'cost_type_id': lin_type,
+                            'name': _("Linens"),
+                            'quantity': 1,
+                            'unit_cost': round(price, 2),
+                            'x_line_cogs': 0.0,
+                            'x_taxable': Type.browse(lin_type).taxable,
+                            'x_auto_source': 'linen_auto',
                         })
 
             # Gratuity — a pass-through: charged to the customer AND paid out to
@@ -3383,6 +3404,54 @@ class ProjectTask(models.Model):
                 vals['user_id'] = cal_user.id
                 vals['partner_ids'] = [(4, cal_user.partner_id.id)]
             self.x_calendar_event_id.sudo().write(vals)
+
+    def _notify_new_website_request(self, post=None):
+        """Ping the Lodge Settings 'Notify on New Website Request' users about a
+        new submission — by Odoo chat/inbox AND email."""
+        self.ensure_one()
+        settings = self._event_settings()
+        users = settings.x_new_request_notify_user_ids if settings else False
+        if not users:
+            return
+        partners = users.mapped('partner_id')
+        base = self.get_base_url()
+        link = '%s/web#id=%s&model=project.task&view_type=form' % (
+            base, self.id)
+        subject = _("New event request: %s", self.name or 'Event')
+        body = _(
+            "<p><b>New website event request:</b> %(name)s</p>"
+            "<ul>"
+            "<li>Host: %(host)s</li>"
+            "<li>Email: %(email)s</li>"
+            "<li>Phone: %(phone)s</li>"
+            "<li>Date: %(date)s</li>"
+            "<li>Guests: %(guests)s</li>"
+            "</ul>"
+            '<p><a href="%(link)s">Open the request</a></p>',
+            name=self.name or 'Event',
+            host=self.x_customer_name or '',
+            email=self.x_customer_email or '',
+            phone=self.x_customer_phone or '',
+            date=self.x_event_date or '',
+            guests=self.x_guest_count or 0,
+            link=link)
+        # Followers + chat/inbox message (delivered per each user's own
+        # notification preference: Odoo inbox or email).
+        self.message_subscribe(partner_ids=partners.ids)
+        self.message_post(
+            subject=subject, body=body, partner_ids=partners.ids,
+            subtype_xmlid='mail.mt_comment', message_type='comment')
+        # message_post only emails users whose preference is 'email'; send a
+        # direct email to the 'inbox' users too so everyone gets the email.
+        inbox_emails = [
+            u.partner_id.email for u in users
+            if u.notification_type == 'inbox' and u.partner_id.email]
+        if inbox_emails:
+            self.env['mail.mail'].sudo().create({
+                'subject': subject,
+                'body_html': body,
+                'email_to': ",".join(inbox_emails),
+            }).send()
 
     # ──────────────────────────────────────────────────────────────────
     # SECTION: Marketing listing (Events app)
@@ -4136,20 +4205,53 @@ class ProjectTask(models.Model):
             acc = self.env['account.account'].search(domain, limit=1)
         return acc
 
+    def _existing_event_invoice(self, kind):
+        self.ensure_one()
+        return self.x_invoice_ids.filtered(
+            lambda m: m.state != 'cancel'
+            and m.x_event_invoice_kind == kind)[:1]
+
+    def _open_event_invoice(self, move):
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _("Event Invoice"),
+            'res_model': 'account.move',
+            'res_id': move.id,
+            'view_mode': 'form',
+            'views': [(False, 'form')],
+            'target': 'current',
+        }
+
     def action_create_deposit_invoice(self):
+        """View the deposit invoice if it exists, otherwise create it."""
+        existing = self._existing_event_invoice('deposit')
+        if existing:
+            return self._open_event_invoice(existing)
         return self._build_event_invoice('deposit')
 
     def action_create_final_invoice(self):
+        """View the final invoice if it exists, otherwise create it."""
+        existing = self._existing_event_invoice('final')
+        if existing:
+            return self._open_event_invoice(existing)
         return self._build_event_invoice('final')
 
     def action_refresh_invoice_from_quote(self):
-        """Rebuild the lines on every DRAFT event invoice to current amounts.
+        """Refresh the numbers.
 
-        Rebuilds the quote first, then fully re-lays each draft deposit/final
-        invoice (deposit % or full-minus-deposit) so the amounts owed reflect
-        the latest room, event costs, coordinator, discount, and deposit paid.
+        Always rebuilds the event cost lines and quote so the Financials P&L
+        and the bookkeeper breakdown reflect the latest figures. DRAFT (not yet
+        confirmed / unpaid) invoices are re-laid to the new totals; POSTED
+        invoices are left untouched (they are locked once confirmed) — only the
+        P&L / bookkeeper numbers update for those.
         """
         self.ensure_one()
+        # Rebuild cost lines + quote -> the computed P&L / bookkeeper numbers
+        # follow automatically.
+        try:
+            self._sync_labor_cost_lines()
+        except Exception as e:  # noqa: BLE001
+            _logger.warning("Cost rebuild failed for %s: %s", self.id, e)
         if self.x_sale_order_id:
             try:
                 self._sync_quote_lines()
@@ -4157,20 +4259,20 @@ class ProjectTask(models.Model):
                 _logger.warning(
                     "Quote refresh failed for %s: %s", self.id, e)
         drafts = self.x_invoice_ids.filtered(lambda m: m.state == 'draft')
-        if not drafts:
-            raise UserError(_(
-                "No draft invoice to refresh. Posted invoices must be "
-                "cancelled and recreated."))
         for mv in drafts:
             kind = mv.x_event_invoice_kind or 'final'
             mv.write({
                 'invoice_line_ids': [(5, 0, 0)] + self._event_invoice_lines(kind),
                 'narration': self._event_invoice_narration(),
             })
-        self.message_post(
-            body=_("Refreshed %s draft invoice(s) from the quote.", len(drafts)),
-            subtype_xmlid='mail.mt_note',
-        )
+        posted = self.x_invoice_ids.filtered(lambda m: m.state == 'posted')
+        msg = _("Financials refreshed (P&L and bookkeeper breakdown updated).")
+        if drafts:
+            msg += _(" %s draft invoice(s) re-laid to the new totals.",
+                     len(drafts))
+        if posted:
+            msg += _(" %s confirmed invoice(s) left unchanged.", len(posted))
+        self.message_post(body=msg, subtype_xmlid='mail.mt_note')
         return True
 
     def _get_event_partner(self):
