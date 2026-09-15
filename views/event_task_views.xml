@@ -274,9 +274,10 @@
                                    invisible="not x_is_member"
                                    required="x_is_member"/>
                             <field name="x_is_nonprofit"/>
-                            <field name="x_event_committee"
+                            <field name="x_event_committee_id"
                                    invisible="not x_is_elks_event"
-                                   required="x_is_elks_event"/>
+                                   required="x_is_elks_event"
+                                   options="{'no_create_edit': True}"/>
                             <field name="x_responsible_party_id"
                                    invisible="not x_is_elks_event"
                                    required="x_is_elks_event"/>

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Elks Event Bookings',
-    'version': '19.0.9.43.0',
+    'version': '19.0.9.44.0',
     'category': 'Services/Project',
     'summary': 'Facility event booking, board approval, room billing, and P&L reporting',
     'description': """
@@ -65,6 +65,7 @@ Key features
         'elksfrs',
         'elksmaintenance',
         'elkspurchase',
+        'elkscontacts',
     ],
     'data': [
         'security/event_security.xml',

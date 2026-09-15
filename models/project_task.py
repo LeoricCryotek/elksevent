@@ -174,8 +174,8 @@ class ProjectTask(models.Model):
         "Discount Note", tracking=True,
         help="Required whenever a discount is applied — explain why.")
     # Elks (lodge's own) events — who owns it; not billed, no insurance needed.
-    x_event_committee = fields.Char(
-        "Committee",
+    x_event_committee_id = fields.Many2one(
+        'elks.committee', string="Committee",
         help="The lodge committee responsible for this Elks event.")
     x_responsible_party_id = fields.Many2one(
         'res.partner', string="Responsible Party",
