@@ -85,6 +85,33 @@ sudo systemctl restart odona-lewistonelks896.com
 
 ## Recent changes
 
+- 19.0.9.74 — Printable W-9 and I-9 (Section 1) PDFs filled from the 1099
+  application, for the paper folder — "Print W-9" / "Print I-9" buttons on the
+  applicant (and in its Print menu). I-9 Section 2 is left for the employer to
+  complete in person against the uploaded documents.
+- 19.0.9.73 — 1099 onboarding completeness: added W-9 federal tax classification
+  + backup-withholding certification to the form/applicant. "Create 1099
+  Employee" now sets Contract Type = 1099 Contractor, employee_type =
+  freelance, copies the SSN to the employee's SSN field, logs the W-9 details,
+  and leaves the wage blank (event pay comes from the timecard). Free-text
+  roster names are matched and linked to the new employee record.
+- 19.0.9.72 — New employees' attendance/POS PIN defaults to the last 4 digits of
+  their phone (work → mobile → private), or 0000 when there's no phone (only
+  when a PIN isn't given). Migration backfills employees with a blank PIN.
+- 19.0.9.71 — 1099 onboarding uploads now also attach to the application as
+  regular (viewable/downloadable) attachments in the sidebar, not just binary
+  fields; convert-to-employee copies them onto the employee.
+- 19.0.9.70 — Fix: 1099 onboarding submit crashed with "Invalid field 'name' in
+  'hr.applicant'" — Odoo 19 has no name field on hr.applicant; use partner_name.
+- 19.0.9.69 — Event (call-out) rate now PAYS 1099 contractors only; W-2
+  employees are paid their normal wage for event hours (event pay = $0 for
+  them). The P&L billed-vs-actual and cost-line true-up value actuals as 1099 @
+  call-out rate, W-2 @ wage. The "Discount" is now an ADDITIONAL courtesy
+  discount (reason required, room/profit only) — the automatic Member /
+  Non-Profit 50% and Elks-event $0 room are the room's price, not counted as a
+  discount. Timecard gains a "PAYMENT SUMMARY — who to pay & how much" block
+  (regular hours, event pay, gratuity, coordinator fee, cash to pay).
+  (Requires elksattendance 19.0.5.16.)
 - 19.0.9.68 — Re-send button hidden once a call-out is certified (only the amber
   "Resend (changes)" shows if a certified plan later changes). The "Updated
   Since You Were Sent This" old→new diff now sits at the TOP of the manager's

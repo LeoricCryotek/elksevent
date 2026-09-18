@@ -42,8 +42,7 @@ class Recruitment1099(http.Controller):
 
         name = (post.get('legal_name') or '').strip()
         vals = {
-            'name': 'On-Call 1099 - %s' % (name or 'Applicant'),
-            'partner_name': name,
+            'partner_name': name or 'On-Call 1099 Applicant',
             'email_from': (post.get('email') or '').strip(),
             'partner_phone': (post.get('phone') or '').strip(),
             'job_id': job.id if job else False,
@@ -66,6 +65,13 @@ class Recruitment1099(http.Controller):
                             else False),
             'x_uscis_number': (post.get('uscis_number') or '').strip(),
             'x_work_auth_expiry': _date(post.get('work_auth_expiry')),
+            'x_w9_tax_class': (post.get('w9_tax_class')
+                               if post.get('w9_tax_class') in (
+                                   'individual', 'c_corp', 's_corp',
+                                   'partnership', 'trust_estate', 'llc',
+                                   'other')
+                               else False),
+            'x_not_backup_withholding': bool(post.get('not_backup_withholding')),
             'x_i9_signed': bool(post.get('attest')),
             'x_signature_name': (post.get('signature_name') or '').strip(),
             'x_signature_date': _date(post.get('signature_date'))
@@ -73,20 +79,39 @@ class Recruitment1099(http.Controller):
         }
 
         files = request.httprequest.files
-        doc_map = {
-            'id_doc': ('x_id_doc', 'x_id_doc_name'),
-            'id_doc_back': ('x_id_doc_back', 'x_id_doc_back_name'),
-            'ssn_doc': ('x_ssn_doc', 'x_ssn_doc_name'),
-        }
-        for field, (bin_f, name_f) in doc_map.items():
+        doc_map = [
+            ('id_doc', 'x_id_doc', 'x_id_doc_name', 'Photo ID (front)'),
+            ('id_doc_back', 'x_id_doc_back', 'x_id_doc_back_name',
+             'Photo ID (back)'),
+            ('ssn_doc', 'x_ssn_doc', 'x_ssn_doc_name',
+             'SSN / Work-Auth Document'),
+        ]
+        uploaded = []
+        for field, bin_f, name_f, label in doc_map:
             f = files.get(field)
             if f and f.filename:
                 data = f.read()
                 if data:
-                    vals[bin_f] = base64.b64encode(data)
+                    b64 = base64.b64encode(data)
+                    vals[bin_f] = b64
                     vals[name_f] = f.filename
+                    uploaded.append((label, f.filename, b64))
 
         applicant = request.env['hr.applicant'].sudo().create(vals)
+
+        # Attach the uploads as regular attachments (res_field=False) so they
+        # appear in the application's attachment sidebar and can be previewed
+        # and downloaded — not just as download-only binary fields.
+        Att = request.env['ir.attachment'].sudo()
+        for label, fname, b64 in uploaded:
+            Att.create({
+                'name': '%s - %s' % (label, fname),
+                'datas': b64,
+                'res_model': 'hr.applicant',
+                'res_id': applicant.id,
+                'res_field': False,
+            })
+
         applicant.message_post(body=(
             "<b>1099 onboarding submitted from the website.</b><br/>"
             "Name: %s | Email: %s | Phone: %s"

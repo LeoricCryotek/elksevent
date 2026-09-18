@@ -72,17 +72,36 @@ class HrAttendance(models.Model):
              "for this shift (separate from any regular hourly pay).",
     )
 
-    @api.depends('x_event_id', 'employee_id', 'worked_hours')
+    @api.depends('x_event_id', 'employee_id', 'employee_id.x_pay_category',
+                 'worked_hours')
     def _compute_event_pay(self):
         Line = self.env['elks.event.callout.line'].sudo()
         for att in self:
             rate = 0.0
-            if att.x_event_id and att.employee_id:
-                line = Line.search([
+            # The event (call-out) rate only PAYS 1099 contractors — they have
+            # no base wage. W-2 employees are paid their normal hourly wage for
+            # event hours, so the event rate does not add to their pay.
+            is_1099 = (
+                'x_pay_category' in att.employee_id._fields
+                and att.employee_id.x_pay_category == '1099')
+            if att.x_event_id and att.employee_id and is_1099:
+                # Match this event's certified roster line for this person; when
+                # the punch names a department role, match that department too so
+                # a per-department rate is picked precisely.
+                role_dept = {'bartender': 'bar', 'kitchen': 'kitchen',
+                             'custodial': 'custodial'}
+                domain = [
                     ('callout_id.event_id', '=', att.x_event_id.id),
                     ('callout_id.state', '=', 'certified'),
                     ('employee_id', '=', att.employee_id.id),
-                ], limit=1)
+                ]
+                dept = role_dept.get(att.x_event_role)
+                line = Line.browse()
+                if dept:
+                    line = Line.search(
+                        domain + [('callout_id.department', '=', dept)], limit=1)
+                if not line:
+                    line = Line.search(domain, limit=1)
                 rate = line.rate or 0.0
             att.x_event_rate = rate
             att.x_event_pay = (att.worked_hours or 0.0) * rate

@@ -97,6 +97,27 @@
                                    placeholder="XXX-XX-XXXX" autocomplete="off"/>
                         </div>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label">Federal Tax Classification (W-9) *</label>
+                        <select name="w9_tax_class" class="form-select" required="required">
+                            <option value="">-- select --</option>
+                            <option value="individual">Individual / Sole Proprietor / Single-member LLC</option>
+                            <option value="c_corp">C Corporation</option>
+                            <option value="s_corp">S Corporation</option>
+                            <option value="partnership">Partnership</option>
+                            <option value="trust_estate">Trust / Estate</option>
+                            <option value="llc">LLC (C / S / Partnership)</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input type="checkbox" name="not_backup_withholding" value="1" class="form-check-input" id="bw"/>
+                        <label class="form-check-label" for="bw">
+                            I certify that I am <strong>not</strong> subject to backup
+                            withholding (W-9, Part II). Leave unchecked if the IRS has
+                            notified you that you are subject to backup withholding.
+                        </label>
+                    </div>
 
                     <h5 class="mt-3">Work Authorization (I-9)</h5>
                     <div class="mb-3">

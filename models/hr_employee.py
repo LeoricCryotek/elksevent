@@ -39,6 +39,19 @@ DEPT_LABEL = {
 class HrEmployee(models.Model):
     _inherit = 'hr.employee'
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        """Default the attendance/POS PIN to the last 4 digits of the phone
+        number (work, then mobile, then private), or 0000 when there's none —
+        unless a PIN was given explicitly."""
+        for vals in vals_list:
+            if not vals.get('pin'):
+                phone = (vals.get('work_phone') or vals.get('mobile_phone')
+                         or vals.get('private_phone') or '')
+                digits = ''.join(ch for ch in phone if ch.isdigit())
+                vals['pin'] = digits[-4:] if len(digits) >= 4 else '0000'
+        return super().create(vals_list)
+
     x_is_event_bar_mgr = fields.Boolean(
         "Event Bar / Lounge Manager",
         help="This employee manages the bar for events — receives the Bar "

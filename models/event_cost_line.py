@@ -153,14 +153,13 @@ class EventCostLine(models.Model):
             cost = 0.0
             role = self._ROSTER_SRC_ROLE.get(line.x_auto_source)
             if evt and role and 'x_event_pay' in evt.x_attendance_ids._fields:
-                # Certified-roster line: actual = the clocked EVENT PAY (hours
-                # worked on this event x the manager's call-out rate) for that
-                # department's shifts. This is what actually paid out, compared
-                # against what we billed (line.total).
+                # Certified-roster line: actual = what actually paid out for that
+                # department's clocked shifts — 1099 at the call-out rate, W-2 at
+                # their wage — compared against what we billed (line.total).
+                rates = evt._event_role_rates(evt._event_settings())
                 for a in evt.x_attendance_ids:
-                    if a.x_event_role == role \
-                            and not evt._elks_is_volunteer_att(a):
-                        cost += a.x_event_pay or 0.0
+                    if a.x_event_role == role:
+                        cost += evt._att_actual_pay(a, rates)
             else:
                 # Other cost lines: sum shifts explicitly tagged to this line,
                 # priced at each worker's payroll rate.

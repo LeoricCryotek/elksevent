@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- =========================================================================
+     HUMAN: Printable W-9 and I-9 (Section 1) forms filled from a 1099
+     applicant's onboarding data, for the paper application folder. Print from
+     the applicant's header buttons. These reproduce the standard sections of
+     the public U.S. government forms; the employer completes I-9 Section 2 in
+     person against the uploaded ID documents.
+     AI: qweb-pdf on hr.applicant, US-Letter, self-contained inline styles,
+     ASCII-only so no PDF-engine mojibake.
+     ========================================================================= -->
+<odoo>
+    <record id="action_report_applicant_w9" model="ir.actions.report">
+        <field name="name">W-9 (from application)</field>
+        <field name="model">hr.applicant</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_applicant_w9</field>
+        <field name="report_file">elksevent.report_applicant_w9</field>
+        <field name="paperformat_id" ref="base.paperformat_us"/>
+        <field name="print_report_name">'W-9 - %s' % (object.x_legal_name or object.partner_name or 'Applicant')</field>
+        <field name="binding_model_id" ref="hr_recruitment.model_hr_applicant"/>
+        <field name="binding_type">report</field>
+    </record>
+
+    <record id="action_report_applicant_i9" model="ir.actions.report">
+        <field name="name">I-9 Section 1 (from application)</field>
+        <field name="model">hr.applicant</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_applicant_i9</field>
+        <field name="report_file">elksevent.report_applicant_i9</field>
+        <field name="paperformat_id" ref="base.paperformat_us"/>
+        <field name="print_report_name">'I-9 - %s' % (object.x_legal_name or object.partner_name or 'Applicant')</field>
+        <field name="binding_model_id" ref="hr_recruitment.model_hr_applicant"/>
+        <field name="binding_type">report</field>
+    </record>
+
+    <!-- ============================ W-9 ============================ -->
+    <template id="report_applicant_w9">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="s" t-value="o.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
+                <t t-set="bx" t-value="'display:inline-block; width:12px; height:12px; border:1px solid #000; text-align:center; line-height:11px; font-size:10px; margin-right:4px;'"/>
+                <div class="page" style="font-size:11px; color:#000; font-variant-ligatures:none;">
+                    <table style="width:100%; border:none;">
+                        <tr>
+                            <td style="border:none; padding:0; vertical-align:top;">
+                                <div style="font-size:16px; font-weight:bold;">Form W-9</div>
+                                <div style="font-size:10px;">Request for Taxpayer Identification Number and Certification</div>
+                            </td>
+                            <td style="border:none; padding:0; text-align:right; font-size:9px; color:#333;">
+                                Give Form to the requester.<br/>Do NOT send to the IRS.<br/>
+                                <t t-if="s"><t t-esc="s.name"/><t t-if="s.lodge_number"> #<t t-esc="s.lodge_number"/></t></t>
+                            </td>
+                        </tr>
+                    </table>
+                    <hr style="border-top:2px solid #000; margin:4px 0;"/>
+
+                    <table style="width:100%; border-collapse:collapse;">
+                        <tr>
+                            <td style="border:1px solid #000; padding:4px 6px;">
+                                <span style="font-size:9px;">1  Name (as shown on your income tax return)</span><br/>
+                                <span style="font-size:13px; font-weight:bold;"><t t-esc="o.x_legal_name or o.partner_name or ''"/></span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="border:1px solid #000; border-top:none; padding:4px 6px;">
+                                <span style="font-size:9px;">2  Business name / disregarded entity name, if different from above</span><br/>
+                                <span style="font-size:12px;"><t t-esc="o.x_business_name or ''"/></span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="border:1px solid #000; border-top:none; padding:4px 6px;">
+                                <span style="font-size:9px;">3  Federal tax classification (check ONE):</span><br/>
+                                <span style="margin-right:14px;"><span t-att-style="bx"><t t-if="o.x_w9_tax_class == 'individual'">X</t></span>Individual / sole proprietor / single-member LLC</span>
+                                <span style="margin-right:14px;"><span t-att-style="bx"><t t-if="o.x_w9_tax_class == 'c_corp'">X</t></span>C Corporation</span>
+                                <span style="margin-right:14px;"><span t-att-style="bx"><t t-if="o.x_w9_tax_class == 's_corp'">X</t></span>S Corporation</span>
+                                <span style="margin-right:14px;"><span t-att-style="bx"><t t-if="o.x_w9_tax_class == 'partnership'">X</t></span>Partnership</span>
+                                <br/>
+                                <span style="margin-right:14px;"><span t-att-style="bx"><t t-if="o.x_w9_tax_class == 'trust_estate'">X</t></span>Trust / estate</span>
+                                <span style="margin-right:14px;"><span t-att-style="bx"><t t-if="o.x_w9_tax_class == 'llc'">X</t></span>LLC (C / S / Partnership)</span>
+                                <span style="margin-right:14px;"><span t-att-style="bx"><t t-if="o.x_w9_tax_class == 'other'">X</t></span>Other</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="border:1px solid #000; border-top:none; padding:4px 6px;">
+                                <span style="font-size:9px;">5  Address (number, street, and apt. or suite no.)</span><br/>
+                                <span style="font-size:12px;"><t t-esc="o.x_addr_street or ''"/></span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="border:1px solid #000; border-top:none; padding:4px 6px;">
+                                <span style="font-size:9px;">6  City, state, and ZIP code</span><br/>
+                                <span style="font-size:12px;"><t t-esc="o.x_addr_city or ''"/><t t-if="o.x_addr_state">, <t t-esc="o.x_addr_state"/></t> <t t-esc="o.x_addr_zip or ''"/></span>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <div style="font-weight:bold; margin-top:8px; border-bottom:1px solid #000;">Part I  -  Taxpayer Identification Number (TIN)</div>
+                    <table style="width:100%; border-collapse:collapse; margin-top:4px;">
+                        <tr>
+                            <td style="border:1px solid #000; padding:5px 6px; width:50%;">
+                                Social Security Number (SSN)<br/>
+                                <span style="font-size:14px; font-weight:bold; letter-spacing:2px;">
+                                    <t t-if="o.x_tin_type == 'ssn'"><t t-esc="o.x_ssn or ''"/></t>
+                                </span>
+                            </td>
+                            <td style="border:1px solid #000; border-left:none; padding:5px 6px;">
+                                Employer Identification Number (EIN)<br/>
+                                <span style="font-size:14px; font-weight:bold; letter-spacing:2px;">
+                                    <t t-if="o.x_tin_type == 'ein'"><t t-esc="o.x_ssn or ''"/></t>
+                                </span>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <div style="font-weight:bold; margin-top:8px; border-bottom:1px solid #000;">Part II  -  Certification</div>
+                    <div style="font-size:9.5px; margin-top:3px;">
+                        Under penalties of perjury, I certify that: (1) The number shown on this
+                        form is my correct taxpayer identification number; (2) I am
+                        <strong><t t-if="o.x_not_backup_withholding">NOT</t><t t-else="">(see note)</t></strong>
+                        subject to backup withholding; (3) I am a U.S. citizen or other U.S.
+                        person; and (4) any FATCA code(s) entered are correct.
+                        <t t-if="not o.x_not_backup_withholding"><br/><em>Note: payee did not certify exemption from backup withholding.</em></t>
+                    </div>
+                    <table style="width:100%; border:none; margin-top:18px;">
+                        <tr>
+                            <td style="border:none; border-top:1px solid #000; padding-top:3px; width:60%;">
+                                Signature of U.S. person: <strong><t t-esc="o.x_signature_name or ''"/></strong>
+                            </td>
+                            <td style="border:none; border-top:1px solid #000; padding-top:3px; padding-left:12px;">
+                                Date: <t t-if="o.x_signature_date"><span t-field="o.x_signature_date"/></t>
+                            </td>
+                        </tr>
+                    </table>
+                    <p style="font-size:8px; color:#666; margin-top:10px;">
+                        Prepared from the lodge's online 1099 onboarding submission for the
+                        application folder. Verify against the payee's signed documents.
+                    </p>
+                </div>
+            </t>
+        </t>
+    </template>
+
+    <!-- ============================ I-9 (Section 1) ============================ -->
+    <template id="report_applicant_i9">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="s" t-value="o.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
+                <t t-set="bx" t-value="'display:inline-block; width:12px; height:12px; border:1px solid #000; text-align:center; line-height:11px; font-size:10px; margin-right:4px;'"/>
+                <div class="page" style="font-size:11px; color:#000; font-variant-ligatures:none;">
+                    <table style="width:100%; border:none;">
+                        <tr>
+                            <td style="border:none; padding:0; vertical-align:top;">
+                                <div style="font-size:16px; font-weight:bold;">Form I-9</div>
+                                <div style="font-size:10px;">Employment Eligibility Verification - Section 1: Employee Information and Attestation</div>
+                            </td>
+                            <td style="border:none; padding:0; text-align:right; font-size:9px; color:#333;">
+                                <t t-if="s"><t t-esc="s.name"/><t t-if="s.lodge_number"> #<t t-esc="s.lodge_number"/></t></t>
+                            </td>
+                        </tr>
+                    </table>
+                    <hr style="border-top:2px solid #000; margin:4px 0;"/>
+
+                    <table style="width:100%; border-collapse:collapse;">
+                        <tr>
+                            <td style="border:1px solid #000; padding:4px 6px; width:50%;">
+                                <span style="font-size:9px;">Legal Name (Last, First, Middle)</span><br/>
+                                <span style="font-size:13px; font-weight:bold;"><t t-esc="o.x_legal_name or o.partner_name or ''"/></span>
+                            </td>
+                            <td style="border:1px solid #000; border-left:none; padding:4px 6px;">
+                                <span style="font-size:9px;">Date of Birth</span><br/>
+                                <span style="font-size:12px;"><t t-if="o.x_dob"><span t-field="o.x_dob"/></t></span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="border:1px solid #000; border-top:none; padding:4px 6px;">
+                                <span style="font-size:9px;">Address (Street)</span><br/>
+                                <span style="font-size:12px;"><t t-esc="o.x_addr_street or ''"/></span>
+                            </td>
+                            <td style="border:1px solid #000; border-top:none; border-left:none; padding:4px 6px;">
+                                <span style="font-size:9px;">City / State / ZIP</span><br/>
+                                <span style="font-size:12px;"><t t-esc="o.x_addr_city or ''"/><t t-if="o.x_addr_state">, <t t-esc="o.x_addr_state"/></t> <t t-esc="o.x_addr_zip or ''"/></span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="border:1px solid #000; border-top:none; padding:4px 6px;">
+                                <span style="font-size:9px;">U.S. Social Security Number</span><br/>
+                                <span style="font-size:12px; font-weight:bold;"><t t-if="o.x_tin_type == 'ssn'"><t t-esc="o.x_ssn or ''"/></t></span>
+                            </td>
+                            <td style="border:1px solid #000; border-top:none; border-left:none; padding:4px 6px;">
+                                <span style="font-size:9px;">Email / Phone</span><br/>
+                                <span style="font-size:12px;"><t t-esc="o.email_from or ''"/> <t t-if="o.partner_phone">/ <t t-esc="o.partner_phone"/></t></span>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <div style="font-weight:bold; margin-top:8px; border-bottom:1px solid #000;">Attestation - I attest, under penalty of perjury, that I am (check one):</div>
+                    <div style="margin-top:4px;">
+                        <div><span t-att-style="bx"><t t-if="o.x_work_auth == 'citizen'">X</t></span>1. A citizen of the United States</div>
+                        <div><span t-att-style="bx"><t t-if="o.x_work_auth == 'noncitizen_national'">X</t></span>2. A noncitizen national of the United States</div>
+                        <div><span t-att-style="bx"><t t-if="o.x_work_auth == 'permanent_resident'">X</t></span>3. A lawful permanent resident  -  USCIS/A-Number: <t t-esc="o.x_uscis_number or '____________'"/></div>
+                        <div><span t-att-style="bx"><t t-if="o.x_work_auth == 'authorized_alien'">X</t></span>4. An alien authorized to work  -  expires: <t t-if="o.x_work_auth_expiry"><span t-field="o.x_work_auth_expiry"/></t><t t-else="">____________</t>; USCIS/A-Number: <t t-esc="o.x_uscis_number or '____________'"/></div>
+                    </div>
+
+                    <table style="width:100%; border:none; margin-top:18px;">
+                        <tr>
+                            <td style="border:none; border-top:1px solid #000; padding-top:3px; width:60%;">
+                                Signature of Employee: <strong><t t-esc="o.x_signature_name or ''"/></strong>
+                            </td>
+                            <td style="border:none; border-top:1px solid #000; padding-top:3px; padding-left:12px;">
+                                Date: <t t-if="o.x_signature_date"><span t-field="o.x_signature_date"/></t>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <div style="font-weight:bold; margin-top:16px; border-bottom:1px solid #000;">Section 2  -  Employer Review and Verification (complete in person)</div>
+                    <div style="font-size:9.5px; margin-top:3px;">
+                        The employer must examine the employee's original identity and
+                        work-authorization document(s) in person and record them here. The
+                        documents the applicant uploaded online are attached to their
+                        application for reference only.
+                    </div>
+                    <table style="width:100%; border-collapse:collapse; margin-top:6px; font-size:9.5px;">
+                        <tr>
+                            <td style="border:1px solid #000; padding:10px 6px; width:34%;">Document Title: __________________</td>
+                            <td style="border:1px solid #000; border-left:none; padding:10px 6px; width:33%;">Issuing Authority: __________________</td>
+                            <td style="border:1px solid #000; border-left:none; padding:10px 6px;">Number / Expiration: __________________</td>
+                        </tr>
+                    </table>
+                    <table style="width:100%; border:none; margin-top:16px;">
+                        <tr>
+                            <td style="border:none; border-top:1px solid #000; padding-top:3px; width:60%;">Employer Signature &amp; Title</td>
+                            <td style="border:none; border-top:1px solid #000; padding-top:3px; padding-left:12px;">Date</td>
+                        </tr>
+                    </table>
+                    <p style="font-size:8px; color:#666; margin-top:10px;">
+                        Section 1 prepared from the lodge's online 1099 onboarding submission
+                        for the application folder.
+                    </p>
+                </div>
+            </t>
+        </t>
+    </template>
+</odoo>

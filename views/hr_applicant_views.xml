@@ -12,6 +12,12 @@
                 <button name="action_create_1099_employee" type="object"
                         string="Create 1099 Employee" class="btn-primary"
                         invisible="not x_is_1099"/>
+                <button name="%(action_report_applicant_w9)d" type="action"
+                        string="Print W-9" class="btn-secondary"
+                        invisible="not x_is_1099"/>
+                <button name="%(action_report_applicant_i9)d" type="action"
+                        string="Print I-9" class="btn-secondary"
+                        invisible="not x_is_1099"/>
             </xpath>
             <xpath expr="//notebook" position="inside">
                 <page string="1099 Onboarding" name="onboarding_1099"
@@ -23,6 +29,8 @@
                             <field name="x_business_name"/>
                             <field name="x_tin_type"/>
                             <field name="x_ssn" password="True"/>
+                            <field name="x_w9_tax_class"/>
+                            <field name="x_not_backup_withholding"/>
                         </group>
                         <group string="Address">
                             <field name="x_addr_street"/>

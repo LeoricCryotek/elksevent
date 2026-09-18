@@ -148,12 +148,17 @@ class ProjectTask(models.Model):
     #     default to 50% via _onchange_discount_reason.
     # ──────────────────────────────────────────────────────────────────
     x_discount_reason = fields.Selection([
-        ('member', 'Member'),
-        ('nonprofit', 'Non-Profit'),
         ('officer_board', 'Officer / Board Approved'),
         ('other', 'Other'),
-    ], string="Discount Reason", tracking=True,
-        help="Why a discount is applied. Leave blank for no discount.")
+        # Legacy values (kept so old records still display); Member / Non-Profit
+        # are now automatic room-rate reductions via their own checkboxes, not
+        # an additional discount.
+        ('member', 'Member (legacy)'),
+        ('nonprofit', 'Non-Profit (legacy)'),
+    ], string="Additional Discount Reason", tracking=True,
+        help="Why an EXTRA courtesy discount is being given, on top of any "
+             "automatic Member / Non-Profit rate. Leave blank for none. Applies "
+             "to the room only (a profit item) — never to services we pay out.")
     x_discount_type = fields.Selection([
         ('percent', 'Percent (%)'),
         ('amount', 'Amount ($)'),
@@ -1288,17 +1293,16 @@ class ProjectTask(models.Model):
 
     @api.depends('x_callout_ids.state', 'x_callout_ids.cost_total',
                  'x_attendance_ids.x_event_pay',
+                 'x_attendance_ids.worked_hours',
                  'x_attendance_ids.x_event_role')
     def _compute_event_labor_clocked(self):
         for rec in self:
             billed = sum(rec.x_callout_ids.filtered(
                 lambda c: c.state == 'certified').mapped('cost_total'))
-            actual = 0.0
-            if 'x_event_pay' in rec.x_attendance_ids._fields:
-                actual = sum(
-                    a.x_event_pay or 0.0 for a in rec.x_attendance_ids
-                    if a.x_event_id.id == rec.id
-                    and not rec._elks_is_volunteer_att(a))
+            rates = rec._event_role_rates(rec._event_settings())
+            actual = sum(
+                rec._att_actual_pay(a, rates) for a in rec.x_attendance_ids
+                if a.x_event_id.id == rec.id)
             rec.x_labor_billed = billed
             rec.x_labor_actual_clocked = actual
             rec.x_labor_clocked_variance = billed - actual
@@ -1880,12 +1884,10 @@ class ProjectTask(models.Model):
 
     @api.onchange('x_discount_reason')
     def _onchange_discount_reason(self):
-        """Member and Non-Profit default to 50% off (editable). Clearing the
-        reason clears the percent + amount."""
-        if self.x_discount_reason in ('member', 'nonprofit'):
-            if self.x_discount_type == 'percent' and not self.x_discount_pct:
-                self.x_discount_pct = 50.0
-        elif not self.x_discount_reason:
+        """Clearing the additional-discount reason clears its percent + amount.
+        (Member / Non-Profit are automatic room-rate reductions set by their
+        own checkboxes, not this additional courtesy discount.)"""
+        if not self.x_discount_reason:
             self.x_discount_pct = 0.0
             self.x_discount_value = 0.0
 
@@ -1911,25 +1913,26 @@ class ProjectTask(models.Model):
             + (b.room_id.x_cleaning_fee or 0.0)
             + (b.room_id.x_service_fee or 0.0)
             for b in bookings) or room_income
-        # The room bills at the PRICE SET ON THE ROOMS TAB — that set price IS
-        # the room discount decision (set it to $0 to give the space away for
-        # a Celebration of Life, or to a reduced rate for a member courtesy).
-        # An optional manual reason/percent/amount reduces the set price on top.
-        # Member Rental or Non-Profit gives an automatic 50% off the room rate.
-        # A manual discount reason (if set) overrides the automatic one.
+        # Room pricing has two, separate steps:
+        #  1) Automatic rate: Member Rental or Non-Profit halves the room rate,
+        #     and an Elks event / Celebration-of-Life sets it to $0 on the Rooms
+        #     tab. This is the room's PRICE, not a "discount" — it is NOT counted
+        #     in the Discount line.
+        #  2) An optional ADDITIONAL courtesy discount (a manual reason with a
+        #     percent/amount) comes off that price. Only THIS shows as the
+        #     "Discount applied", and it only ever touches the room (a profit
+        #     item) — never labor, gratuity, linens or other pass-through costs.
         auto_half = self.x_is_member or self.x_is_nonprofit
-        if self.x_discount_reason and self.x_discount_type == 'amount':
-            rooms_net = max(room_income - (self.x_discount_value or 0.0), 0.0)
-        elif self.x_discount_reason:
-            rooms_net = room_income * (
-                1.0 - (self.x_discount_pct or 0.0) / 100.0)
-        elif auto_half:
-            rooms_net = room_income * 0.5
-        else:
-            rooms_net = room_income
-        # Discount = the room's retail default minus what we actually charge
-        # (i.e. exactly the amount taken off the room rental).
-        discount = max(room_retail - rooms_net, 0.0)
+        base = room_income * 0.5 if auto_half else room_income
+        manual = 0.0
+        if self.x_discount_reason in ('officer_board', 'other'):
+            if self.x_discount_type == 'amount':
+                manual = min(self.x_discount_value or 0.0, base)
+            else:
+                manual = base * (self.x_discount_pct or 0.0) / 100.0
+        rooms_net = max(base - manual, 0.0)
+        # Discount line = the ADDITIONAL courtesy discount only.
+        discount = manual
         return rooms_net, discount
 
     def _linen_charge(self, settings=None):
@@ -2018,6 +2021,20 @@ class ProjectTask(models.Model):
         if not rate:
             rate = rates.get(att.x_event_role or 'event', 0.0)
         return rate
+
+    def _att_actual_pay(self, att, rates=None):
+        """Actual labor paid for one event-tagged shift: a 1099 contractor is
+        paid the event (call-out) rate x hours; a W-2 employee is paid their
+        normal wage x hours. Volunteers cost nothing."""
+        if self._elks_is_volunteer_att(att):
+            return 0.0
+        emp = att.employee_id
+        if ('x_pay_category' in emp._fields
+                and emp.x_pay_category == '1099'):
+            return att.x_event_pay or 0.0
+        if rates is None:
+            rates = self._event_role_rates(self._event_settings())
+        return (att.worked_hours or 0.0) * self._att_labor_rate(att, rates)
 
     def _paid_labor_by_category(self):
         """Actual PAID labor cost (non-volunteer timeclock hours x the
