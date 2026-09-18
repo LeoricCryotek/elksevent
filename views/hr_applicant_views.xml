@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- 1099 onboarding details on the recruitment applicant, plus a button to
+         create the employee (marked 1099) once approved. -->
+    <record id="view_hr_applicant_form_1099" model="ir.ui.view">
+        <field name="name">hr.applicant.form.1099</field>
+        <field name="model">hr.applicant</field>
+        <field name="inherit_id" ref="hr_recruitment.hr_applicant_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//header" position="inside">
+                <field name="x_is_1099" invisible="1"/>
+                <button name="action_create_1099_employee" type="object"
+                        string="Create 1099 Employee" class="btn-primary"
+                        invisible="not x_is_1099"/>
+            </xpath>
+            <xpath expr="//notebook" position="inside">
+                <page string="1099 Onboarding" name="onboarding_1099"
+                      invisible="not x_is_1099">
+                    <group>
+                        <group string="Identity / W-9">
+                            <field name="x_legal_name"/>
+                            <field name="x_dob"/>
+                            <field name="x_business_name"/>
+                            <field name="x_tin_type"/>
+                            <field name="x_ssn" password="True"/>
+                        </group>
+                        <group string="Address">
+                            <field name="x_addr_street"/>
+                            <field name="x_addr_city"/>
+                            <field name="x_addr_state"/>
+                            <field name="x_addr_zip"/>
+                        </group>
+                        <group string="Work Authorization (I-9)">
+                            <field name="x_work_auth"/>
+                            <field name="x_uscis_number"/>
+                            <field name="x_work_auth_expiry"/>
+                        </group>
+                        <group string="Attestation">
+                            <field name="x_i9_signed"/>
+                            <field name="x_signature_name"/>
+                            <field name="x_signature_date"/>
+                        </group>
+                    </group>
+                    <separator string="Uploaded Documents"/>
+                    <group>
+                        <field name="x_id_doc" filename="x_id_doc_name"
+                               string="Photo ID (front)"/>
+                        <field name="x_id_doc_name" invisible="1"/>
+                        <field name="x_id_doc_back" filename="x_id_doc_back_name"
+                               string="Photo ID (back)"/>
+                        <field name="x_id_doc_back_name" invisible="1"/>
+                        <field name="x_ssn_doc" filename="x_ssn_doc_name"
+                               string="SSN Card / Work-Auth Document"/>
+                        <field name="x_ssn_doc_name" invisible="1"/>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Pay category + 1099 tax fields on the employee record. -->
+    <record id="view_employee_form_pay_category" model="ir.ui.view">
+        <field name="name">hr.employee.form.pay.category</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr.view_employee_form"/>
+        <field name="arch" type="xml">
+            <field name="x_is_event_custodial_mgr" position="after">
+                <field name="x_pay_category"/>
+                <field name="x_tin_type" invisible="x_pay_category == 'w2'"/>
+                <field name="x_tin_last4" invisible="x_pay_category == 'w2'"/>
+                <field name="x_w9_on_file" invisible="x_pay_category == 'w2'"/>
+            </field>
+        </field>
+    </record>
+</odoo>

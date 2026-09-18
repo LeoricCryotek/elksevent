@@ -124,6 +124,12 @@ class ElksLodgeSettings(models.Model):
     x_labor_markup_pct = fields.Float(
         "Labor Markup %", default=15.0,
         help="Markup added to labor lines (charge = cost x (1 + this%)).")
+    x_labor_overhead_per_hour = fields.Monetary(
+        "Labor Overhead / hr", currency_field='x_event_currency_id',
+        default=5.0,
+        help="Lodge overhead added to each call-out staff rate/hr. The billed "
+             "rate = the manager's rate + this overhead, rounded to the nearest "
+             "$5 (e.g. $15 entered -> $20 billed to the event).")
 
     x_marketing_signage_fee = fields.Monetary(
         "Marketing Signage Use Fee", currency_field='x_event_currency_id',
@@ -132,6 +138,11 @@ class ElksLodgeSettings(models.Model):
     x_exclusive_use_fee = fields.Monetary(
         "Exclusive Use Fee", currency_field='x_event_currency_id',
         help="Default fee for the 'Exclusive Use' Event Cost.",
+    )
+    x_antlers_fee = fields.Monetary(
+        "Antlers Service Fee", currency_field='x_event_currency_id',
+        default=200.0,
+        help="Default fee for the 'Antlers Service' Event Cost.",
     )
     x_event_insurance_fee = fields.Monetary(
         "Event Rental Insurance Default", currency_field='x_event_currency_id',

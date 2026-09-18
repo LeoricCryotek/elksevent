@@ -16,50 +16,111 @@
                 <t t-set="icon" t-value="'/elksevent/static/src/img/callout_icon.svg'"/>
                 <t t-set="title">Department Call-Outs</t>
                 <t t-set="url" t-value="'/my/callouts'"/>
-                <t t-set="text">Review and certify staffing for your events</t>
+                <t t-set="text">Staff and certify your events (bar, kitchen, custodial)</t>
                 <t t-set="placeholder_count" t-value="'callout_count'"/>
             </t>
         </xpath>
     </template>
 
-    <!-- List of the manager's call-outs -->
+    <!-- List of call-outs, grouped by event, soonest event first. -->
     <template id="portal_my_callouts" name="My Department Call-Outs">
         <t t-call="portal.portal_layout">
             <t t-set="breadcrumbs_searchbar" t-value="True"/>
-            <h4 class="mt-3 mb-3">Department Call-Outs</h4>
-            <t t-if="not callouts">
-                <div class="alert alert-info">You have no call-outs to review right now.</div>
+            <h4 class="mt-3 mb-1">Department Call-Outs</h4>
+            <p class="text-muted">
+                <t t-if="is_coordinator">All events with call-outs, grouped by event, soonest first. Past events are hidden — use the filter to include them.</t>
+                <t t-else="">Your events, grouped by event, soonest first. Past events are hidden — use the filter to include them.</t>
+            </p>
+
+            <!-- Sort / filter / search dropdowns -->
+            <t t-call="portal.portal_searchbar">
+                <t t-set="title">Call-Outs</t>
             </t>
-            <t t-if="callouts">
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Event</th>
-                                <th>Department</th>
-                                <th>Date</th>
-                                <th>Status</th>
-                                <th/>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr t-foreach="callouts" t-as="co">
-                                <td><t t-esc="co.event_name"/></td>
-                                <td><t t-esc="co.department_label"/></td>
-                                <td><span t-field="co.event_date"/></td>
-                                <td>
-                                    <span t-if="co.state == 'certified'" class="badge text-bg-success">Certified</span>
-                                    <span t-elif="co.state == 'sent'" class="badge text-bg-warning">Needs Review</span>
-                                    <span t-else="" class="badge text-bg-secondary">Draft</span>
-                                </td>
-                                <td class="text-end">
-                                    <a t-attf-href="/my/callout/{{co.id}}" class="btn btn-sm btn-primary">Open</a>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+
+            <t t-if="not groups">
+                <div class="alert alert-info">Nothing to review right now.</div>
+            </t>
+            <t t-foreach="groups" t-as="g">
+                <t t-set="evt" t-value="g['event']"/>
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <span class="fw-bold"><t t-esc="evt.name or 'Event'"/></span>
+                        <span class="text-muted">
+                            <i class="fa fa-calendar"/>
+                            <t t-if="evt.x_event_date"><span t-field="evt.x_event_date"/></t>
+                            <t t-else="">No date set</t>
+                            <t t-if="evt.x_event_start_time_text"> · <t t-esc="evt.x_event_start_time_text"/></t>
+                        </span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0 align-middle callout-sortable">
+                            <thead>
+                                <tr>
+                                    <th class="callout-sort" data-type="text" style="cursor:pointer;">Department <i class="fa fa-sort text-muted small"/></th>
+                                    <th class="callout-sort" data-type="text" style="cursor:pointer;">Status <i class="fa fa-sort text-muted small"/></th>
+                                    <th class="callout-sort text-end" data-type="num" style="cursor:pointer;">People <i class="fa fa-sort text-muted small"/></th>
+                                    <th class="callout-sort text-end" data-type="num" style="cursor:pointer;">Hours <i class="fa fa-sort text-muted small"/></th>
+                                    <th class="callout-sort text-end" data-type="num" style="cursor:pointer;">Labor <i class="fa fa-sort text-muted small"/></th>
+                                    <th class="callout-sort text-end" data-type="num" style="cursor:pointer;">Gratuity <i class="fa fa-sort text-muted small"/></th>
+                                    <th/>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="g['callouts']" t-as="co">
+                                    <td><t t-esc="co.department_label"/></td>
+                                    <td>
+                                        <span t-if="co.state == 'certified'" class="badge text-bg-success">Certified</span>
+                                        <span t-elif="co.state == 'sent'" class="badge text-bg-warning">Needs staffing</span>
+                                        <span t-else="" class="badge text-bg-secondary">Draft</span>
+                                    </td>
+                                    <td class="text-end"><t t-esc="co.staff_count"/></td>
+                                    <td class="text-end"><t t-esc="'%g' % co.hours_total"/></td>
+                                    <td class="text-end">$<t t-esc="'{:,.2f}'.format(co.cost_total)"/></td>
+                                    <td class="text-end">$<t t-esc="'{:,.2f}'.format(co.gratuity or 0)"/></td>
+                                    <td class="text-end">
+                                        <a t-attf-href="/my/callout/{{co.id}}" class="btn btn-sm btn-primary">Open</a>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </t>
+
+            <!-- Click a column header to sort that event's call-out rows. -->
+            <script type="text/javascript">
+                (function () {
+                    function cellVal(row, idx, type) {
+                        var td = row.children[idx];
+                        var txt = (td ? td.textContent : '').trim();
+                        if (type === 'num') {
+                            var n = parseFloat(txt.replace(/[^0-9.\-]/g, ''));
+                            return isNaN(n) ? 0 : n;
+                        }
+                        return txt.toLowerCase();
+                    }
+                    document.querySelectorAll('table.callout-sortable').forEach(function (table) {
+                        var ths = table.querySelectorAll('th.callout-sort');
+                        ths.forEach(function (th, idx) {
+                            th.addEventListener('click', function () {
+                                var type = th.dataset.type || 'text';
+                                var asc = th.dataset.asc !== 'true';
+                                ths.forEach(function (o) { o.dataset.asc = ''; });
+                                th.dataset.asc = asc ? 'true' : 'false';
+                                var tbody = table.querySelector('tbody');
+                                var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+                                rows.sort(function (a, b) {
+                                    var va = cellVal(a, idx, type), vb = cellVal(b, idx, type);
+                                    if (va &lt; vb) { return asc ? -1 : 1; }
+                                    if (va &gt; vb) { return asc ? 1 : -1; }
+                                    return 0;
+                                });
+                                rows.forEach(function (r) { tbody.appendChild(r); });
+                            });
+                        });
+                    });
+                })();
+            </script>
         </t>
     </template>
 
@@ -75,6 +136,7 @@
             </t>
 
             <t t-set="evt" t-value="callout.event_id"/>
+            <t t-set="chgmap" t-value="callout._plan_changes_by_key() if callout.has_plan_changes else {}"/>
             <div class="card">
                 <div class="card-body">
                     <h4 class="mb-1">
@@ -102,9 +164,50 @@
                         </div>
                     </t>
 
+                    <!-- ===== What changed since you were sent this (top, prominent) ===== -->
+                    <div class="border border-warning rounded p-3 mb-3 bg-warning-subtle" t-if="callout.has_plan_changes">
+                        <h5 class="fw-bold text-warning mb-2"><i class="fa fa-exclamation-triangle"/> Updated Since You Were Sent This</h5>
+                        <p class="small text-muted mb-2">The coordinator changed these details after your call-out was sent. Review them and adjust your staffing or timing if needed.</p>
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0">
+                                <thead>
+                                    <tr class="small text-muted">
+                                        <th>Field</th><th>Originally</th><th></th><th>Now</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr t-foreach="callout._plan_change_rows()" t-as="chg">
+                                        <td class="fw-semibold"><t t-esc="chg['label']"/></td>
+                                        <td class="text-danger text-decoration-line-through"><t t-esc="chg['old'] or '(blank)'"/></td>
+                                        <td>&#8594;</td>
+                                        <td class="fw-bold" style="background:#fff3cd;"><t t-esc="chg['new'] or '(blank)'"/></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <!-- ===== Event details (read-only, responsive) ===== -->
                     <div class="border rounded p-3 mb-3 bg-light">
                         <h6 class="fw-bold text-uppercase small text-muted mb-2">Event Details</h6>
+                        <t t-if="cal">
+                            <div class="float-md-end ms-md-3 mb-2" style="max-width:220px;">
+                                <table class="table table-sm table-bordered text-center mb-1 bg-white" style="font-size:11px;">
+                                    <thead>
+                                        <tr><th colspan="7" class="bg-light"><t t-esc="cal['title']"/></th></tr>
+                                        <tr><th>Su</th><th>Mo</th><th>Tu</th><th>We</th><th>Th</th><th>Fr</th><th>Sa</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr t-foreach="cal['weeks']" t-as="wk">
+                                            <td t-foreach="wk" t-as="d"
+                                                t-att-class="'bg-primary text-white fw-bold' if d == cal['day'] else ''">
+                                                <t t-if="d"><t t-esc="d"/></t>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </t>
                         <div class="row g-3">
                             <div class="col-6 col-md-3">
                                 <div class="small text-muted">Date</div>
@@ -128,16 +231,26 @@
                                 <div class="small text-muted">Rooms</div>
                                 <div class="fw-semibold"><t t-esc="', '.join(evt.x_booked_room_ids.mapped('name'))"/></div>
                             </div>
-                            <div class="col-6 col-md-3" t-if="evt.x_requested_setup">
+                            <div class="col-6 col-md-3" t-if="evt.x_requested_setup or 'x_requested_setup' in chgmap">
                                 <div class="small text-muted">Requested Setup</div>
-                                <div class="fw-semibold"><span t-field="evt.x_requested_setup" t-options='{"widget": "datetime", "format": "MMM d, h:mm a"}'/></div>
+                                <div class="fw-semibold">
+                                    <span t-attf-style="{{'background:#fff3cd;padding:0 3px;border-radius:3px;' if 'x_requested_setup' in chgmap else ''}}"><span t-field="evt.x_requested_setup" t-options='{"widget": "datetime", "format": "MMM d, h:mm a"}'/></span>
+                                    <t t-if="'x_requested_setup' in chgmap"><span style="color:#b02a37;font-size:.8em;"> (was <span style="text-decoration:line-through;"><t t-esc="chgmap['x_requested_setup']['old'] or '(blank)'"/></span>)</span></t>
+                                </div>
                             </div>
-                            <div class="col-6 col-md-3" t-if="evt.x_requested_entry">
+                            <div class="col-6 col-md-3" t-if="evt.x_requested_entry or 'x_requested_entry' in chgmap">
                                 <div class="small text-muted">Requested Entry</div>
-                                <div class="fw-semibold"><span t-field="evt.x_requested_entry" t-options='{"widget": "datetime", "format": "MMM d, h:mm a"}'/></div>
+                                <div class="fw-semibold">
+                                    <span t-attf-style="{{'background:#fff3cd;padding:0 3px;border-radius:3px;' if 'x_requested_entry' in chgmap else ''}}"><span t-field="evt.x_requested_entry" t-options='{"widget": "datetime", "format": "MMM d, h:mm a"}'/></span>
+                                    <t t-if="'x_requested_entry' in chgmap"><span style="color:#b02a37;font-size:.8em;"> (was <span style="text-decoration:line-through;"><t t-esc="chgmap['x_requested_entry']['old'] or '(blank)'"/></span>)</span></t>
+                                </div>
                             </div>
-                            <div class="col-6 col-md-3" t-if="evt.x_cleanup_scheduled and evt.x_cleanup_datetime">
-                                <div class="small text-muted">Cleanup By</div>
+                            <div class="col-6 col-md-3" t-if="callout.department == 'custodial' and evt.x_cleanup_before_datetime">
+                                <div class="small text-muted">Clean Prior To Event By</div>
+                                <div class="fw-semibold"><span t-field="evt.x_cleanup_before_datetime" t-options='{"widget": "datetime", "format": "MMM d, h:mm a"}'/></div>
+                            </div>
+                            <div class="col-6 col-md-3" t-if="callout.department == 'custodial' and evt.x_cleanup_datetime">
+                                <div class="small text-muted">Cleanup After Event By</div>
                                 <div class="fw-semibold"><span t-field="evt.x_cleanup_datetime" t-options='{"widget": "datetime", "format": "MMM d, h:mm a"}'/></div>
                             </div>
                             <div class="col-6 col-md-3" t-if="evt.x_customer_name">
@@ -158,71 +271,53 @@
                             <t t-if="callout.department == 'bar'">
                                 <div class="col-6 col-md-3">
                                     <div class="small text-muted">Bars</div>
-                                    <div class="fw-semibold"><t t-esc="evt.x_num_bars or 0"/></div>
-                                </div>
-                                <div class="col-6 col-md-3">
-                                    <div class="small text-muted">Bartenders</div>
-                                    <div class="fw-semibold"><t t-esc="evt.x_bartender_count or 0"/></div>
-                                </div>
-                                <div class="col-6 col-md-3">
-                                    <div class="small text-muted">Hours each</div>
-                                    <div class="fw-semibold"><t t-esc="'%g' % (evt.x_plan_bar_hours or 0)"/></div>
+                                    <div class="fw-semibold"><t t-out="callout._chg('x_num_bars', evt.x_num_bars or 0)"/></div>
                                 </div>
                                 <div class="col-6 col-md-3">
                                     <div class="small text-muted">Beer Tub</div>
-                                    <div class="fw-semibold"><t t-esc="'Yes' if evt.x_need_beer_tub else 'No'"/></div>
+                                    <div class="fw-semibold"><t t-out="callout._chg('x_need_beer_tub', 'Yes' if evt.x_need_beer_tub else 'No')"/></div>
                                 </div>
-                                <div class="col-12" t-if="evt.x_bar_drink_requests">
+                                <div class="col-12" t-if="evt.x_bar_drink_requests or 'x_bar_drink_requests' in chgmap">
                                     <div class="small text-muted">Drink Requests</div>
-                                    <div style="white-space:pre-line;"><t t-esc="evt.x_bar_drink_requests"/></div>
+                                    <div style="white-space:pre-line;"><t t-out="callout._chg('x_bar_drink_requests', evt.x_bar_drink_requests or '')"/></div>
                                 </div>
-                                <div class="col-12" t-if="evt.x_bar_customer_request">
+                                <div class="col-12" t-if="evt.x_bar_customer_request or 'x_bar_customer_request' in chgmap">
                                     <div class="small text-muted">Other Requests</div>
-                                    <div style="white-space:pre-line;"><t t-esc="evt.x_bar_customer_request"/></div>
+                                    <div style="white-space:pre-line;"><t t-out="callout._chg('x_bar_customer_request', evt.x_bar_customer_request or '')"/></div>
                                 </div>
                             </t>
                             <t t-if="callout.department == 'kitchen'">
-                                <div class="col-6 col-md-3">
-                                    <div class="small text-muted">Cooks</div>
-                                    <div class="fw-semibold"><t t-esc="evt.x_cook_count or 0"/></div>
+                                <div class="col-12" t-if="evt.x_catering_details or 'x_catering_details' in chgmap">
+                                    <div class="small text-muted">Catering</div>
+                                    <div style="white-space:pre-line;"><t t-out="callout._chg('x_catering_details', evt.x_catering_details or '')"/></div>
                                 </div>
-                                <div class="col-6 col-md-3">
-                                    <div class="small text-muted">Cook hrs each</div>
-                                    <div class="fw-semibold"><t t-esc="'%g' % (evt.x_cook_hours or 0)"/></div>
+                                <div class="col-12" t-if="evt.x_food_menu or 'x_food_menu' in chgmap">
+                                    <div class="small text-muted">Menu</div>
+                                    <div style="white-space:pre-line;"><t t-out="callout._chg('x_food_menu', evt.x_food_menu or '')"/></div>
                                 </div>
-                                <div class="col-6 col-md-3">
-                                    <div class="small text-muted">Kitchen Support</div>
-                                    <div class="fw-semibold"><t t-esc="evt.x_kitchen_support_count or 0"/></div>
-                                </div>
-                                <div class="col-6 col-md-3">
-                                    <div class="small text-muted">Support hrs each</div>
-                                    <div class="fw-semibold"><t t-esc="'%g' % (evt.x_kitchen_support_hours or 0)"/></div>
-                                </div>
-                                <div class="col-12" t-if="evt.x_catering_details or evt.x_food_menu">
-                                    <div class="small text-muted">Menu / Catering</div>
-                                    <div style="white-space:pre-line;"><t t-esc="evt.x_catering_details or ''"/> <t t-esc="evt.x_food_menu or ''"/></div>
-                                </div>
-                                <div class="col-12" t-if="evt.x_kitchen_customer_request">
+                                <div class="col-12" t-if="evt.x_kitchen_customer_request or 'x_kitchen_customer_request' in chgmap">
                                     <div class="small text-muted">Other Requests</div>
-                                    <div style="white-space:pre-line;"><t t-esc="evt.x_kitchen_customer_request"/></div>
+                                    <div style="white-space:pre-line;"><t t-out="callout._chg('x_kitchen_customer_request', evt.x_kitchen_customer_request or '')"/></div>
                                 </div>
                             </t>
                             <t t-if="callout.department == 'custodial'">
-                                <div class="col-6 col-md-3">
-                                    <div class="small text-muted">Cleaners</div>
-                                    <div class="fw-semibold"><t t-esc="evt.x_cleaner_count or 0"/></div>
+                                <div class="col-6 col-md-3" t-if="evt.x_cleanup_before_datetime or 'x_cleanup_before_datetime' in chgmap">
+                                    <div class="small text-muted">Clean Prior To Event By</div>
+                                    <div class="fw-semibold">
+                                        <span t-attf-style="{{'background:#fff3cd;padding:0 3px;border-radius:3px;' if 'x_cleanup_before_datetime' in chgmap else ''}}"><span t-field="evt.x_cleanup_before_datetime" t-options='{"widget": "datetime", "format": "MMM d, h:mm a"}'/></span>
+                                        <t t-if="'x_cleanup_before_datetime' in chgmap"><span style="color:#b02a37;font-size:.8em;"> (was <span style="text-decoration:line-through;"><t t-esc="chgmap['x_cleanup_before_datetime']['old'] or '(blank)'"/></span>)</span></t>
+                                    </div>
                                 </div>
-                                <div class="col-6 col-md-3">
-                                    <div class="small text-muted">Hours each</div>
-                                    <div class="fw-semibold"><t t-esc="'%g' % (evt.x_cleaner_hours or 0)"/></div>
+                                <div class="col-6 col-md-3" t-if="evt.x_cleanup_datetime or 'x_cleanup_datetime' in chgmap">
+                                    <div class="small text-muted">Cleanup After Event By</div>
+                                    <div class="fw-semibold">
+                                        <span t-attf-style="{{'background:#fff3cd;padding:0 3px;border-radius:3px;' if 'x_cleanup_datetime' in chgmap else ''}}"><span t-field="evt.x_cleanup_datetime" t-options='{"widget": "datetime", "format": "MMM d, h:mm a"}'/></span>
+                                        <t t-if="'x_cleanup_datetime' in chgmap"><span style="color:#b02a37;font-size:.8em;"> (was <span style="text-decoration:line-through;"><t t-esc="chgmap['x_cleanup_datetime']['old'] or '(blank)'"/></span>)</span></t>
+                                    </div>
                                 </div>
-                                <div class="col-6 col-md-3" t-if="evt.x_cleanup_datetime">
-                                    <div class="small text-muted">Building Ready By</div>
-                                    <div class="fw-semibold"><span t-field="evt.x_cleanup_datetime" t-options='{"widget": "datetime", "format": "MMM d, h:mm a"}'/></div>
-                                </div>
-                                <div class="col-12" t-if="evt.x_custodial_customer_request">
-                                    <div class="small text-muted">Other Requests</div>
-                                    <div style="white-space:pre-line;"><t t-esc="evt.x_custodial_customer_request"/></div>
+                                <div class="col-12" t-if="evt.x_custodial_customer_request or 'x_custodial_customer_request' in chgmap">
+                                    <div class="small text-muted">Cleaning Instructions / Requests</div>
+                                    <div style="white-space:pre-line;"><t t-out="callout._chg('x_custodial_customer_request', evt.x_custodial_customer_request or '')"/></div>
                                 </div>
                             </t>
                         </div>
@@ -234,9 +329,10 @@
 
                         <!-- ===== Staff roster: assign people, start/end -> hours, cost ===== -->
                         <h6 class="fw-bold">Staff Roster — assign by name</h6>
-                        <p class="text-muted small">Pick a lodge employee, or type a name for outside help. Enter each person's start &amp; end time (hours total automatically) and cost.</p>
+                        <p class="text-muted small">Pick a lodge employee, or type a name for outside help. Enter each person's start &amp; end time (hours total automatically) and the rate you pay them.</p>
                         <t t-set="rows" t-value="list(callout.line_ids)"/>
                         <t t-set="row_count" t-value="len(rows) + 6"/>
+                        <t t-set="has_grat" t-value="callout.department in ('bar', 'kitchen')"/>
                         <div class="table-responsive">
                             <table class="table table-sm align-middle" id="callout_roster">
                                 <thead>
@@ -249,6 +345,8 @@
                                         <th style="min-width:70px">Hours</th>
                                         <th style="min-width:90px">Rate / hr</th>
                                         <th style="min-width:90px">Cost</th>
+                                        <th style="min-width:90px" t-if="has_grat">Gratuity</th>
+                                        <th style="width:36px" t-if="not ro"></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -276,6 +374,12 @@
                                         <td><input type="number" step="0.01" t-attf-name="rate_{{i}}" class="form-control form-control-sm roster-rate"
                                                    t-att-value="line.rate if line else ''" t-att-readonly="ro"/></td>
                                         <td class="text-end align-middle">$<span class="roster-cost">0.00</span></td>
+                                        <td t-if="has_grat"><input type="number" step="0.01" t-attf-name="grat_{{i}}" class="form-control form-control-sm roster-grat"
+                                                   t-att-value="line.gratuity_share if (line and line.gratuity_share) else ''" t-att-readonly="ro"/></td>
+                                        <td class="align-middle text-center" t-if="not ro">
+                                            <button type="button" class="btn btn-sm btn-link text-danger p-0 roster-clear"
+                                                    tabindex="-1" title="Clear this line">&#10005;</button>
+                                        </td>
                                     </tr>
                                 </tbody>
                                 <tfoot>
@@ -284,17 +388,28 @@
                                         <td><span id="roster_total_hours">0</span></td>
                                         <td/>
                                         <td class="text-end">$<span id="roster_total_cost">0.00</span></td>
+                                        <td class="text-end" t-if="has_grat">$<span id="roster_total_grat">0.00</span></td>
+                                        <td t-if="not ro"/>
                                     </tr>
                                 </tfoot>
                             </table>
                         </div>
+                        <div class="d-flex flex-wrap gap-2 mb-3" t-if="not ro">
+                            <button type="button" id="roster_add" class="btn btn-sm btn-outline-secondary">+ Add person</button>
+                            <button type="button" id="roster_split_grat" class="btn btn-sm btn-outline-secondary" t-if="has_grat">Split gratuity evenly</button>
+                        </div>
 
                         <div class="row g-3 mb-3">
-                            <t t-if="callout.department in ('bar', 'kitchen')">
+                            <t t-if="has_grat">
                                 <div class="col-12 col-md-4">
                                     <label class="form-label">Gratuity (total for this department)</label>
-                                    <input type="number" step="0.01" name="gratuity" class="form-control"
+                                    <input type="number" step="0.01" name="gratuity" id="gratuity_pool" class="form-control"
                                            t-att-value="callout.gratuity or ''" t-att-readonly="ro"/>
+                                    <div class="small text-muted mt-1">
+                                        Assigned $<span id="grat_assigned">0.00</span> ·
+                                        Left <span id="grat_left_wrap">$<span id="grat_left">0.00</span></span>
+                                    </div>
+                                    <div class="small text-muted">Disburse the pool across the roster's Gratuity column so it's recorded per person.</div>
                                 </div>
                             </t>
                             <div class="col-12 col-md-8">
@@ -332,7 +447,7 @@
                     }
                     function recalc() {
                         var rows = table.querySelectorAll('tbody tr.roster-row');
-                        var totalH = 0, totalC = 0;
+                        var totalH = 0, totalC = 0, totalG = 0;
                         rows.forEach(function (row) {
                             var s = toHours((row.querySelector('.roster-start') || {}).value);
                             var e = toHours((row.querySelector('.roster-end') || {}).value);
@@ -346,14 +461,86 @@
                             var c = h * r;
                             var cEl = row.querySelector('.roster-cost');
                             if (cEl) { cEl.textContent = c.toFixed(2); }
-                            totalH += h; totalC += c;
+                            var g = parseFloat((row.querySelector('.roster-grat') || {}).value) || 0;
+                            totalH += h; totalC += c; totalG += g;
                         });
                         var th = document.getElementById('roster_total_hours');
                         var tc = document.getElementById('roster_total_cost');
                         if (th) { th.textContent = (Math.round(totalH * 100) / 100); }
                         if (tc) { tc.textContent = totalC.toFixed(2); }
+                        var tg = document.getElementById('roster_total_grat');
+                        if (tg) { tg.textContent = totalG.toFixed(2); }
+                        var pool = parseFloat((document.getElementById('gratuity_pool') || {}).value) || 0;
+                        var ga = document.getElementById('grat_assigned');
+                        var gl = document.getElementById('grat_left');
+                        if (ga) { ga.textContent = totalG.toFixed(2); }
+                        if (gl) {
+                            var left = pool - totalG;
+                            gl.textContent = left.toFixed(2);
+                            var wrap = document.getElementById('grat_left_wrap');
+                            if (wrap) { wrap.style.color = Math.abs(left) &lt; 0.005 ? '#198754' : '#b02a37'; }
+                        }
                     }
                     table.addEventListener('input', recalc);
+                    var poolEl = document.getElementById('gratuity_pool');
+                    if (poolEl) { poolEl.addEventListener('input', recalc); }
+
+                    // Split the gratuity pool evenly across staffed rows.
+                    var splitBtn = document.getElementById('roster_split_grat');
+                    if (splitBtn) {
+                        splitBtn.addEventListener('click', function () {
+                            var pool = parseFloat((document.getElementById('gratuity_pool') || {}).value) || 0;
+                            var staffed = [];
+                            table.querySelectorAll('tbody tr.roster-row').forEach(function (row) {
+                                var sel = row.querySelector('select');
+                                var nm = row.querySelector('input[name^="pname_"]');
+                                var has = (sel &amp;&amp; sel.value) || (nm &amp;&amp; nm.value.trim());
+                                var gEl = row.querySelector('.roster-grat');
+                                if (has &amp;&amp; gEl) { staffed.push(gEl); }
+                            });
+                            if (!staffed.length || !pool) { return; }
+                            var each = Math.floor((pool / staffed.length) * 100) / 100;
+                            var assigned = each * staffed.length;
+                            staffed.forEach(function (gEl) { gEl.value = each.toFixed(2); });
+                            // Put the rounding remainder on the first person.
+                            var rem = Math.round((pool - assigned) * 100) / 100;
+                            if (rem) { staffed[0].value = (each + rem).toFixed(2); }
+                            recalc();
+                        });
+                    }
+
+                    var tbody = table.querySelector('tbody');
+                    var counter = tbody.querySelectorAll('tr.roster-row').length;
+
+                    // Clear a line (blank its inputs) without removing the row.
+                    table.addEventListener('click', function (ev) {
+                        var btn = ev.target.closest('.roster-clear');
+                        if (!btn) { return; }
+                        var row = btn.closest('tr.roster-row');
+                        row.querySelectorAll('input').forEach(function (el) { el.value = ''; });
+                        row.querySelectorAll('select').forEach(function (el) { el.selectedIndex = 0; });
+                        recalc();
+                    });
+
+                    // Add another blank line beyond the ones provided.
+                    var addBtn = document.getElementById('roster_add');
+                    if (addBtn) {
+                        addBtn.addEventListener('click', function () {
+                            var rows = tbody.querySelectorAll('tr.roster-row');
+                            var clone = rows[rows.length - 1].cloneNode(true);
+                            var idx = counter;
+                            clone.querySelectorAll('[name]').forEach(function (el) {
+                                el.name = el.name.replace(/_\d+$/, '_' + idx);
+                                if (el.tagName === 'SELECT') { el.selectedIndex = 0; }
+                                else { el.value = ''; }
+                            });
+                            var cEl = clone.querySelector('.roster-cost');
+                            if (cEl) { cEl.textContent = '0.00'; }
+                            tbody.appendChild(clone);
+                            counter += 1;
+                            recalc();
+                        });
+                    }
                     recalc();
                 })();
             </script>

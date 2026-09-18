@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- The lodge's own kitchen, as a caterer contact. It is the default
+         "Catered By" for events and, when selected, turns on the in-house
+         kitchen call-out. -->
+    <record id="partner_lodge_kitchen" model="res.partner">
+        <field name="name">Lodge Kitchen</field>
+        <field name="is_company" eval="True"/>
+        <field name="company_type">company</field>
+        <field name="x_is_catering" eval="True"/>
+    </record>
+</odoo>

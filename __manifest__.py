@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Elks Event Bookings',
-    'version': '19.0.9.44.0',
+    'version': '19.0.9.68.0',
     'category': 'Services/Project',
     'summary': 'Facility event booking, board approval, room billing, and P&L reporting',
     'description': """
@@ -62,6 +62,8 @@ Key features
         'purchase',
         'sale_management',
         'hr_attendance',
+        'hr_recruitment',
+        'website_hr_recruitment',
         'elksfrs',
         'elksmaintenance',
         'elkspurchase',
@@ -77,6 +79,7 @@ Key features
         'data/event_mail_templates.xml',
         'data/event_after_action_mail.xml',
         'data/website_form_data.xml',
+        'data/event_caterers.xml',
         'wizard/event_approval_wizard_views.xml',
         'wizard/event_add_hours_wizard_views.xml',
         'report/event_paperformat.xml',
@@ -98,6 +101,9 @@ Key features
         'views/event_cost_type_views.xml',
         'views/hr_attendance_views.xml',
         'views/hr_employee_views.xml',
+        'views/hr_applicant_views.xml',
+        'views/recruitment_1099_templates.xml',
+        'views/res_partner_views.xml',
         'views/event_menus.xml',
         'views/website_event_form.xml',
         'views/event_terms_page.xml',

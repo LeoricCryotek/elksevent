@@ -31,7 +31,7 @@ import base64
 import logging
 import math
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, time as dtime, timedelta
 
 import pytz
 from lxml import etree
@@ -267,9 +267,14 @@ class ProjectTask(models.Model):
     x_cleanup_scheduled = fields.Boolean(
         "Cleanup Scheduled",
         help="Tick to schedule a cleanup date & time for this event.")
+    x_cleanup_before_datetime = fields.Datetime(
+        "Clean Prior To Event By",
+        help="Deadline to have the space cleaned and ready BEFORE the event. "
+             "A pre-event custodial deadline (shown on the custodial call-out).")
     x_cleanup_datetime = fields.Datetime(
-        "Cleanup Date & Time",
-        help="When cleanup is scheduled for this event.")
+        "Cleanup After Event By",
+        help="Deadline to have the building cleaned up AFTER the event "
+             "(typically the following day). Shown on the custodial call-out.")
     x_event_duration = fields.Float(
         "Duration (hrs)", compute='_compute_event_duration', store=True,
     )
@@ -380,14 +385,96 @@ class ProjectTask(models.Model):
         compute='_compute_callout_certified',
         string="Custodial Call-Out Certified")
 
+    x_bar_callout_sent = fields.Boolean(
+        compute='_compute_callout_certified', string="Bar Call-Out Sent")
+    x_kitchen_callout_sent = fields.Boolean(
+        compute='_compute_callout_certified', string="Kitchen Call-Out Sent")
+    x_custodial_callout_sent = fields.Boolean(
+        compute='_compute_callout_certified', string="Custodial Call-Out Sent")
+
     @api.depends('x_callout_ids.state', 'x_callout_ids.department')
     def _compute_callout_certified(self):
         for rec in self:
             done = {c.department for c in rec.x_callout_ids
                     if c.state == 'certified'}
+            sent = {c.department for c in rec.x_callout_ids
+                    if c.state in ('sent', 'certified')}
             rec.x_bar_callout_certified = 'bar' in done
             rec.x_kitchen_callout_certified = 'kitchen' in done
             rec.x_custodial_callout_certified = 'custodial' in done
+            rec.x_bar_callout_sent = 'bar' in sent
+            rec.x_kitchen_callout_sent = 'kitchen' in sent
+            rec.x_custodial_callout_sent = 'custodial' in sent
+
+    # Per-department "the plan changed since the manager was sent this" flags,
+    # plus a combined old->new diff to show the coordinator on the form.
+    x_bar_callout_changed = fields.Boolean(
+        compute='_compute_callout_changed', string="Bar Plan Changed")
+    x_kitchen_callout_changed = fields.Boolean(
+        compute='_compute_callout_changed', string="Kitchen Plan Changed")
+    x_custodial_callout_changed = fields.Boolean(
+        compute='_compute_callout_changed', string="Custodial Plan Changed")
+    x_callout_changes_pending = fields.Boolean(
+        compute='_compute_callout_changed', string="Call-Out Changes Pending")
+    x_callout_changes_html = fields.Html(
+        compute='_compute_callout_changed', sanitize=False,
+        string="Call-Out Changes")
+
+    # Watched fields: any of these changing after a call-out is sent flags a
+    # resend. Kept in sync with elks.event.callout _PLAN_SHARED/_PLAN_FIELDS.
+    _CALLOUT_WATCH_FIELDS = (
+        'x_callout_ids', 'x_callout_ids.state', 'x_callout_ids.sent_snapshot',
+        'x_event_date', 'x_requested_entry', 'x_requested_setup',
+        'x_event_start_time_text', 'x_event_end_time_text',
+        'x_num_bars', 'x_bartender_count', 'x_plan_bar_hours',
+        'x_need_beer_tub', 'x_bar_drink_requests', 'x_bar_customer_request',
+        'x_cook_count', 'x_cook_hours', 'x_kitchen_support_count',
+        'x_kitchen_support_hours', 'x_catering_details', 'x_food_menu',
+        'x_kitchen_customer_request', 'x_cleaner_count', 'x_cleaner_hours',
+        'x_cleanup_before_datetime', 'x_cleanup_datetime',
+        'x_custodial_customer_request',
+    )
+
+    @api.depends(*_CALLOUT_WATCH_FIELDS)
+    def _compute_callout_changed(self):
+        for rec in self:
+            changed = {'bar': False, 'kitchen': False, 'custodial': False}
+            blocks = []
+            for co in rec.x_callout_ids.filtered(
+                    lambda c: c.state in ('sent', 'certified')):
+                rows = co._plan_change_rows()
+                if rows:
+                    changed[co.department] = True
+                    blocks.append(
+                        '<div style="margin-bottom:6px;">'
+                        '<div style="font-weight:bold;">%s</div>%s</div>' % (
+                            co.department_label,
+                            co._render_changes_html(rows) or ''))
+            rec.x_bar_callout_changed = changed['bar']
+            rec.x_kitchen_callout_changed = changed['kitchen']
+            rec.x_custodial_callout_changed = changed['custodial']
+            rec.x_callout_changes_pending = any(changed.values())
+            rec.x_callout_changes_html = (
+                ''.join(blocks) if blocks else False)
+
+    @api.onchange(*_CALLOUT_WATCH_FIELDS[3:])
+    def _onchange_callout_plan_warn(self):
+        """Prompt the coordinator when they edit details already sent to a
+        department manager, so they can decide whether to resend."""
+        sent = self.x_callout_ids.filtered(
+            lambda c: c.state in ('sent', 'certified'))
+        if not sent:
+            return
+        depts = ', '.join(sorted({c.department_label for c in sent}))
+        return {'warning': {
+            'title': _("Call-out plan changed"),
+            'message': _(
+                "You changed details already sent to the %s manager(s). If this "
+                "affects their staffing or timing, use the amber \"Resend\" "
+                "button on the Documents tab so they're notified. If it's "
+                "benign, you can leave it — either way the original vs. updated "
+                "details stay highlighted for the manager.")
+            % depts}}
 
     @api.depends('x_is_event')
     def _compute_event_dept_managers(self):
@@ -548,12 +635,20 @@ class ProjectTask(models.Model):
         "Exclusive Use",
         help="Adds the Exclusive Use fee (from Lodge Settings) to the Event "
              "Costs.")
+    x_antlers_service = fields.Boolean(
+        "Antlers Service",
+        help="Adds the Antlers Service fee (from Lodge Settings) to the Event "
+             "Costs.")
     x_bar_gratuity = fields.Monetary(
-        "Bar Gratuity", currency_field='x_currency_id',
-        help="Gratuity pool for the bar — split among bartender shifts.")
+        "Bar Gratuity", currency_field='x_currency_id', readonly=True,
+        help="Gratuity pool for the bar — entered by the bar manager on their "
+             "call-out sheet and set here when they certify. Split among "
+             "bartender shifts.")
     x_kitchen_gratuity = fields.Monetary(
-        "Kitchen Gratuity", currency_field='x_currency_id',
-        help="Gratuity pool for the kitchen — split among kitchen shifts.")
+        "Kitchen Gratuity", currency_field='x_currency_id', readonly=True,
+        help="Gratuity pool for the kitchen — entered by the kitchen manager on "
+             "their call-out sheet and set here when they certify. Split among "
+             "kitchen shifts.")
     x_gratuity_amount = fields.Monetary(
         "Gratuity (total)", currency_field='x_currency_id',
         compute='_compute_gratuity_total', store=True,
@@ -612,15 +707,42 @@ class ProjectTask(models.Model):
                 (rec.x_kitchen_gratuity or 0.0) - kit_paid)
             rec.x_gratuity_remaining = (
                 rec.x_gratuity_amount - bar_paid - kit_paid)
-    x_food_by_us = fields.Boolean("Food by Us")
-    x_food_menu = fields.Text("Menu")
+    x_food_by_us = fields.Boolean(
+        "Lodge Kitchen (in-house)",
+        compute='_compute_food_by_us', store=True,
+        help="True when the Lodge Kitchen is the caterer — this turns on the "
+             "in-house kitchen call-out.")
+    x_food_menu = fields.Text(
+        "Menu",
+        help="The menu items the customer wants fulfilled.")
     x_food_request = fields.Boolean(
         "Food / Catering Request",
         help="The customer is requesting food or catering for the event.")
     x_catering_details = fields.Text(
         "Catering Details",
-        help="What kind of catering the customer is requesting.")
-    x_caterer_id = fields.Many2one('res.partner', string="Catered By")
+        help="How the food should be served / set up — e.g. \"two buffet "
+             "lines; just provide tables with linens.\"")
+    x_caterer_id = fields.Many2one(
+        'res.partner', string="Catered By",
+        help="Who is catering. Defaults to the Lodge Kitchen (which turns on "
+             "the kitchen call-out); pick an outside catering company or "
+             "create a new one.")
+
+    @api.depends('x_caterer_id')
+    def _compute_food_by_us(self):
+        kitchen = self.env.ref(
+            'elksevent.partner_lodge_kitchen', raise_if_not_found=False)
+        for rec in self:
+            rec.x_food_by_us = bool(
+                kitchen and rec.x_caterer_id.id == kitchen.id)
+
+    @api.onchange('x_food_request')
+    def _onchange_food_request_default_caterer(self):
+        if self.x_food_request and not self.x_caterer_id:
+            kitchen = self.env.ref(
+                'elksevent.partner_lodge_kitchen', raise_if_not_found=False)
+            if kitchen:
+                self.x_caterer_id = kitchen.id
     x_caterer_license_on_file = fields.Boolean("Caterer License on File")
     x_caterer_insurance_on_file = fields.Boolean("Caterer Insurance on File")
     x_extras = fields.Text("Extras Supplied")
@@ -777,6 +899,46 @@ class ProjectTask(models.Model):
         help="COGS not in the four named categories — coordinator, gratuity "
              "pass-through, and any custom cost types. Included so the "
              "category breakdown reconciles to total COGS.")
+
+    # ------------------------------------------------------------------
+    # Event sales income — money taken in AT the event (bar, food, door),
+    # separate from the rental invoice. Entered by hand (or, later, pulled
+    # from the Clover POS by category) and added to the P&L net.
+    # ------------------------------------------------------------------
+    x_sales_drink = fields.Monetary(
+        "Drink Sales (net)", currency_field='x_currency_id',
+        help="NET bar / drink sales at the event (after cost of goods, which "
+             "Clover accounts for).")
+    x_sales_food = fields.Monetary(
+        "Food Sales (net)", currency_field='x_currency_id',
+        help="NET food / concession sales at the event (after cost of goods).")
+    x_sales_entry = fields.Monetary(
+        "Entry / Ticket Fees (net)", currency_field='x_currency_id',
+        help="NET door, cover, or ticket revenue at the event.")
+    x_sales_other = fields.Monetary(
+        "Other Sales (net)", currency_field='x_currency_id',
+        help="Any other NET on-site sales income (raffle, merchandise, etc.).")
+    x_sales_notes = fields.Char(
+        "Sales Notes",
+        help="Where the numbers came from (Clover net batch, cash count, etc.).")
+    x_event_sales_income = fields.Monetary(
+        "Event Sales Income (net total)", currency_field='x_currency_id',
+        compute='_compute_event_sales', store=True,
+        help="Net drink + food + entry + other on-site sales.")
+    x_pl_net_total = fields.Monetary(
+        "Net incl. Event Sales", currency_field='x_currency_id',
+        compute='_compute_event_sales', store=True,
+        help="Rental P&L net plus the net on-site event sales income.")
+
+    @api.depends('x_sales_drink', 'x_sales_food', 'x_sales_entry',
+                 'x_sales_other', 'x_net_income')
+    def _compute_event_sales(self):
+        for rec in self:
+            rec.x_event_sales_income = (
+                (rec.x_sales_drink or 0.0) + (rec.x_sales_food or 0.0)
+                + (rec.x_sales_entry or 0.0) + (rec.x_sales_other or 0.0))
+            rec.x_pl_net_total = (
+                (rec.x_net_income or 0.0) + rec.x_event_sales_income)
 
     # ------------------------------------------------------------------
     # Coordinator fee
@@ -1106,6 +1268,40 @@ class ProjectTask(models.Model):
         "Actual Labor Cost", currency_field='x_currency_id',
         compute='_compute_actual_hours',
         help="Actual hours worked x their rate — a P&L cost.")
+    # Certified-roster labor: what we BILLED (planned hours x billed rate) vs
+    # what actually PAID OUT (hours clocked on the event x the call-out rate).
+    x_labor_billed = fields.Monetary(
+        "Event Labor Billed", currency_field='x_currency_id',
+        compute='_compute_event_labor_clocked', store=True,
+        help="Total billed for certified call-out labor (planned hours x the "
+             "billed rate).")
+    x_labor_actual_clocked = fields.Monetary(
+        "Event Labor Actual (clocked)", currency_field='x_currency_id',
+        compute='_compute_event_labor_clocked', store=True,
+        help="What actually paid out: hours clocked on this event x the "
+             "department manager's call-out rate.")
+    x_labor_clocked_variance = fields.Monetary(
+        "Labor Billed - Actual", currency_field='x_currency_id',
+        compute='_compute_event_labor_clocked', store=True,
+        help="Billed labor minus actual clocked labor. Positive = we billed "
+             "more hours than were worked; negative = under-billed.")
+
+    @api.depends('x_callout_ids.state', 'x_callout_ids.cost_total',
+                 'x_attendance_ids.x_event_pay',
+                 'x_attendance_ids.x_event_role')
+    def _compute_event_labor_clocked(self):
+        for rec in self:
+            billed = sum(rec.x_callout_ids.filtered(
+                lambda c: c.state == 'certified').mapped('cost_total'))
+            actual = 0.0
+            if 'x_event_pay' in rec.x_attendance_ids._fields:
+                actual = sum(
+                    a.x_event_pay or 0.0 for a in rec.x_attendance_ids
+                    if a.x_event_id.id == rec.id
+                    and not rec._elks_is_volunteer_att(a))
+            rec.x_labor_billed = billed
+            rec.x_labor_actual_clocked = actual
+            rec.x_labor_clocked_variance = billed - actual
     x_total_billed = fields.Monetary(
         "Total Billed", currency_field='x_currency_id',
         compute='_compute_financials', store=True,
@@ -2680,7 +2876,7 @@ class ProjectTask(models.Model):
         'x_est_event_hours', 'x_est_bartender_hours', 'x_est_cleaning_hours',
         'x_est_cook_hours', 'x_est_kitchen_support_hours',
         'x_bar_gratuity', 'x_kitchen_gratuity',
-        'x_marketing_signage', 'x_exclusive_use',
+        'x_marketing_signage', 'x_exclusive_use', 'x_antlers_service',
         'x_bar_use', 'x_food_request', 'x_is_elks_event',
         'x_insurance_by'))
 
@@ -2705,87 +2901,31 @@ class ProjectTask(models.Model):
             if not rec.x_is_event or not settings:
                 continue
             rec.x_cost_line_ids.filtered('x_auto_source').unlink()
-            markup = 1.0 + ((settings.x_labor_markup_pct or 0.0) / 100.0)
-            # (include, code, name, hours, rate, service_fee, source). Bar and
-            # Catering lines are gated by their checkbox (Bar Use / Food-Catering
-            # Request); Event Staff and Cleaning follow the planned hours.
-            specs = [
-                (rec.x_event_workers_use, 'event_service',
-                 _("Event Service (labor)"),
-                 rec.x_est_event_hours, settings.x_event_staff_rate,
-                 settings.x_event_service_fee, 'labor_event'),
-                (rec.x_bar_use, 'bar_service', _("Bar Service (labor)"),
-                 rec.x_est_bartender_hours, settings.x_bartender_rate,
-                 settings.x_bar_service_fee, 'labor_bar'),
-                (rec.x_cleaning_use, 'cleaning_service',
-                 _("Cleaning Service (labor)"),
-                 rec.x_est_cleaning_hours, settings.x_custodial_rate,
-                 settings.x_custodial_service_fee, 'labor_clean'),
-                # Kitchen split into cooks + support, each priced at its own
-                # rate (Lodge Settings). The one-time kitchen service fee rides
-                # the cook line (mirrors how the bar fee rides the bar line).
-                (rec.x_food_request, 'catering_service',
-                 _("Catering - Cooks (labor)"),
-                 rec.x_est_cook_hours, settings.x_cook_rate,
-                 settings.x_kitchen_service_fee, 'labor_cook'),
-                (rec.x_food_request, 'catering_service',
-                 _("Catering - Kitchen Support (labor)"),
-                 rec.x_est_kitchen_support_hours,
-                 settings.x_kitchen_support_rate, 0.0, 'labor_kitchen_support'),
-            ]
-            for include, code, name, hours, rate, fee, src in specs:
-                if not include:
-                    continue
-                type_id = tid(code)
-                if not type_id:
-                    continue
-                hours = hours or 0.0
-                rate = rate or 0.0
-                fee = fee or 0.0
-                cogs = hours * rate
-                charge = cogs * markup + fee
-                if not charge and not cogs:
-                    continue
-                Line.create({
-                    'event_id': rec.id,
-                    'cost_type_id': type_id,
-                    'name': name,
-                    'quantity': 1,
-                    'unit_cost': round(charge, 2),
-                    'x_line_cogs': round(cogs, 2),
-                    'x_taxable': False,
-                    'x_auto_source': src,
-                })
-            # A CERTIFIED department call-out roster supersedes the plan
-            # estimate for that department's labor COGS: the plan line keeps its
-            # billed charge (unit_cost) but hands its COGS to a dedicated
-            # "… Staff (certified roster)" line carrying the manager's committed
-            # cost (hours x rate). Single COGS source, so no double counting;
-            # gratuity is handled separately via x_*_gratuity.
-            dept_srcs = {'bar': ('labor_bar',),
-                         'kitchen': ('labor_cook', 'labor_kitchen_support'),
-                         'custodial': ('labor_clean',)}
+            # NOTE: the old plan/checkbox-driven labor estimate lines
+            # (Bar/Catering/Cleaning/Event "… (labor)") are no longer created.
+            # Department managers now own labor via their certified call-out
+            # roster (below), so labor comes from real committed staffing only.
+
+            # A CERTIFIED department call-out roster is the sole labor source for
+            # its department. Each posts ONE line where the billed Amount is the
+            # inflated (rate + overhead, rounded up to $5) roster total and the
+            # COGS is the raw labor the lodge pays (hours x rate); the overhead
+            # spread is the lodge's margin. Gratuity posts on its own line below.
             dept_code = {'bar': 'bar_service',
                          'kitchen': 'catering_service',
                          'custodial': 'cleaning_service'}
             for co in rec.x_callout_ids.filtered(
                     lambda c: c.state == 'certified'):
-                srcs = dept_srcs.get(co.department)
-                if not srcs:
-                    continue
-                for pl in rec.x_cost_line_ids.filtered(
-                        lambda x: x.x_auto_source in srcs):
-                    pl.x_line_cogs = 0.0
                 ctype = tid(dept_code.get(co.department))
-                if ctype and co.cost_total:
+                if ctype and (co.cost_total or co.raw_cost_total):
                     Line.create({
                         'event_id': rec.id,
                         'cost_type_id': ctype,
                         'name': _("%s Staff (certified roster)")
                         % co.department_label,
                         'quantity': 1,
-                        'unit_cost': 0.0,
-                        'x_line_cogs': round(co.cost_total, 2),
+                        'unit_cost': round(co.cost_total, 2),
+                        'x_line_cogs': round(co.raw_cost_total, 2),
                         'x_taxable': False,
                         'x_auto_source': 'roster_%s' % co.department,
                     })
@@ -2800,7 +2940,10 @@ class ProjectTask(models.Model):
                      _("Marketing Signage Use"), 'addon_signage'),
                     (rec.x_exclusive_use, 'exclusive_use',
                      settings.x_exclusive_use_fee,
-                     _("Exclusive Use"), 'addon_exclusive')):
+                     _("Exclusive Use"), 'addon_exclusive'),
+                    (rec.x_antlers_service, 'antlers',
+                     settings.x_antlers_fee,
+                     _("Antlers Service"), 'addon_antlers')):
                 type_id = tid(code)
                 if flag and type_id:
                     Line.create({
@@ -2989,15 +3132,20 @@ class ProjectTask(models.Model):
             'res_id': self.id,
             'mimetype': 'application/pdf',
         })
+        # Ensure a call-out record exists so we can link the online fill-in form.
+        co = self.env['elks.event.callout']._get_or_create(self, dept)
+        link = '%s/my/callout/%s' % (self.get_base_url(), co.id)
         self.env['mail.mail'].sudo().create({
             'subject': _('%(dept)s Call-Out - %(name)s',
                          dept=label, name=self.name or 'Event'),
             'body_html': _(
-                '<p>Hello %(mgr)s,</p><p>Please review the attached %(dept)s '
-                'call-out / quote request for <strong>%(name)s</strong> and '
-                'reply with your staff assignments and quote.</p>'
+                '<p>Hello %(mgr)s,</p><p>Please review the %(dept)s call-out '
+                'for <strong>%(name)s</strong> (PDF attached). You can fill it '
+                'out and certify online:</p>'
+                '<p><a href="%(link)s">Open the call-out form</a></p>'
                 '<p>Thank you.</p>',
-                mgr=partner.name, dept=label, name=self.name or 'the event'),
+                mgr=partner.name, dept=label, name=self.name or 'the event',
+                link=link),
             'email_to': partner.email,
             'attachment_ids': [(4, attachment.id)],
         }).send()
@@ -3017,9 +3165,14 @@ class ProjectTask(models.Model):
         return self._email_callout('custodial')
 
     # ── Digital call-outs (portal) ─────────────────────────────────────
-    def _send_digital_callout(self, dept):
+    def _send_digital_callout(self, dept, keep_state=False):
         """Create/refresh the department call-out, mark it Sent, and email the
-        manager a link to review + certify it in their portal (/my)."""
+        manager a link to review + certify it in their portal (/my).
+
+        keep_state=True re-sends WITHOUT knocking a certified call-out back to
+        Sent (used by the plain "Re-send" notify button); the default downgrades
+        to Sent so a plan change forces a re-certify.
+        """
         self.ensure_one()
         Callout = self.env['elks.event.callout']
         co = Callout._get_or_create(self, dept)
@@ -3028,27 +3181,46 @@ class ProjectTask(models.Model):
             raise UserError(_(
                 "Set the %s Manager (on this event or in Lodge Settings) "
                 "before sending the call-out.", co.department_label))
-        # Refresh the estimate from the event, then mark as sent.
+        # If this is a resend, capture what changed since the last send so the
+        # manager sees old -> new. Compute BEFORE re-baselining the snapshot.
+        change_rows = co._plan_change_rows() if co.sent_snapshot else []
+        change_html = co._render_changes_html(change_rows) or ''
+        resend = bool(co.sent_snapshot)
+        # Refresh the estimate from the event, then mark as sent (unless we're
+        # only notifying a still-current certified call-out).
         co._seed_from_event()
-        co.write({'manager_partner_id': mgr.id, 'state': 'sent'})
+        vals = {'manager_partner_id': mgr.id}
+        if not (keep_state and co.state == 'certified'):
+            vals['state'] = 'sent'
+        co.write(vals)
+        # Baseline the as-sent plan so later edits show as changes to resend.
+        co._capture_snapshot()
         base = self.get_base_url()
         link = '%s/my/callout/%s' % (base, co.id)
         if mgr.email:
+            changes_block = (
+                '<p><strong>What changed since you were last sent this:'
+                '</strong></p>%s' % change_html) if change_html else ''
             self.env['mail.mail'].sudo().create({
-                'subject': _('%(dept)s Call-Out to review - %(name)s',
+                'subject': _('%(pfx)s%(dept)s Call-Out to review - %(name)s',
+                             pfx=_('Updated: ') if resend else '',
                              dept=co.department_label, name=self.name or 'Event'),
                 'body_html': _(
                     '<p>Hello %(mgr)s,</p><p>Please review the %(dept)s '
                     'call-out for <strong>%(name)s</strong>, adjust the staff '
                     'counts/hours as needed, add any notes, and certify it.</p>'
+                    '%(changes)s'
                     '<p><a href="%(link)s">Open the call-out</a></p>',
                     mgr=mgr.name, dept=co.department_label,
-                    name=self.name or 'the event', link=link),
+                    name=self.name or 'the event', changes=changes_block,
+                    link=link),
                 'email_to': mgr.email,
             }).send()
         self.message_post(
-            body=_("%(dept)s digital call-out sent to %(mgr)s for review.",
-                   dept=co.department_label, mgr=mgr.name),
+            body=_("%(dept)s digital call-out %(verb)s to %(mgr)s for review.",
+                   dept=co.department_label,
+                   verb=_("re-sent") if resend else _("sent"),
+                   mgr=mgr.name),
             subtype_xmlid='mail.mt_note')
         return co
 
@@ -3103,6 +3275,15 @@ class ProjectTask(models.Model):
             {'name': 'Vendor Purchases (POs)', 'revenue': 0.0,
              'cogs': po_total},
         ]
+        # On-site event sales income (bar / food / door), tracked separately
+        # from the rental invoice. Shown as revenue rows so they land in net.
+        for label, amount in (
+                ('Event Sales - Drink', self.x_sales_drink or 0.0),
+                ('Event Sales - Food', self.x_sales_food or 0.0),
+                ('Event Sales - Entry/Tickets', self.x_sales_entry or 0.0),
+                ('Event Sales - Other', self.x_sales_other or 0.0)):
+            if amount:
+                rows.append({'name': label, 'revenue': amount, 'cogs': 0.0})
         for r in rows:
             r['net'] = r['revenue'] - r['cogs']
         return rows
@@ -3112,6 +3293,68 @@ class ProjectTask(models.Model):
         return self.env.ref(
             'elksevent.action_report_event_bookkeeper').report_action(self)
 
+    def action_gratuity_disbursement_xlsx(self):
+        """Download the bookkeeper's gratuity/labor disbursement worksheet."""
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_url',
+            'url': '/elksevent/gratuity_xlsx/%s' % self.id,
+            'target': 'new',
+        }
+
+    def _coordinator_timeline(self):
+        """Every dated time entry for the day, in chronological order, for the
+        coordinator sheet: entry / clean-prior / setup / staff shift in-outs
+        (from certified call-outs) / event start-end / access windows / cleanup.
+        Returns [{when(datetime), label, detail}] sorted; undated entries drop.
+        """
+        self.ensure_one()
+        day = self.x_event_date
+        rows = []
+
+        def local_naive(dtval):
+            if not dtval:
+                return None
+            return fields.Datetime.context_timestamp(
+                self, dtval).replace(tzinfo=None)
+
+        def from_hours(h):
+            if day is None or not h:
+                return None
+            hh = int(h)
+            mm = int(round((h - hh) * 60))
+            if mm == 60:
+                hh, mm = hh + 1, 0
+            return datetime.combine(day, dtime(0, 0)) + timedelta(
+                hours=hh, minutes=mm)
+
+        def add(when, label, detail=''):
+            if when is not None:
+                rows.append({'when': when, 'label': label, 'detail': detail})
+
+        add(local_naive(self.x_requested_entry), 'Requested Entry')
+        add(local_naive(self.x_cleanup_before_datetime),
+            'Clean Prior To Event By', 'Custodial')
+        add(local_naive(self.x_requested_setup), 'Setup / Decorate')
+        add(from_hours(self.x_event_start_time), 'EVENT START')
+        for co in self.x_callout_ids.filtered(lambda c: c.state == 'certified'):
+            for ln in co.line_ids:
+                who = ln.employee_id.name or ln.person_name or '(unnamed)'
+                add(from_hours(ln.start_time),
+                    '%s in: %s' % (co.department_label, who), ln.role or '')
+                add(from_hours(ln.end_time),
+                    '%s out: %s' % (co.department_label, who), ln.role or '')
+        add(from_hours(self.x_event_end_time), 'EVENT END')
+        for w in self.x_access_window_ids:
+            add(local_naive(w.start_datetime),
+                'Access: %s' % (w.name or 'Window'),
+                ', '.join(w.employee_ids.mapped('name')))
+        add(local_naive(self.x_cleanup_datetime),
+            'Cleanup After Event By', 'Custodial')
+
+        rows.sort(key=lambda r: r['when'])
+        return rows
+
     def action_send_bar_callout(self):
         self._send_digital_callout('bar')
 
@@ -3120,6 +3363,17 @@ class ProjectTask(models.Model):
 
     def action_send_custodial_callout(self):
         self._send_digital_callout('custodial')
+
+    # Plain "Re-send" — notify the manager again without knocking a certified
+    # call-out back to Sent.
+    def action_notify_bar_callout(self):
+        self._send_digital_callout('bar', keep_state=True)
+
+    def action_notify_kitchen_callout(self):
+        self._send_digital_callout('kitchen', keep_state=True)
+
+    def action_notify_custodial_callout(self):
+        self._send_digital_callout('custodial', keep_state=True)
 
     def action_build_labor_costs(self):
         """Button: rebuild the auto service cost lines and refresh the quote."""
@@ -3201,12 +3455,12 @@ class ProjectTask(models.Model):
 
             room_income = evt.x_room_income or 0.0
             coordinator = evt.x_coordinator_fee or 0.0
-            total_income = evt.x_total_billed or (
+            billed_income = evt.x_total_billed or (
                 room_income + eventcosts_total + coordinator)
             # Gross of any member / Celebration-of-Life discount; the discount
             # line is the difference so income always ties to the billed total.
             gross_income = room_income + eventcosts_total + coordinator
-            discount = round(gross_income - total_income, 2)
+            discount = round(gross_income - billed_income, 2)
             _reason_labels = {
                 'member': 'Member', 'nonprofit': 'Non-Profit',
                 'officer_board': 'Officer / Board Approved', 'other': 'Other',
@@ -3227,11 +3481,21 @@ class ProjectTask(models.Model):
             else:
                 discount_label = 'Less: Discount'
 
+            # On-site NET sales income (from After Action) — Clover already
+            # netted the cost of goods, so it adds straight to income/profit.
+            sales_income = evt.x_event_sales_income or 0.0
+            sales_lines = [{'name': n, 'total': v} for n, v in (
+                ('Drink Sales (net)', evt.x_sales_drink or 0.0),
+                ('Food Sales (net)', evt.x_sales_food or 0.0),
+                ('Entry / Ticket Fees (net)', evt.x_sales_entry or 0.0),
+                ('Other Sales (net)', evt.x_sales_other or 0.0),
+            ) if v]
+            total_income = billed_income + sales_income
+
             cogs_total = evt.x_cogs or 0.0
             po_total = sum(p['total'] for p in po_lines)
             total_expense = evt.x_total_costs or (cogs_total + po_total)
-            profit = (evt.x_net_income if evt.x_total_billed
-                      else total_income - total_expense)
+            profit = total_income - total_expense
 
             grand_income += total_income
             grand_costs += total_expense
@@ -3240,6 +3504,8 @@ class ProjectTask(models.Model):
                 'event': evt,
                 'room_lines': room_lines,
                 'charge_lines': charge_lines,
+                'sales_lines': sales_lines,
+                'sales_income': sales_income,
                 'eventcosts_total': eventcosts_total,
                 'cogs_cats': cogs_cats,
                 'cost_items': cost_items,

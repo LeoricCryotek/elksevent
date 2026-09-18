@@ -87,13 +87,15 @@ class EventCostLine(models.Model):
             return
         self.x_taxable = self.cost_type_id.taxable
         code = self.cost_type_id.code
-        if code in ('marketing_signage', 'exclusive_use') and not self.unit_cost:
+        _fixed_fees = {
+            'marketing_signage': 'x_marketing_signage_fee',
+            'exclusive_use': 'x_exclusive_use_fee',
+            'antlers': 'x_antlers_fee',
+        }
+        if code in _fixed_fees and not self.unit_cost:
             settings = self.env['elks.lodge.settings'].sudo().search([], limit=1)
             if settings:
-                self.unit_cost = (
-                    settings.x_marketing_signage_fee
-                    if code == 'marketing_signage'
-                    else settings.x_exclusive_use_fee) or 0.0
+                self.unit_cost = settings[_fixed_fees[code]] or 0.0
     purchase_order_id = fields.Many2one(
         'purchase.order', string="Linked PO",
         help="Optional link to an actual vendor purchase order.",
@@ -130,25 +132,48 @@ class EventCostLine(models.Model):
         help="True when the actual labor cost exceeds what we billed.",
     )
 
+    # roster cost line source -> the attendance event-role it reconciles to
+    _ROSTER_SRC_ROLE = {
+        'roster_bar': 'bartender',
+        'roster_kitchen': 'kitchen',
+        'roster_custodial': 'custodial',
+    }
+
     @api.depends(
-        'total',
+        'total', 'x_auto_source',
         'event_id.x_attendance_ids.x_event_cost_line_id',
         'event_id.x_attendance_ids.worked_hours',
         'event_id.x_attendance_ids.employee_id',
         'event_id.x_attendance_ids.x_event_role',
+        'event_id.x_attendance_ids.x_event_pay',
     )
     def _compute_labor_trueup(self):
         for line in self:
             evt = line.event_id
-            atts = evt.x_attendance_ids.filtered(
-                lambda a: a.x_event_cost_line_id.id == line.id
-            ) if evt else line.env['hr.attendance']
-            rates = evt._event_role_rates(evt._event_settings()) if evt else {}
             cost = 0.0
-            for a in atts:
-                if evt._elks_is_volunteer_att(a):
-                    continue
-                cost += (a.worked_hours or 0.0) * evt._att_labor_rate(a, rates)
+            role = self._ROSTER_SRC_ROLE.get(line.x_auto_source)
+            if evt and role and 'x_event_pay' in evt.x_attendance_ids._fields:
+                # Certified-roster line: actual = the clocked EVENT PAY (hours
+                # worked on this event x the manager's call-out rate) for that
+                # department's shifts. This is what actually paid out, compared
+                # against what we billed (line.total).
+                for a in evt.x_attendance_ids:
+                    if a.x_event_role == role \
+                            and not evt._elks_is_volunteer_att(a):
+                        cost += a.x_event_pay or 0.0
+            else:
+                # Other cost lines: sum shifts explicitly tagged to this line,
+                # priced at each worker's payroll rate.
+                atts = evt.x_attendance_ids.filtered(
+                    lambda a: a.x_event_cost_line_id.id == line.id
+                ) if evt else line.env['hr.attendance']
+                rates = evt._event_role_rates(
+                    evt._event_settings()) if evt else {}
+                for a in atts:
+                    if evt._elks_is_volunteer_att(a):
+                        continue
+                    cost += (a.worked_hours or 0.0) * evt._att_labor_rate(
+                        a, rates)
             line.x_actual_labor_cost = cost
             line.x_labor_variance = (line.total or 0.0) - cost
             line.x_underbilled = cost > (line.total or 0.0) and cost > 0.0

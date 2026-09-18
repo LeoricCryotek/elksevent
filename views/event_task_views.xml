@@ -141,6 +141,11 @@
                 <group class="oe_subtotal_footer" invisible="not x_is_event">
                     <field name="x_actual_total_hours" widget="float_time"
                            string="Total Event Hours"/>
+                    <field name="x_bar_gratuity" string="Bar Gratuity (call-out)"
+                           invisible="not x_bar_gratuity"/>
+                    <field name="x_kitchen_gratuity"
+                           string="Kitchen Gratuity (call-out)"
+                           invisible="not x_kitchen_gratuity"/>
                     <field name="x_gratuity_amount" string="Gratuity Pool"/>
                     <field name="x_gratuity_distributed"
                            string="Distributed"/>
@@ -152,7 +157,7 @@
                     <field name="x_kitchen_gratuity_remaining"
                            string="Kitchen Left"
                            invisible="not x_kitchen_gratuity"/>
-                    <field name="x_currency_id" column_invisible="1"/>
+                    <field name="x_currency_id" invisible="1"/>
                 </group>
             </xpath>
 
@@ -328,12 +333,6 @@
                             <field name="x_requested_setup"/>
                             <field name="x_requested_entry"/>
                         </group>
-                        <group string="Cleanup">
-                            <field name="x_cleanup_scheduled"/>
-                            <field name="x_cleanup_datetime"
-                                   invisible="not x_cleanup_scheduled"
-                                   required="x_cleanup_scheduled"/>
-                        </group>
                     </group>
                     <separator string="Additional Access Windows (with assigned staff)"/>
                     <field name="x_access_window_ids">
@@ -370,7 +369,7 @@
                                 icon="fa-tasks"/>
                     </div>
                     <separator string="Department Call-Outs (print or email a quote request)"/>
-                    <div>
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
                         <button name="action_email_bar_callout" type="object"
                                 string="Email Bar Call-Out" class="btn-secondary"
                                 icon="fa-envelope" invisible="not x_bar_use or x_bar_callout_certified"/>
@@ -379,10 +378,10 @@
                                 icon="fa-check" invisible="not x_bar_use or not x_bar_callout_certified"/>
                         <button name="action_email_kitchen_callout" type="object"
                                 string="Email Kitchen Call-Out" class="btn-secondary"
-                                icon="fa-envelope" invisible="not x_food_request or x_kitchen_callout_certified"/>
+                                icon="fa-envelope" invisible="not x_food_by_us or x_kitchen_callout_certified"/>
                         <button name="action_email_kitchen_callout" type="object"
                                 string="Kitchen Certified" class="btn-success"
-                                icon="fa-check" invisible="not x_food_request or not x_kitchen_callout_certified"/>
+                                icon="fa-check" invisible="not x_food_by_us or not x_kitchen_callout_certified"/>
                         <button name="action_email_custodial_callout" type="object"
                                 string="Email Custodial Call-Out" class="btn-secondary"
                                 icon="fa-envelope" invisible="not x_cleaning_use or x_custodial_callout_certified"/>
@@ -411,33 +410,31 @@
                             <field name="x_takedown_by"/>
                             <field name="x_marketing_signage"/>
                             <field name="x_exclusive_use"/>
+                            <field name="x_antlers_service"/>
                             <field name="x_has_decorations"/>
                             <field name="x_decor_takedown_by"
                                    invisible="not x_has_decorations"/>
                             <field name="x_decoration_notes"
                                    invisible="not x_has_decorations"/>
                         </group>
-                        <group string="Event Workers">
-                            <field name="x_event_workers_use"/>
-                            <field name="x_event_worker_count"
-                                   string="Number of Workers"
-                                   invisible="not x_event_workers_use"/>
-                            <field name="x_event_worker_hours"
-                                   string="Hours per Worker"
-                                   invisible="not x_event_workers_use"/>
-                        </group>
                         <group string="Cleaning">
                             <div colspan="2" class="text-muted"
                                  invisible="not x_cleaning_use">
-                                Check the box and note any requests. The
-                                custodial manager sets how many, who, and the
-                                rate on their call sheet.
+                                Check the box and note any requests plus the two
+                                deadlines. The custodial manager decides how many,
+                                who, and the rate on their call sheet.
                             </div>
                             <field name="x_cleaning_use"/>
                             <field name="x_custodial_customer_request"
                                    string="Other Cleaning Requests"
                                    invisible="not x_cleaning_use"
                                    placeholder="Anything to pass to the custodian — setup, teardown, special areas..."/>
+                            <field name="x_cleanup_before_datetime"
+                                   string="Clean Prior To Event By"
+                                   invisible="not x_cleaning_use"/>
+                            <field name="x_cleanup_datetime"
+                                   string="Cleanup After Event By"
+                                   invisible="not x_cleaning_use"/>
                         </group>
                     </group>
                     <group>
@@ -461,8 +458,6 @@
                                    string="Other Bar Requests"
                                    invisible="not x_bar_use"
                                    placeholder="Anything else to pass to the bar manager..."/>
-                            <field name="x_bar_gratuity"
-                                   invisible="not x_bar_use"/>
                         </group>
                         <group string="Insurance (required for all events)"
                                invisible="x_is_elks_event">
@@ -485,29 +480,33 @@
                         <group string="Food">
                             <div colspan="2" class="text-muted"
                                  invisible="not x_food_request">
-                                Check the box and note the menu / requests. The
-                                kitchen manager sets cooks, hours, and rates on
-                                their call sheet.
+                                Check the box, then note how the food is served
+                                and the menu. Leaving "Catered By" as the Lodge
+                                Kitchen turns on the kitchen call-out, where the
+                                kitchen manager sets cooks, hours, rates and
+                                gratuity on their call sheet.
                             </div>
                             <field name="x_food_request"/>
                             <field name="x_catering_details"
-                                   invisible="not x_food_request"/>
+                                   invisible="not x_food_request"
+                                   placeholder="e.g. two buffet lines; just provide tables with linens..."/>
+                            <field name="x_food_menu" string="Menu"
+                                   invisible="not x_food_request"
+                                   placeholder="Menu items the customer wants fulfilled..."/>
                             <field name="x_kitchen_customer_request"
                                    string="Other Food / Menu Requests"
                                    invisible="not x_food_request"
-                                   placeholder="Menu, dietary needs, service times — anything to pass to the kitchen manager..."/>
-                            <field name="x_food_by_us"
-                                   invisible="not x_food_request"/>
-                            <field name="x_food_menu"
-                                   invisible="not x_food_request or not x_food_by_us"/>
+                                   placeholder="Dietary needs, service times — anything else to pass to the kitchen manager..."/>
                             <field name="x_caterer_id"
-                                   invisible="not x_food_request"/>
+                                   invisible="not x_food_request"
+                                   domain="[('x_is_catering', '=', True)]"
+                                   context="{'default_x_is_catering': True, 'default_is_company': True, 'default_company_type': 'company'}"
+                                   options="{'no_create': False, 'no_create_edit': False}"/>
+                            <field name="x_food_by_us" invisible="1"/>
                             <field name="x_caterer_license_on_file"
-                                   invisible="not x_food_request or not x_caterer_id"/>
+                                   invisible="not x_food_request or not x_caterer_id or x_food_by_us"/>
                             <field name="x_caterer_insurance_on_file"
-                                   invisible="not x_food_request or not x_caterer_id"/>
-                            <field name="x_kitchen_gratuity"
-                                   invisible="not x_food_request"/>
+                                   invisible="not x_food_request or not x_caterer_id or x_food_by_us"/>
                         </group>
                         <group string="Other">
                             <field name="x_gratuity_amount" readonly="1"
@@ -721,9 +720,29 @@
                             <field name="x_total_costs" readonly="1"
                                    class="oe_subtotal_footer_separator"/>
                             <field name="x_net_income" readonly="1"
-                                   string="Net (Revenue − Costs)"
+                                   string="Rental Net (Revenue − Costs)"
                                    decoration-danger="x_net_income &lt; 0"
                                    decoration-success="x_net_income &gt;= 0"/>
+                            <field name="x_event_sales_income" readonly="1"
+                                   string="+ Event Sales Income"
+                                   invisible="not x_event_sales_income"/>
+                            <field name="x_pl_net_total" readonly="1"
+                                   string="Net incl. Event Sales"
+                                   class="oe_subtotal_footer_separator"
+                                   decoration-danger="x_pl_net_total &lt; 0"
+                                   decoration-success="x_pl_net_total &gt;= 0"/>
+                        </group>
+                        <group string="Event Labor: Billed vs Actual (clocked)"
+                               invisible="not x_labor_billed and not x_labor_actual_clocked">
+                            <field name="x_labor_billed" readonly="1"
+                                   string="Billed (planned hrs x billed rate)"/>
+                            <field name="x_labor_actual_clocked" readonly="1"
+                                   string="Actual (clocked hrs x event rate)"/>
+                            <field name="x_labor_clocked_variance" readonly="1"
+                                   string="Billed − Actual"
+                                   class="oe_subtotal_footer_separator"
+                                   decoration-danger="x_labor_clocked_variance &lt; 0"
+                                   decoration-success="x_labor_clocked_variance &gt;= 0"/>
                         </group>
                         <group string="Quote &amp; Invoice">
                             <field name="x_sale_order_id" readonly="1"/>
@@ -761,8 +780,11 @@
                                     string="Event Coordinator Sheet" class="btn-secondary" icon="fa-clipboard"/>
                             <button name="%(action_report_event_pl_single)d" type="action"
                                     string="Event P&amp;L" class="btn-secondary" icon="fa-line-chart"/>
+                            <button name="action_gratuity_disbursement_xlsx" type="object"
+                                    string="Gratuity Disbursement (Excel)" class="btn-secondary" icon="fa-file-excel-o"
+                                    help="Download the bookkeeper's disbursement worksheet: who to pay (1099 vs W-2), pay, tips, and check total."/>
                             <button name="%(action_report_event_gratuity)d" type="action"
-                                    string="Gratuity Distribution" class="btn-secondary" icon="fa-money"/>
+                                    string="Gratuity (PDF)" class="btn-secondary" icon="fa-money"/>
                         </group>
                     </group>
                     <group string="Department Managers (route the call-outs)">
@@ -770,8 +792,8 @@
                         <field name="x_kitchen_manager_id"/>
                         <field name="x_custodial_manager_id"/>
                     </group>
-                    <group string="Department Call-Outs (print or email a quote request)">
-                        <div>
+                    <separator string="Department Call-Outs (print or email a quote request)"/>
+                    <div class="d-flex flex-wrap gap-2 mb-3">
                             <button name="%(action_report_event_callout)d" type="action"
                                     string="All Departments" class="btn-secondary" icon="fa-print"/>
                             <button name="%(action_report_event_callout_bar)d" type="action"
@@ -779,54 +801,98 @@
                                     invisible="not x_bar_use"/>
                             <button name="%(action_report_event_callout_kitchen)d" type="action"
                                     string="Kitchen" class="btn-secondary" icon="fa-print"
-                                    invisible="not x_food_request"/>
+                                    invisible="not x_food_by_us"/>
                             <button name="%(action_report_event_callout_custodial)d" type="action"
                                     string="Custodial" class="btn-secondary" icon="fa-print"
                                     invisible="not x_cleaning_use"/>
-                        </div>
-                    </group>
-                    <group string="Send Digital Call-Out (manager reviews &amp; certifies in their portal)">
-                        <div>
-                            <!-- Bar: green once the manager certifies -->
+                    </div>
+                    <separator string="Send Digital Call-Out (manager reviews &amp; certifies in their portal)"/>
+                    <div class="alert alert-warning" role="alert"
+                         invisible="not x_callout_changes_pending">
+                        <strong>Plans changed since a call-out was sent.</strong>
+                        Review the differences below and use the amber
+                        <em>Resend</em> button for any department the manager
+                        needs to re-check. Benign changes can be left — the
+                        manager still sees what was originally asked vs. now.
+                        <field name="x_callout_changes_html" nolabel="1"
+                               readonly="1"/>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mb-2">
+                            <!-- Bar: Send (first time) -> Re-send / amber Resend on change; green badge when certified. -->
                             <button name="action_send_bar_callout" type="object"
                                     string="Send Bar" class="btn-primary" icon="fa-paper-plane"
-                                    invisible="not x_bar_use or x_bar_callout_certified"/>
+                                    invisible="not x_bar_use or x_bar_callout_sent"/>
+                            <button name="action_send_bar_callout" type="object"
+                                    string="Resend Bar (changes)" class="btn-warning" icon="fa-refresh"
+                                    invisible="not x_bar_callout_changed"/>
+                            <button name="action_notify_bar_callout" type="object"
+                                    string="Re-send Bar" class="btn-outline-secondary" icon="fa-envelope"
+                                    invisible="not x_bar_callout_sent or x_bar_callout_certified or x_bar_callout_changed"
+                                    help="Re-send the call-out email to the bar manager (notify them of any update)."/>
                             <button name="action_send_bar_callout" type="object"
                                     string="Bar Certified" class="btn-success" icon="fa-check"
-                                    invisible="not x_bar_use or not x_bar_callout_certified"/>
+                                    invisible="not x_bar_callout_certified or x_bar_callout_changed"/>
                             <!-- Kitchen -->
                             <button name="action_send_kitchen_callout" type="object"
                                     string="Send Kitchen" class="btn-primary" icon="fa-paper-plane"
-                                    invisible="not x_food_request or x_kitchen_callout_certified"/>
+                                    invisible="not x_food_by_us or x_kitchen_callout_sent"/>
+                            <button name="action_send_kitchen_callout" type="object"
+                                    string="Resend Kitchen (changes)" class="btn-warning" icon="fa-refresh"
+                                    invisible="not x_kitchen_callout_changed"/>
+                            <button name="action_notify_kitchen_callout" type="object"
+                                    string="Re-send Kitchen" class="btn-outline-secondary" icon="fa-envelope"
+                                    invisible="not x_kitchen_callout_sent or x_kitchen_callout_certified or x_kitchen_callout_changed"
+                                    help="Re-send the call-out email to the kitchen manager."/>
                             <button name="action_send_kitchen_callout" type="object"
                                     string="Kitchen Certified" class="btn-success" icon="fa-check"
-                                    invisible="not x_food_request or not x_kitchen_callout_certified"/>
+                                    invisible="not x_kitchen_callout_certified or x_kitchen_callout_changed"/>
                             <!-- Custodial -->
                             <button name="action_send_custodial_callout" type="object"
                                     string="Send Custodial" class="btn-primary" icon="fa-paper-plane"
-                                    invisible="not x_cleaning_use or x_custodial_callout_certified"/>
+                                    invisible="not x_cleaning_use or x_custodial_callout_sent"/>
+                            <button name="action_send_custodial_callout" type="object"
+                                    string="Resend Custodial (changes)" class="btn-warning" icon="fa-refresh"
+                                    invisible="not x_custodial_callout_changed"/>
+                            <button name="action_notify_custodial_callout" type="object"
+                                    string="Re-send Custodial" class="btn-outline-secondary" icon="fa-envelope"
+                                    invisible="not x_custodial_callout_sent or x_custodial_callout_certified or x_custodial_callout_changed"
+                                    help="Re-send the call-out email to the custodial manager."/>
                             <button name="action_send_custodial_callout" type="object"
                                     string="Custodial Certified" class="btn-success" icon="fa-check"
-                                    invisible="not x_cleaning_use or not x_custodial_callout_certified"/>
+                                    invisible="not x_custodial_callout_certified or x_custodial_callout_changed"/>
                             <button name="action_remind_pending_callouts" type="object"
                                     string="Remind Pending Managers" class="btn-secondary"
                                     icon="fa-bell"
                                     help="Email a reminder to every manager whose call-out is still awaiting certification."/>
-                        </div>
-                    </group>
+                    </div>
                     <field name="x_callout_ids" readonly="1">
-                        <list>
+                        <list decoration-warning="has_plan_changes">
                             <field name="department_label" string="Department"/>
-                            <field name="manager_partner_id"/>
                             <field name="state"/>
+                            <field name="has_plan_changes" string="Updated"
+                                   widget="boolean"/>
+                            <field name="manager_partner_id" string="Manager"
+                                   optional="show"/>
                             <field name="staff_count" string="People"/>
                             <field name="hours_total" string="Hours"/>
-                            <field name="cost_total" string="Labor Cost"/>
-                            <field name="gratuity"/>
-                            <field name="certified_on"/>
+                            <field name="raw_cost_total" string="Labor Cost"
+                                   optional="show"/>
+                            <field name="cost_total" string="Billed"
+                                   optional="show"/>
+                            <field name="gratuity" optional="show"/>
+                            <field name="certified_on" optional="hide"/>
                             <field name="currency_id" column_invisible="1"/>
+                            <button name="action_open_portal_form" type="object"
+                                    string="Open Form" icon="fa-external-link"
+                                    title="Open the manager's online call-out form"/>
                         </list>
                         <form>
+                            <header>
+                                <button name="action_open_portal_form"
+                                        type="object" class="btn-primary"
+                                        icon="fa-external-link"
+                                        string="Open Online Form"/>
+                            </header>
                             <group>
                                 <group>
                                     <field name="department_label" string="Department"/>
@@ -835,11 +901,21 @@
                                 </group>
                                 <group>
                                     <field name="gratuity"/>
+                                    <field name="gratuity_distributed"/>
+                                    <field name="gratuity_remaining"/>
                                     <field name="cost_total"/>
                                     <field name="certified_on"/>
                                     <field name="currency_id" column_invisible="1"/>
                                 </group>
                             </group>
+                            <div class="alert alert-warning" role="alert"
+                                 invisible="not has_plan_changes">
+                                <strong>Plan changed since this was sent.</strong>
+                                Resend from the event's Documents tab if the
+                                manager needs to re-check.
+                                <field name="plan_changes_html" nolabel="1"
+                                       readonly="1"/>
+                            </div>
                             <separator string="Staff Roster"/>
                             <field name="line_ids">
                                 <list editable="bottom">
@@ -847,7 +923,10 @@
                                     <field name="person_name"/>
                                     <field name="role"/>
                                     <field name="hours"/>
+                                    <field name="rate"/>
+                                    <field name="bill_rate"/>
                                     <field name="cost"/>
+                                    <field name="gratuity_share" sum="Gratuity"/>
                                     <field name="currency_id" column_invisible="1"/>
                                 </list>
                             </field>
@@ -872,12 +951,36 @@
                                    options="{'no_open': False}"/>
                             <field name="x_customer_survey_state" readonly="1"/>
                         </group>
+                        <group string="Event Sales Income (on-site: bar / food / door)">
+                            <div colspan="2" class="text-muted">
+                                NET sales taken in AT the event (separate from the
+                                rental invoice) — after the cost of goods, which
+                                Clover already accounts for. Enter each category's
+                                NET so on-site sales fold into the P&amp;L net.
+                            </div>
+                            <field name="x_sales_drink"/>
+                            <field name="x_sales_food"/>
+                            <field name="x_sales_entry"/>
+                            <field name="x_sales_other"/>
+                            <field name="x_sales_notes"
+                                   placeholder="e.g. Clover NET batch 9/17, cash drawer count..."/>
+                            <field name="x_event_sales_income" readonly="1"
+                                   class="oe_subtotal_footer_separator"/>
+                        </group>
                     </group>
                     <separator string="After-Action Notes / Thoughts"/>
                     <field name="x_after_action_notes"
                            placeholder="What went well? Any issues, damages, or follow-ups? Would we host this again?"/>
                 </page>
 
+            </xpath>
+
+            <!-- Tab order: Rooms right after Event Details; Timesheets before Event Costs -->
+            <xpath expr="//page[@name='event_details']" position="after">
+                <xpath expr="//page[@name='event_rooms']" position="move"/>
+            </xpath>
+            <xpath expr="//page[@name='event_costs']" position="before">
+                <xpath expr="//field[@name='timesheet_ids']/ancestor::page[1]" position="move"/>
             </xpath>
         </field>
     </record>

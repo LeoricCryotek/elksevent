@@ -58,6 +58,34 @@ class HrAttendance(models.Model):
         help="This shift's share of the event gratuity pool (for payroll). "
              "Set by the event's 'Distribute Gratuity' action.",
     )
+    x_event_rate = fields.Monetary(
+        "Event Rate / hr", currency_field='currency_id',
+        compute='_compute_event_pay',
+        help="The call-out (event) pay rate the department manager set for this "
+             "person on this event. Applies to the hours clocked for the event, "
+             "shown as a second pay area on the timecard.",
+    )
+    x_event_pay = fields.Monetary(
+        "Event Pay", currency_field='currency_id',
+        compute='_compute_event_pay',
+        help="Hours worked on this event x the event rate — the event-rate pay "
+             "for this shift (separate from any regular hourly pay).",
+    )
+
+    @api.depends('x_event_id', 'employee_id', 'worked_hours')
+    def _compute_event_pay(self):
+        Line = self.env['elks.event.callout.line'].sudo()
+        for att in self:
+            rate = 0.0
+            if att.x_event_id and att.employee_id:
+                line = Line.search([
+                    ('callout_id.event_id', '=', att.x_event_id.id),
+                    ('callout_id.state', '=', 'certified'),
+                    ('employee_id', '=', att.employee_id.id),
+                ], limit=1)
+                rate = line.rate or 0.0
+            att.x_event_rate = rate
+            att.x_event_pay = (att.worked_hours or 0.0) * rate
     x_coordinator_fee_share = fields.Monetary(
         "Coordinator Fee", currency_field='currency_id',
         help="Flat coordinator-fee payout posted to this shift by the event's "

@@ -85,6 +85,102 @@ sudo systemctl restart odona-lewistonelks896.com
 
 ## Recent changes
 
+- 19.0.9.68 — Re-send button hidden once a call-out is certified (only the amber
+  "Resend (changes)" shows if a certified plan later changes). The "Updated
+  Since You Were Sent This" old→new diff now sits at the TOP of the manager's
+  portal call-out form (prominent), in addition to the inline highlights.
+- 19.0.9.67 — Labor billed-vs-actual in the P&L: certified-roster Event Costs
+  lines now compute "Actual Labor" from the clocked event pay (hours worked on
+  the event x the call-out rate), lighting up the "Billed − Actual" true-up.
+  Financials gains an "Event Labor: Billed vs Actual (clocked)" summary
+  (billed planned vs actual clocked, with variance).
+- 19.0.9.66 — Event-rate pay on the timecard: hr.attendance carries x_event_rate
+  / x_event_pay (the department manager's call-out rate x the hours clocked for
+  that event). The elksattendance timecard's event-pay area now reads those
+  clocked event shifts as a second area on the same card (falling back to the
+  planned roster when there's no clock-in), labelled by pay category — "1099
+  Event Pay" for contractors, "Event Pay (call-out rate)" for hourly employees.
+  (Requires elksattendance 19.0.5.15.)
+- 19.0.9.65 — /my portal always shows the Department Call-Outs card (empty for
+  users without access). 1099 contractor onboarding: a published "Join as a
+  1099" careers position (/jobs) links to a mobile I-9/W-9 form that collects
+  identity, taxpayer ID, work authorization, attestation, and document uploads
+  (photo ID + SSN/work-auth doc) and files a recruitment applicant. Once
+  approved, "Create 1099 Employee" makes the employee with Pay Category = 1099
+  and copies the documents. Adds hr_recruitment + website_hr_recruitment as
+  dependencies; employees carry a Pay Category (W-2 / 1099 / Contract).
+- 19.0.9.64 — Call-out change highlights now baseline on certify and via a
+  migration for existing call-outs, so managers see what changed after
+  certifying. Added always-available per-department "Re-send" buttons to notify
+  a manager of an update on demand (without un-certifying). New Gratuity
+  Disbursement Excel worksheet for the bookkeeper: per payee, 1099 vs W-2, pay
+  (hours x rate), tips (gratuity share), and check total, 1099 payees first.
+- 19.0.9.63 — After-Action Event Sales Income (net) now flows into the Event
+  P&L report: on-site net sales appear as their own income lines and add to
+  Total Income and Net Profit. Blank categories are excluded.
+- 19.0.9.59 — Event Sales Income moved to the After Action tab and re-worded to
+  NET (Clover accounts for cost of goods). Removed the stray Currency selector
+  on the Timesheets tab. Reworded the change-warning to point at the amber
+  "Resend" button. Documents-tab call-out list reordered/optional so headers
+  aren't cut off (Updated column). Manager portal now highlights each changed
+  request/schedule value inline (new value highlighted, old shown struck), so
+  managers see what changed whether or not a resend was requested.
+- 19.0.9.58 — Per-person gratuity: managers can disburse the department pool
+  across their roster (a Gratuity column on the call-out sheet, with "split
+  evenly" and pool/assigned/remaining tracking), so payroll knows each person's
+  share even if the manager is out. The Gratuity Distribution report now reads
+  those actual per-person shares by department. Coordinator PDF: fixed the
+  dropped "ff" ligature (Buffet) and em-dash/middle-dot mojibake, laid the
+  schedule out in two columns, and added a gratuity column to the certified
+  rosters. Documents-tab call-out buttons now spread horizontally (wrap only on
+  narrow screens).
+- 19.0.9.57 — Added an "Antlers Service" checkbox under Setup & Service; when
+  ticked it adds an Antlers Service line ($200 default, configurable in Lodge
+  Settings) to the Event Costs (Event Services category). Includes a migration
+  to seed the cost type and default fee on existing databases.
+- 19.0.9.56 — /my/callouts list upgraded: coordinators/officers see every
+  call-out, department managers see theirs; grouped by event, soonest first,
+  past events hidden by default; a sort dropdown (soonest/furthest/name/status),
+  a filter (upcoming/needs staffing/certified/all incl. past), a search box
+  (event/manager/department), and click-to-sort column headers within each
+  event.
+- 19.0.9.55 — /my portal "Department Call-Outs" card now appears for any user
+  who has a call-out assigned, matching them across their portal contact, their
+  employee work-contact, or a partner with the same email (not just their login
+  partner). Same broadened matching applies to the call-out list and detail
+  access.
+- 19.0.9.54 — Financials: new "Event Sales Income" section (drink / food / entry
+  / other on-site sales, entered by hand or later pulled from Clover) that adds
+  a "Net incl. Event Sales" line to the P&L summary and rows to the bookkeeper
+  report.
+- 19.0.9.53 — Coordinator day-of sheet rebuilt: a single chronological SCHEDULE
+  (entry, clean-prior, setup, every certified staff shift in/out, event
+  start/end, access windows, cleanup), certified call-out rosters with shift
+  times and gratuity, per-department customer requests (drinks, menu, cleaning),
+  caterer, committee, Elks/Non-Profit flags, and wedding contacts. Call-out
+  change tracking: sending a call-out snapshots the requested plan; if the
+  coordinator later edits the shared schedule or a department's request, an
+  onchange prompt appears, the Documents tab shows an amber Resend button with a
+  highlighted old->new diff, and the manager's portal shows "Originally vs Now"
+  until it's resent (benign edits can be left).
+- 19.0.9.52 — Certified call-out roster is now the ONLY labor source: the old
+  checkbox/plan "… (labor)" estimate lines are no longer created. Each certified
+  roster posts one Event Costs line billing the inflated labor (rate + overhead,
+  rounded UP to $5) with the raw labor as COGS, plus its gratuity line. Portal
+  call-out: clear-line and add-person controls, employees already committed on
+  another department's call-out for the same event are hidden, cleanup deadlines
+  and request context show only where relevant per department, and the overhead
+  rounding is no longer surfaced to managers. Backend call-out buttons spaced.
+- 19.0.9.51 — Food section reworked: Catering Details (how it's served), Menu
+  (items to fulfill), and a "Catered By" picker filtered to catering companies
+  (new "Is Catering" flag on business contacts) defaulting to the Lodge Kitchen,
+  which drives the in-house kitchen call-out. Bar/kitchen gratuity moved off the
+  event to the call-out sheets (fed to the event on certify; shown under
+  Timesheets, posted to Event Costs). Call-out staff rate now bills at rate +
+  lodge overhead (default $5, configurable) rounded to the nearest $5 (+ pre/post
+  migration so prior "Food by Us" events point at the Lodge Kitchen).
+- 19.0.9.49–50 — Removed Event Workers; tab order (Rooms after Event Details,
+  Timesheets before Event Costs).
 - 19.0.9.42 — Linen tier auto-charge; removed the Financials labor-estimate
   section and Contract/Agreement notes; manifest/README refresh.
 - 19.0.9.41 — Event Insurance default $187 (+ migration); Refresh Invoices

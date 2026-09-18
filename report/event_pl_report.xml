@@ -223,7 +223,7 @@
                         </h4>
 
                         <!-- Income section -->
-                        <t t-if="ed['room_lines'] or ed['charge_lines']">
+                        <t t-if="ed['room_lines'] or ed['charge_lines'] or ed['sales_lines']">
                             <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10px;">
                                 <thead>
                                     <tr style="background: #28a745; color: white;">
@@ -310,6 +310,30 @@
                                             -$<t t-esc="'{:,.2f}'.format(ed['discount'])"/>
                                         </td>
                                     </tr>
+                                    <!-- On-site NET sales income (from After Action) -->
+                                    <t t-if="ed['sales_lines']">
+                                        <tr>
+                                            <td colspan="5" style="padding: 4px 8px; font-style: italic; color:#155724; border-top:1px solid #cbe6cf;">
+                                                On-Site Sales (net of cost of goods)
+                                            </td>
+                                        </tr>
+                                        <tr t-foreach="ed['sales_lines']" t-as="sl">
+                                            <td colspan="4" style="padding: 4px 8px 4px 20px; border-bottom: 1px solid #dee2e6;">
+                                                <t t-esc="sl['name']"/>
+                                            </td>
+                                            <td style="padding: 4px 8px; text-align: right; border-bottom: 1px solid #dee2e6;">
+                                                $<t t-esc="'{:,.2f}'.format(sl['total'] or 0)"/>
+                                            </td>
+                                        </tr>
+                                        <tr style="background: #e8f5e9;">
+                                            <td colspan="4" style="padding: 4px 8px; text-align: right; font-weight: bold;">
+                                                Event Sales Income:
+                                            </td>
+                                            <td style="padding: 4px 8px; text-align: right; font-weight: bold;">
+                                                $<t t-esc="'{:,.2f}'.format(ed['sales_income'])"/>
+                                            </td>
+                                        </tr>
+                                    </t>
                                     <tr style="background: #c8e6c9; font-weight: bold;">
                                         <td colspan="4" style="padding: 4px 8px; text-align: right;">
                                             TOTAL INCOME:

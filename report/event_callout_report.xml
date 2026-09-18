@@ -243,7 +243,8 @@
             <table style="width:100%; font-size:10px; border:1px solid #cbb8dd; border-top:none;">
                 <tr><td style="padding:2px 6px; width:45%;">Cleaners requested</td><td style="padding:2px 6px;"><t t-esc="o.x_cleaner_count or 0"/> x <t t-esc="'%g' % (o.x_cleaner_hours or 0)"/> hrs each</td></tr>
                 <tr t-if="o.x_need_garbage"><td style="padding:2px 6px;">Garbage / haul-out</td><td style="padding:2px 6px;">Yes</td></tr>
-                <tr t-if="o.x_cleanup_scheduled and o.x_cleanup_datetime"><td style="padding:2px 6px;">Cleanup scheduled</td><td style="padding:2px 6px;"><span t-field="o.x_cleanup_datetime" t-options='{"widget":"datetime","format":"MM/dd h:mm a"}'/></td></tr>
+                <tr t-if="o.x_cleanup_before_datetime"><td style="padding:2px 6px;">Clean prior to event by</td><td style="padding:2px 6px;"><span t-field="o.x_cleanup_before_datetime" t-options='{"widget":"datetime","format":"EEE, MMM d h:mm a"}'/></td></tr>
+                <tr t-if="o.x_cleanup_datetime"><td style="padding:2px 6px;">Cleanup after event by</td><td style="padding:2px 6px;"><span t-field="o.x_cleanup_datetime" t-options='{"widget":"datetime","format":"EEE, MMM d h:mm a"}'/></td></tr>
             </table>
             <div style="font-size:9px; color:#666; padding:2px 0;">These are the customer's requests. The manager sets the actual staffing below.</div>
             <t t-if="o.x_custodial_customer_request">
@@ -251,13 +252,20 @@
                 <div style="font-size:10px; border:1px solid #cbb8dd; border-top:none; padding:4px 6px; white-space:pre-line;"><t t-esc="o.x_custodial_customer_request"/></div>
             </t>
             <div style="border:2px solid #46166a; padding:6px 8px; margin-top:8px; font-size:11px;">
-                <strong>REQUIRED:</strong> The building must be fully cleaned and the
-                bathrooms restocked by
-                <strong>
-                    <t t-if="o.x_cleanup_datetime"><span t-field="o.x_cleanup_datetime" t-options='{"widget":"datetime","format":"EEE, MMM d, yyyy h:mm a"}'/></t>
-                    <t t-else="">________________ (date &amp; time)</t>
-                </strong>
-                (typically the day following the event).
+                <div t-if="o.x_cleanup_before_datetime">
+                    <strong>CLEAN PRIOR TO EVENT:</strong> The space must be clean and
+                    ready by
+                    <strong><span t-field="o.x_cleanup_before_datetime" t-options='{"widget":"datetime","format":"EEE, MMM d, yyyy h:mm a"}'/></strong>.
+                </div>
+                <div>
+                    <strong>CLEANUP AFTER EVENT:</strong> The building must be fully
+                    cleaned and the bathrooms restocked by
+                    <strong>
+                        <t t-if="o.x_cleanup_datetime"><span t-field="o.x_cleanup_datetime" t-options='{"widget":"datetime","format":"EEE, MMM d, yyyy h:mm a"}'/></t>
+                        <t t-else="">________________ (date &amp; time)</t>
+                    </strong>
+                    (typically the day following the event).
+                </div>
             </div>
             <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin-top:8px;">CUSTODIAL CHECKLIST</div>
             <table style="width:100%; font-size:10px; border:1px solid #ccc; border-top:none;">

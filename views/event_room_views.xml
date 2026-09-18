@@ -96,6 +96,7 @@
                     <group string="Marketing / Exclusive Use Fees">
                         <field name="x_marketing_signage_fee"/>
                         <field name="x_exclusive_use_fee"/>
+                        <field name="x_antlers_fee"/>
                         <field name="x_event_insurance_fee"/>
                         <field name="x_linen_price_30"/>
                         <field name="x_linen_price_60"/>
@@ -111,6 +112,7 @@
                     </group>
                     <group string="Labor Rates &amp; Service Fees (drive auto Event Costs)">
                         <field name="x_labor_markup_pct"/>
+                        <field name="x_labor_overhead_per_hour"/>
                         <field name="x_event_staff_rate"/>
                         <field name="x_event_service_fee"/>
                         <field name="x_bartender_rate"/>

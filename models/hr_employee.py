@@ -53,6 +53,27 @@ class HrEmployee(models.Model):
         help="This employee manages custodial/cleaning for events — receives "
              "the Custodial call-sheet link and certifies cleaning staffing.")
 
+    x_pay_category = fields.Selection([
+        ('w2', 'Employee (W-2)'),
+        ('1099', '1099 Contractor'),
+        ('contract', 'Contract Worker'),
+    ], string="Pay Category", default='w2', tracking=True,
+        help="How this worker is paid. 1099 contractors get a 1099 check "
+             "(no tax withholding); the gratuity/labor disbursement sheet and "
+             "call-out roster use this to flag who needs a 1099.")
+    x_tin_type = fields.Selection([
+        ('ssn', 'SSN'), ('ein', 'EIN')],
+        string="Taxpayer ID Type",
+        help="For 1099 payees: whether their taxpayer ID is an SSN or an EIN.")
+    x_tin_last4 = fields.Char(
+        "Taxpayer ID (last 4)", size=4,
+        help="Last 4 of the SSN/EIN for 1099 reference (full number lives on "
+             "the recruitment application / a secure document).")
+    x_w9_on_file = fields.Boolean(
+        "W-9 on File",
+        help="A signed W-9 (or the onboarding application) is on file for this "
+             "1099 contractor.")
+
     @api.onchange('x_is_event_bar_mgr', 'x_is_event_kitchen_mgr',
                   'x_is_event_custodial_mgr')
     def _onchange_event_dept_manager(self):

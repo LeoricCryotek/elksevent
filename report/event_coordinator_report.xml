@@ -32,7 +32,7 @@
                 <t t-set="kids"
                    t-value="o.child_ids.sorted(key=lambda c: (c.sequence, c.id))"/>
                 <t t-set="us_them" t-value="{'us': 'Lodge', 'them': 'Renter'}"/>
-                <div class="page" style="font-size:10.5px; line-height:1.35; color:#222;">
+                <div class="page" style="font-size:10.5px; line-height:1.35; color:#222; font-variant-ligatures:none;">
 
                     <!-- ===================== HEADER ===================== -->
                     <table style="width:100%; border:none; margin-bottom:4px;">
@@ -57,36 +57,31 @@
                     </div>
                     <hr style="border-top:2px solid #46166a; margin:2px 0 8px 0;"/>
 
-                    <!-- ===================== SCHEDULE (day-of times) ===================== -->
-                    <table style="width:100%; border-collapse:collapse; margin-bottom:8px;">
-                        <tr style="background:#46166a; color:#fff;">
-                            <th style="padding:4px 6px; text-align:left; width:20%;">Requested Entry</th>
-                            <th style="padding:4px 6px; text-align:left; width:20%;">Setup</th>
-                            <th style="padding:4px 6px; text-align:left; width:20%;">Event Start</th>
-                            <th style="padding:4px 6px; text-align:left; width:20%;">Event End</th>
-                            <th style="padding:4px 6px; text-align:left; width:20%;">Cleanup</th>
-                        </tr>
-                        <tr style="font-size:12px; font-weight:bold;">
-                            <td style="padding:5px 6px; border:1px solid #ccc;">
-                                <t t-if="o.x_requested_entry"><span t-field="o.x_requested_entry" t-options='{"widget":"datetime","format":"MM/dd h:mm a"}'/></t>
-                                <t t-else="">-</t>
+                    <!-- ===================== SCHEDULE (chronological) ===================== -->
+                    <t t-set="timeline" t-value="o._coordinator_timeline()"/>
+                    <t t-set="tl_half" t-value="(len(timeline) + 1) // 2"/>
+                    <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px;">SCHEDULE (CHRONOLOGICAL)</div>
+                    <table style="width:100%; border:1px solid #46166a; border-top:none; margin-bottom:8px;">
+                        <tr style="vertical-align:top;">
+                            <td style="width:50%; border:none; padding:0; border-right:1px solid #ddd;">
+                                <table style="width:100%; border-collapse:collapse; font-size:9.5px;">
+                                    <tr t-foreach="timeline[:tl_half]" t-as="tl">
+                                        <td style="padding:2px 6px; border-bottom:1px solid #eee; white-space:nowrap; font-weight:bold; width:42%;"><t t-esc="tl['when'].strftime('%m/%d %I:%M %p')"/></td>
+                                        <td style="padding:2px 6px; border-bottom:1px solid #eee;"><t t-esc="tl['label']"/><t t-if="tl['detail']"> (<t t-esc="tl['detail']"/>)</t></td>
+                                    </tr>
+                                </table>
                             </td>
-                            <td style="padding:5px 6px; border:1px solid #ccc;">
-                                <t t-if="o.x_requested_setup"><span t-field="o.x_requested_setup" t-options='{"widget":"datetime","format":"MM/dd h:mm a"}'/></t>
-                                <t t-else="">-</t>
-                            </td>
-                            <td style="padding:5px 6px; border:1px solid #ccc;">
-                                <t t-esc="o.x_event_start_time_text or '-'"/>
-                            </td>
-                            <td style="padding:5px 6px; border:1px solid #ccc;">
-                                <t t-esc="o.x_event_end_time_text or '-'"/>
-                            </td>
-                            <td style="padding:5px 6px; border:1px solid #ccc;">
-                                <t t-if="o.x_cleanup_scheduled and o.x_cleanup_datetime"><span t-field="o.x_cleanup_datetime" t-options='{"widget":"datetime","format":"MM/dd h:mm a"}'/></t>
-                                <t t-else="">-</t>
+                            <td style="width:50%; border:none; padding:0;">
+                                <table style="width:100%; border-collapse:collapse; font-size:9.5px;">
+                                    <tr t-foreach="timeline[tl_half:]" t-as="tl">
+                                        <td style="padding:2px 6px; border-bottom:1px solid #eee; white-space:nowrap; font-weight:bold; width:42%;"><t t-esc="tl['when'].strftime('%m/%d %I:%M %p')"/></td>
+                                        <td style="padding:2px 6px; border-bottom:1px solid #eee;"><t t-esc="tl['label']"/><t t-if="tl['detail']"> (<t t-esc="tl['detail']"/>)</t></td>
+                                    </tr>
+                                </table>
                             </td>
                         </tr>
                     </table>
+                    <t t-if="not timeline"><div style="font-size:9.5px; padding:2px 6px;"><em>No dated times entered yet.</em></div></t>
 
                     <!-- ===================== HOST / EVENT PARTICULARS ===================== -->
                     <table style="width:100%; font-size:10px; margin-bottom:8px;">
@@ -114,6 +109,17 @@
                                 <t t-else="">-</t>
                             </td>
                         </tr>
+                        <tr t-if="o.x_event_committee_id or o.x_is_nonprofit or o.x_is_elks_event">
+                            <td style="padding:2px 4px;"><strong>Committee:</strong> <t t-esc="o.x_event_committee_id.name or '-'"/></td>
+                            <td style="padding:2px 4px;">
+                                <t t-if="o.x_is_elks_event"><strong>Elks Event</strong> (no room charge)</t>
+                                <t t-if="o.x_is_nonprofit"> <strong>Non-Profit</strong></t>
+                            </td>
+                        </tr>
+                        <tr t-if="o.x_event_type == 'wedding' and (o.x_wedding_bride_name or o.x_wedding_groom_name)">
+                            <td style="padding:2px 4px;"><strong>Bride:</strong> <t t-esc="o.x_wedding_bride_name or '-'"/> <t t-if="o.x_wedding_bride_phone">(<t t-esc="o.x_wedding_bride_phone"/>)</t></td>
+                            <td style="padding:2px 4px;"><strong>Groom:</strong> <t t-esc="o.x_wedding_groom_name or '-'"/> <t t-if="o.x_wedding_groom_phone">(<t t-esc="o.x_wedding_groom_phone"/>)</t></td>
+                        </tr>
                     </table>
 
                     <!-- ===================== PLAN GRID ===================== -->
@@ -135,6 +141,7 @@
                                     <tr t-if="o.x_need_garbage"><td style="padding:2px 6px;">Garbage/haul-out</td><td style="padding:2px 6px;">Yes</td></tr>
                                     <tr t-if="o.x_marketing_signage"><td style="padding:2px 6px;">Marketing signage</td><td style="padding:2px 6px;">Yes</td></tr>
                                     <tr t-if="o.x_exclusive_use"><td style="padding:2px 6px;">Exclusive use</td><td style="padding:2px 6px;">Yes</td></tr>
+                                    <tr t-if="o.x_antlers_service"><td style="padding:2px 6px;">Antlers service</td><td style="padding:2px 6px;">Yes</td></tr>
                                     <tr t-if="o.x_has_decorations"><td style="padding:2px 6px;">Decorations</td><td style="padding:2px 6px;">Yes (takedown: <t t-esc="o.x_decor_takedown_by or '-'"/>)</td></tr>
                                 </table>
                             </td>
@@ -143,9 +150,10 @@
                                 <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd;">BAR</div>
                                 <table style="width:100%; font-size:9.5px; border:1px solid #cbb8dd; border-top:none;">
                                     <t t-if="o.x_bar_use">
-                                        <tr><td style="padding:2px 6px; width:55%;">Bars</td><td style="padding:2px 6px;"><t t-esc="o.x_num_bars or 0"/></td></tr>
-                                        <tr><td style="padding:2px 6px;">Bartenders</td><td style="padding:2px 6px;"><t t-esc="o.x_bartender_count or 0"/></td></tr>
+                                        <tr><td style="padding:2px 6px; width:40%;">Bars</td><td style="padding:2px 6px;"><t t-esc="o.x_num_bars or 0"/></td></tr>
                                         <tr t-if="o.x_need_beer_tub"><td style="padding:2px 6px;">Beer tub</td><td style="padding:2px 6px;">Yes</td></tr>
+                                        <tr t-if="o.x_bar_drink_requests"><td style="padding:2px 6px;">Drink requests</td><td style="padding:2px 6px;"><t t-esc="o.x_bar_drink_requests"/></td></tr>
+                                        <tr t-if="o.x_bar_customer_request"><td style="padding:2px 6px;">Other requests</td><td style="padding:2px 6px;"><t t-esc="o.x_bar_customer_request"/></td></tr>
                                     </t>
                                     <t t-else="">
                                         <tr><td style="padding:2px 6px;" colspan="2"><em>No bar service.</em></td></tr>
@@ -153,18 +161,57 @@
                                 </table>
                                 <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd; margin-top:6px;">FOOD</div>
                                 <table style="width:100%; font-size:9.5px; border:1px solid #cbb8dd; border-top:none;">
-                                    <t t-if="o.x_food_request or o.x_food_by_us or o.x_caterer_id">
-                                        <tr t-if="o.x_food_by_us"><td style="padding:2px 6px; width:55%;">Food by lodge</td><td style="padding:2px 6px;">Yes</td></tr>
-                                        <tr t-if="o.x_caterer_id"><td style="padding:2px 6px;">Catered by</td><td style="padding:2px 6px;"><t t-esc="o.x_caterer_id.name"/></td></tr>
-                                        <tr t-if="o.x_catering_details"><td style="padding:2px 6px;" colspan="2"><em><t t-esc="o.x_catering_details"/></em></td></tr>
+                                    <t t-if="o.x_food_request or o.x_caterer_id">
+                                        <tr t-if="o.x_caterer_id"><td style="padding:2px 6px; width:40%;">Catered by</td><td style="padding:2px 6px;"><t t-esc="o.x_caterer_id.name"/><t t-if="o.x_food_by_us"> (in-house)</t></td></tr>
+                                        <tr t-if="o.x_catering_details"><td style="padding:2px 6px;">Service</td><td style="padding:2px 6px;"><em><t t-esc="o.x_catering_details"/></em></td></tr>
+                                        <tr t-if="o.x_food_menu"><td style="padding:2px 6px;">Menu</td><td style="padding:2px 6px;"><t t-esc="o.x_food_menu"/></td></tr>
+                                        <tr t-if="o.x_kitchen_customer_request"><td style="padding:2px 6px;">Other requests</td><td style="padding:2px 6px;"><t t-esc="o.x_kitchen_customer_request"/></td></tr>
                                     </t>
                                     <t t-else="">
                                         <tr><td style="padding:2px 6px;" colspan="2"><em>No food service.</em></td></tr>
                                     </t>
                                 </table>
+                                <t t-if="o.x_cleaning_use and o.x_custodial_customer_request">
+                                    <div style="background:#efe9f5; font-weight:bold; padding:3px 6px; border:1px solid #cbb8dd; margin-top:6px;">CLEANING</div>
+                                    <table style="width:100%; font-size:9.5px; border:1px solid #cbb8dd; border-top:none;">
+                                        <tr><td style="padding:2px 6px;"><t t-esc="o.x_custodial_customer_request"/></td></tr>
+                                    </table>
+                                </t>
                             </td>
                         </tr>
                     </table>
+
+                    <!-- ===================== CERTIFIED CALL-OUT ROSTERS ===================== -->
+                    <t t-set="callouts" t-value="o.x_callout_ids.filtered(lambda c: c.state == 'certified')"/>
+                    <t t-if="callouts">
+                        <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px;">CERTIFIED CALL-OUT ROSTERS</div>
+                        <table style="width:100%; border-collapse:collapse; font-size:9.5px; border:1px solid #46166a; border-top:none; margin-bottom:8px;">
+                            <t t-foreach="callouts" t-as="co">
+                                <t t-set="show_grat" t-value="co.department in ('bar', 'kitchen')"/>
+                                <tr style="background:#efe9f5;">
+                                    <td colspan="5" style="padding:2px 6px; font-weight:bold;">
+                                        <t t-esc="co.department_label"/> - Mgr: <t t-esc="co.manager_partner_id.name or '-'"/>
+                                        <t t-if="co.gratuity"> - Gratuity pool $<t t-esc="'{:,.2f}'.format(co.gratuity)"/>
+                                            (assigned $<t t-esc="'{:,.2f}'.format(co.gratuity_distributed)"/>)</t>
+                                    </td>
+                                </tr>
+                                <tr style="background:#f4f0f8;">
+                                    <th style="padding:1px 6px; text-align:left; width:32%;">Name</th>
+                                    <th style="padding:1px 6px; text-align:left; width:24%;">Role / Shift</th>
+                                    <th style="padding:1px 6px; text-align:left; width:24%;">Time</th>
+                                    <th style="padding:1px 6px; text-align:right;">Hrs</th>
+                                    <th style="padding:1px 6px; text-align:right;" t-if="show_grat">Gratuity</th>
+                                </tr>
+                                <tr t-foreach="co.line_ids.sorted(key=lambda l: (l.start_time or 99.0, l.id))" t-as="ln">
+                                    <td style="padding:1px 6px; border-top:1px solid #eee;"><t t-esc="ln.employee_id.name or ln.person_name or '-'"/></td>
+                                    <td style="padding:1px 6px; border-top:1px solid #eee;"><t t-esc="ln.role or ''"/></td>
+                                    <td style="padding:1px 6px; border-top:1px solid #eee;"><t t-esc="ln.start_str or '-'"/><t t-if="ln.end_str"> - <t t-esc="ln.end_str"/></t></td>
+                                    <td style="padding:1px 6px; border-top:1px solid #eee; text-align:right;"><t t-esc="'%g' % (ln.hours or 0)"/></td>
+                                    <td style="padding:1px 6px; border-top:1px solid #eee; text-align:right;" t-if="show_grat"><t t-if="ln.gratuity_share">$<t t-esc="'{:,.2f}'.format(ln.gratuity_share)"/></t></td>
+                                </tr>
+                            </t>
+                        </table>
+                    </t>
 
                     <!-- ===================== STAFF ROSTER (ASSIGNED) ===================== -->
                     <t t-if="o.x_staff_assignment_ids">
