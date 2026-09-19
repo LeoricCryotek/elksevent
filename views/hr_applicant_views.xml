@@ -12,36 +12,57 @@
                 <button name="action_create_1099_employee" type="object"
                         string="Create 1099 Employee" class="btn-primary"
                         invisible="not x_is_1099"/>
-                <button name="%(action_report_applicant_w9)d" type="action"
+                <button name="action_print_w9_official" type="object"
                         string="Print W-9" class="btn-secondary"
                         invisible="not x_is_1099"/>
-                <button name="%(action_report_applicant_i9)d" type="action"
+                <button name="action_print_i9_official" type="object"
                         string="Print I-9" class="btn-secondary"
                         invisible="not x_is_1099"/>
+                <button name="action_print_employment_file" type="object"
+                        string="Print File" class="btn-secondary"
+                        invisible="not x_is_1099"
+                        help="One PDF for the records folder: the filled W-9, the filled I-9, and the uploaded photo ID and SSN / work-authorization document."/>
             </xpath>
             <xpath expr="//notebook" position="inside">
                 <page string="1099 Onboarding" name="onboarding_1099"
                       invisible="not x_is_1099">
                     <group>
                         <group string="Identity / W-9">
+                            <field name="x_first_name"/>
+                            <field name="x_middle_initial"/>
+                            <field name="x_last_name"/>
+                            <field name="x_other_last_names"/>
                             <field name="x_legal_name"/>
                             <field name="x_dob"/>
                             <field name="x_business_name"/>
                             <field name="x_tin_type"/>
                             <field name="x_ssn" password="True"/>
                             <field name="x_w9_tax_class"/>
+                            <field name="x_w9_llc_class"
+                                   invisible="x_w9_tax_class != 'llc'"
+                                   required="x_w9_tax_class == 'llc'"/>
+                            <field name="x_w9_other_desc"
+                                   invisible="x_w9_tax_class != 'other'"
+                                   required="x_w9_tax_class == 'other'"/>
                             <field name="x_not_backup_withholding"/>
                         </group>
                         <group string="Address">
                             <field name="x_addr_street"/>
+                            <field name="x_addr_apt"/>
                             <field name="x_addr_city"/>
                             <field name="x_addr_state"/>
                             <field name="x_addr_zip"/>
                         </group>
                         <group string="Work Authorization (I-9)">
                             <field name="x_work_auth"/>
-                            <field name="x_uscis_number"/>
-                            <field name="x_work_auth_expiry"/>
+                            <field name="x_uscis_number"
+                                   invisible="x_work_auth not in ('permanent_resident','authorized_alien')"/>
+                            <field name="x_i94_number"
+                                   invisible="x_work_auth != 'authorized_alien'"/>
+                            <field name="x_foreign_passport"
+                                   invisible="x_work_auth != 'authorized_alien'"/>
+                            <field name="x_work_auth_expiry"
+                                   invisible="x_work_auth != 'authorized_alien'"/>
                         </group>
                         <group string="Attestation">
                             <field name="x_i9_signed"/>
@@ -57,8 +78,9 @@
                         <field name="x_id_doc_back" filename="x_id_doc_back_name"
                                string="Photo ID (back)"/>
                         <field name="x_id_doc_back_name" invisible="1"/>
+                        <field name="x_work_doc_type"/>
                         <field name="x_ssn_doc" filename="x_ssn_doc_name"
-                               string="SSN Card / Work-Auth Document"/>
+                               string="Work-Authorization Document"/>
                         <field name="x_ssn_doc_name" invisible="1"/>
                     </group>
                 </page>

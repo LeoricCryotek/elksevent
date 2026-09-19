@@ -22,3 +22,15 @@ class ResPartner(models.Model):
         "Is Catering",
         help="This business is a catering company — it appears in the event "
              "\"Catered By\" picker.")
+    x_caterer_insurance_on_file = fields.Boolean(
+        "Insurance Certificate on File",
+        help="Their certificate of insurance is on file and names Elks Lodge "
+             "#896 as additionally insured.")
+    x_caterer_insurance_doc = fields.Binary(
+        "Insurance Certificate", attachment=True,
+        help="Upload the caterer's certificate of insurance naming Elks Lodge "
+             "#896 as additionally insured.")
+    x_caterer_insurance_doc_name = fields.Char("Insurance Certificate filename")
+    x_caterer_insurance_expiry = fields.Date(
+        "Insurance Expiration",
+        help="When the caterer's certificate of insurance expires.")

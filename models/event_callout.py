@@ -434,11 +434,24 @@ class EventCallout(models.Model):
         self.ensure_one()
         try:
             user = self.event_id._after_action_user()
+            summary = _("%(dept)s call-out certified: %(evt)s",
+                        dept=self.department_label,
+                        evt=self.event_id.name or 'Event')
+            # Don't pile up duplicates: if this department already has an open
+            # "certified" to-do for this event and user (from an earlier
+            # certification / re-certification the coordinator hasn't cleared),
+            # skip scheduling and emailing again.
+            existing = self.env['mail.activity'].sudo().search([
+                ('res_model', '=', 'project.task'),
+                ('res_id', '=', self.event_id.id),
+                ('user_id', '=', user.id),
+                ('summary', '=', summary),
+            ], limit=1)
+            if existing:
+                return
             self.event_id.activity_schedule(
                 'mail.mail_activity_data_todo',
-                summary=_("%(dept)s call-out certified: %(evt)s",
-                          dept=self.department_label,
-                          evt=self.event_id.name or 'Event'),
+                summary=summary,
                 note=_("The %(dept)s manager certified their staffing for this "
                        "event. Review the updated estimate.",
                        dept=self.department_label),

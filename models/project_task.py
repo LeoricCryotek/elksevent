@@ -2447,6 +2447,12 @@ class ProjectTask(models.Model):
         self._send_event_mail('elksevent.tmpl_event_approved')
         # Remind the coordinator to purchase K&K rental insurance
         self._schedule_insurance_todo()
+        # And drop a tracked sub-task for it (lodge-insured events only)
+        try:
+            self._ensure_insurance_subtask()
+        except Exception as e:  # noqa: BLE001 - never block approval
+            _logger.warning(
+                "Insurance sub-task failed for task %s: %s", self.id, e)
 
     def action_record_floor_approved(self, notes=""):
         """Back-compat shim for the retired Floor Vote wizard."""
@@ -2482,6 +2488,66 @@ class ProjectTask(models.Model):
         except Exception as e:  # noqa: BLE001 - never block approval
             _logger.warning(
                 "Insurance to-do failed for task %s: %s", self.id, e)
+
+    def _ensure_insurance_subtask(self):
+        """Create the right insurance sub-task for how this event is insured:
+
+        * Lodge provides -> "Purchase event insurance (K&K)".
+        * Renter provides -> "Collect insurance certificate naming Elks Lodge
+          #896 as additionally insured".
+
+        This is the tracked, assignable to-do on the Sub-tasks tab (alongside
+        setup / cleanup), distinct from the activity reminder above. Skipped for
+        the lodge's own (Elks) events. Idempotent — matched on the task name, so
+        re-running (button or approval) never duplicates it.
+        """
+        self.ensure_one()
+        if self.x_is_elks_event or not self.x_insurance_by:
+            return self.env['project.task']
+        Task = self.env['project.task']
+        if self.x_insurance_by == 'lodge':
+            name = _("Purchase event insurance (K&K)")
+        else:  # renter provides their own
+            name = _("Collect insurance certificate naming Elks Lodge #896 as "
+                     "additionally insured")
+        existing = self.child_ids.filtered(lambda t: t.name == name)
+        if existing:
+            return existing
+        vals = {
+            'name': name,
+            'parent_id': self.id,
+            'project_id': self.project_id.id,
+        }
+        # Due 4 days before the event, same window as the activity reminder.
+        if self.x_event_date and 'date_deadline' in Task._fields:
+            deadline = self.x_event_date - timedelta(days=4)
+            if Task._fields['date_deadline'].type == 'datetime':
+                naive = datetime.combine(deadline, dtime(12, 0))
+                tz = pytz.timezone(self.env.user.tz or 'UTC')
+                vals['date_deadline'] = tz.localize(naive).astimezone(
+                    pytz.utc).replace(tzinfo=None)
+            else:
+                vals['date_deadline'] = deadline
+        user = self._after_action_user()
+        if user:
+            vals['user_ids'] = [(6, 0, [user.id])]
+        task = Task.create(vals)
+        self.message_post(
+            body=_("Added insurance sub-task: %s.", name),
+            subtype_xmlid='mail.mt_note',
+        )
+        return task
+
+    def action_create_insurance_task(self):
+        """Button (Insurance section): create the matching insurance sub-task
+        on demand — purchase (lodge) or collect-certificate (renter)."""
+        self.ensure_one()
+        if self.x_is_elks_event:
+            raise UserError(_(
+                "Elks events are insured by the lodge and don't need an "
+                "insurance sub-task."))
+        self._ensure_insurance_subtask()
+        return True
 
     def action_record_floor_rejected(self, notes=""):
         """Called by the reject wizard (board or floor) on a rejection."""
@@ -3210,8 +3276,12 @@ class ProjectTask(models.Model):
         if not (keep_state and co.state == 'certified'):
             vals['state'] = 'sent'
         co.write(vals)
-        # Baseline the as-sent plan so later edits show as changes to resend.
-        co._capture_snapshot()
+        # Baseline the as-sent plan ONLY on the first send. On a resend we keep
+        # the original baseline so the "what changed" diff stays visible on the
+        # backend and the manager's portal until they re-certify — certifying is
+        # what re-baselines it (action_certify -> _capture_snapshot).
+        if not resend:
+            co._capture_snapshot()
         base = self.get_base_url()
         link = '%s/my/callout/%s' % (base, co.id)
         if mgr.email:

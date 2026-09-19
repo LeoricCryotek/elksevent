@@ -17,8 +17,9 @@
         <field name="report_file">elksevent.report_applicant_w9</field>
         <field name="paperformat_id" ref="base.paperformat_us"/>
         <field name="print_report_name">'W-9 - %s' % (object.x_legal_name or object.partner_name or 'Applicant')</field>
-        <field name="binding_model_id" ref="hr_recruitment.model_hr_applicant"/>
-        <field name="binding_type">report</field>
+        <!-- No Print-menu binding: the header "Print W-9" button now streams the
+             EXACT official IRS form filled from the applicant's data. This QWeb
+             recreation is kept only as a fallback and is not surfaced. -->
     </record>
 
     <record id="action_report_applicant_i9" model="ir.actions.report">
@@ -29,8 +30,9 @@
         <field name="report_file">elksevent.report_applicant_i9</field>
         <field name="paperformat_id" ref="base.paperformat_us"/>
         <field name="print_report_name">'I-9 - %s' % (object.x_legal_name or object.partner_name or 'Applicant')</field>
-        <field name="binding_model_id" ref="hr_recruitment.model_hr_applicant"/>
-        <field name="binding_type">report</field>
+        <!-- No Print-menu binding: the header "Print I-9" button now streams the
+             EXACT official USCIS form (Section 1) filled from the applicant's
+             data. This QWeb recreation is kept only as a fallback. -->
     </record>
 
     <!-- ============================ W-9 ============================ -->
@@ -218,6 +220,11 @@
                         work-authorization document(s) in person and record them here. The
                         documents the applicant uploaded online are attached to their
                         application for reference only.
+                    </div>
+                    <div style="font-size:9.5px; margin-top:3px;" t-if="o.x_work_doc_type">
+                        Document the applicant uploaded online:
+                        <strong><t t-esc="dict(o._fields['x_work_doc_type'].selection).get(o.x_work_doc_type, '')"/></strong>
+                        (plus a photo ID). Verify the original in person.
                     </div>
                     <table style="width:100%; border-collapse:collapse; margin-top:6px; font-size:9.5px;">
                         <tr>

@@ -30,88 +30,137 @@
     <!-- ================= Mobile onboarding form ================= -->
     <template id="onboard_1099_form" name="1099 Onboarding">
         <t t-call="website.layout">
+            <t t-set="vals" t-value="vals or {}"/>
+            <t t-set="errors" t-value="errors or []"/>
             <div class="container my-4" style="max-width:640px;">
                 <h2 class="mb-1">Join as a 1099 Contractor</h2>
                 <p class="text-muted">Complete your details, sign the
-                    attestation, and upload your documents. Your information is
+                    attestation, and upload your documents. Everything here is
+                    required to complete your W-9 and I-9. Your information is
                     kept confidential and used only for payment and tax
                     reporting.</p>
 
+                <div t-if="errors" class="alert alert-danger">
+                    <strong>Please complete the following before submitting:</strong>
+                    <ul class="mb-0">
+                        <li t-foreach="errors" t-as="e"><t t-esc="e"/></li>
+                    </ul>
+                </div>
+
                 <form action="/elks/onboard/1099/submit" method="post"
-                      enctype="multipart/form-data" class="mt-3">
+                      enctype="multipart/form-data" class="mt-3" id="onboard1099">
                     <input type="hidden" name="csrf_token"
                            t-att-value="request.csrf_token()"/>
 
-                    <h5 class="mt-3">Your Information</h5>
+                    <h5 class="mt-3">Your Legal Name (as on your Social Security card)</h5>
+                    <div class="row g-2">
+                        <div class="col-12 col-md-5 mb-3">
+                            <label class="form-label">First Name *</label>
+                            <input type="text" name="first_name" class="form-control" required="required" t-att-value="vals.get('first_name')"/>
+                        </div>
+                        <div class="col-4 col-md-2 mb-3">
+                            <label class="form-label">M.I.</label>
+                            <input type="text" name="middle_initial" maxlength="1" class="form-control" t-att-value="vals.get('middle_initial')"/>
+                        </div>
+                        <div class="col-8 col-md-5 mb-3">
+                            <label class="form-label">Last Name *</label>
+                            <input type="text" name="last_name" class="form-control" required="required" t-att-value="vals.get('last_name')"/>
+                        </div>
+                    </div>
                     <div class="mb-3">
-                        <label class="form-label">Legal Full Name *</label>
-                        <input type="text" name="legal_name" class="form-control" required="required"/>
+                        <label class="form-label">Other Last Names Used (if any)</label>
+                        <input type="text" name="other_last_names" class="form-control" t-att-value="vals.get('other_last_names')" placeholder="Leave blank if none"/>
                     </div>
                     <div class="row g-2">
                         <div class="col-12 col-md-6 mb-3">
                             <label class="form-label">Email *</label>
-                            <input type="email" name="email" class="form-control" required="required"/>
+                            <input type="email" name="email" class="form-control" required="required" t-att-value="vals.get('email')"/>
                         </div>
                         <div class="col-12 col-md-6 mb-3">
                             <label class="form-label">Mobile Phone *</label>
-                            <input type="tel" name="phone" class="form-control" required="required"/>
+                            <input type="tel" name="phone" class="form-control" required="required" t-att-value="vals.get('phone')"/>
                         </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Date of Birth *</label>
-                        <input type="date" name="dob" class="form-control" required="required"/>
+                        <input type="date" name="dob" class="form-control" required="required" t-att-value="vals.get('dob')"/>
                     </div>
 
                     <h5 class="mt-3">Mailing Address</h5>
-                    <div class="mb-2">
-                        <input type="text" name="addr_street" class="form-control" placeholder="Street address"/>
+                    <div class="row g-2">
+                        <div class="col-9 mb-2">
+                            <label class="form-label">Street Address *</label>
+                            <input type="text" name="addr_street" class="form-control" required="required" t-att-value="vals.get('addr_street')"/>
+                        </div>
+                        <div class="col-3 mb-2">
+                            <label class="form-label">Apt/Unit</label>
+                            <input type="text" name="addr_apt" class="form-control" t-att-value="vals.get('addr_apt')"/>
+                        </div>
                     </div>
                     <div class="row g-2">
                         <div class="col-6 mb-3">
-                            <input type="text" name="addr_city" class="form-control" placeholder="City"/>
+                            <label class="form-label">City *</label>
+                            <input type="text" name="addr_city" class="form-control" required="required" t-att-value="vals.get('addr_city')"/>
                         </div>
                         <div class="col-3 mb-3">
-                            <input type="text" name="addr_state" class="form-control" placeholder="State"/>
+                            <label class="form-label">State *</label>
+                            <input type="text" name="addr_state" maxlength="2" class="form-control" required="required" t-att-value="vals.get('addr_state')" placeholder="ID"/>
                         </div>
                         <div class="col-3 mb-3">
-                            <input type="text" name="addr_zip" class="form-control" placeholder="ZIP"/>
+                            <label class="form-label">ZIP *</label>
+                            <input type="text" name="addr_zip" class="form-control" required="required" t-att-value="vals.get('addr_zip')"/>
                         </div>
                     </div>
 
                     <h5 class="mt-3">Tax (W-9)</h5>
                     <div class="mb-3">
                         <label class="form-label">Business Name (only if paid as a business/DBA)</label>
-                        <input type="text" name="business_name" class="form-control"/>
+                        <input type="text" name="business_name" class="form-control" t-att-value="vals.get('business_name')"/>
                     </div>
                     <div class="row g-2 align-items-end">
                         <div class="col-5 col-md-4 mb-3">
                             <label class="form-label">ID Type *</label>
                             <select name="tin_type" class="form-select">
-                                <option value="ssn">SSN</option>
-                                <option value="ein">EIN</option>
+                                <option value="ssn" t-att-selected="'selected' if vals.get('tin_type') != 'ein' else None">SSN</option>
+                                <option value="ein" t-att-selected="'selected' if vals.get('tin_type') == 'ein' else None">EIN</option>
                             </select>
                         </div>
                         <div class="col-7 col-md-8 mb-3">
                             <label class="form-label">Taxpayer ID (SSN/EIN) *</label>
                             <input type="text" name="ssn" class="form-control" required="required"
-                                   placeholder="XXX-XX-XXXX" autocomplete="off"/>
+                                   placeholder="XXX-XX-XXXX" autocomplete="off" t-att-value="vals.get('ssn')"/>
                         </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Federal Tax Classification (W-9) *</label>
-                        <select name="w9_tax_class" class="form-select" required="required">
+                        <select name="w9_tax_class" id="w9_tax_class" class="form-select" required="required">
+                            <t t-set="wc" t-value="vals.get('w9_tax_class')"/>
                             <option value="">-- select --</option>
-                            <option value="individual">Individual / Sole Proprietor / Single-member LLC</option>
-                            <option value="c_corp">C Corporation</option>
-                            <option value="s_corp">S Corporation</option>
-                            <option value="partnership">Partnership</option>
-                            <option value="trust_estate">Trust / Estate</option>
-                            <option value="llc">LLC (C / S / Partnership)</option>
-                            <option value="other">Other</option>
+                            <option value="individual" t-att-selected="'selected' if wc == 'individual' else None">Individual / Sole Proprietor / Single-member LLC</option>
+                            <option value="c_corp" t-att-selected="'selected' if wc == 'c_corp' else None">C Corporation</option>
+                            <option value="s_corp" t-att-selected="'selected' if wc == 's_corp' else None">S Corporation</option>
+                            <option value="partnership" t-att-selected="'selected' if wc == 'partnership' else None">Partnership</option>
+                            <option value="trust_estate" t-att-selected="'selected' if wc == 'trust_estate' else None">Trust / Estate</option>
+                            <option value="llc" t-att-selected="'selected' if wc == 'llc' else None">LLC (C / S / Partnership)</option>
+                            <option value="other" t-att-selected="'selected' if wc == 'other' else None">Other</option>
                         </select>
                     </div>
+                    <div class="mb-3 cond-llc" style="display:none;">
+                        <label class="form-label">LLC Tax Classification *</label>
+                        <select name="w9_llc_class" class="form-select">
+                            <t t-set="lc" t-value="vals.get('w9_llc_class')"/>
+                            <option value="">-- select C, S, or P --</option>
+                            <option value="C" t-att-selected="'selected' if lc == 'C' else None">C — taxed as a C corporation</option>
+                            <option value="S" t-att-selected="'selected' if lc == 'S' else None">S — taxed as an S corporation</option>
+                            <option value="P" t-att-selected="'selected' if lc == 'P' else None">P — taxed as a partnership</option>
+                        </select>
+                    </div>
+                    <div class="mb-3 cond-other" style="display:none;">
+                        <label class="form-label">Describe your classification *</label>
+                        <input type="text" name="w9_other_desc" class="form-control" t-att-value="vals.get('w9_other_desc')"/>
+                    </div>
                     <div class="form-check mb-3">
-                        <input type="checkbox" name="not_backup_withholding" value="1" class="form-check-input" id="bw"/>
+                        <input type="checkbox" name="not_backup_withholding" value="1" class="form-check-input" id="bw" t-att-checked="'checked' if vals.get('not_backup_withholding') else None"/>
                         <label class="form-check-label" for="bw">
                             I certify that I am <strong>not</strong> subject to backup
                             withholding (W-9, Part II). Leave unchecked if the IRS has
@@ -122,27 +171,41 @@
                     <h5 class="mt-3">Work Authorization (I-9)</h5>
                     <div class="mb-3">
                         <label class="form-label">I attest that I am *</label>
-                        <select name="work_auth" class="form-select" required="required">
+                        <select name="work_auth" id="work_auth" class="form-select" required="required">
+                            <t t-set="wa" t-value="vals.get('work_auth')"/>
                             <option value="">-- select --</option>
-                            <option value="citizen">A U.S. Citizen</option>
-                            <option value="noncitizen_national">A Noncitizen National of the U.S.</option>
-                            <option value="permanent_resident">A Lawful Permanent Resident</option>
-                            <option value="authorized_alien">An Alien Authorized to Work</option>
+                            <option value="citizen" t-att-selected="'selected' if wa == 'citizen' else None">A U.S. Citizen</option>
+                            <option value="noncitizen_national" t-att-selected="'selected' if wa == 'noncitizen_national' else None">A Noncitizen National of the U.S.</option>
+                            <option value="permanent_resident" t-att-selected="'selected' if wa == 'permanent_resident' else None">A Lawful Permanent Resident</option>
+                            <option value="authorized_alien" t-att-selected="'selected' if wa == 'authorized_alien' else None">An Alien Authorized to Work</option>
                         </select>
                     </div>
-                    <div class="row g-2">
-                        <div class="col-12 col-md-6 mb-3">
-                            <label class="form-label">USCIS / A-Number (if applicable)</label>
-                            <input type="text" name="uscis_number" class="form-control"/>
+                    <div class="mb-3 cond-lpr" style="display:none;">
+                        <label class="form-label">USCIS / A-Number (Permanent Resident) *</label>
+                        <input type="text" name="uscis_number" class="form-control" t-att-value="vals.get('uscis_number')"/>
+                    </div>
+                    <div class="cond-alien" style="display:none;">
+                        <div class="mb-3">
+                            <label class="form-label">Work Authorization Expiration Date *</label>
+                            <input type="date" name="work_auth_expiry" class="form-control" t-att-value="vals.get('work_auth_expiry')"/>
                         </div>
-                        <div class="col-12 col-md-6 mb-3">
-                            <label class="form-label">Work Auth. Expiration (if any)</label>
-                            <input type="date" name="work_auth_expiry" class="form-control"/>
+                        <p class="text-muted small mb-1">Provide at least one of the following: *</p>
+                        <div class="mb-2">
+                            <label class="form-label">USCIS / A-Number</label>
+                            <input type="text" name="uscis_number_alien" class="form-control" t-att-value="vals.get('uscis_number_alien')"/>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Form I-94 Admission Number</label>
+                            <input type="text" name="i94_number" class="form-control" t-att-value="vals.get('i94_number')"/>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Foreign Passport Number &amp; Country of Issuance</label>
+                            <input type="text" name="foreign_passport" class="form-control" t-att-value="vals.get('foreign_passport')"/>
                         </div>
                     </div>
 
                     <h5 class="mt-3">Documents</h5>
-                    <p class="text-muted small">Snap a photo with your phone. Photo ID is required; add your SSN card or work-authorization document.</p>
+                    <p class="text-muted small">Snap a photo with your phone. Add a photo ID, then a second document that proves you can work. Some documents (like a U.S. Passport or Green Card) prove both on their own.</p>
                     <div class="mb-3">
                         <label class="form-label">Photo ID — front *</label>
                         <input type="file" name="id_doc" class="form-control" accept="image/*,application/pdf" required="required"/>
@@ -151,14 +214,35 @@
                         <label class="form-label">Photo ID — back</label>
                         <input type="file" name="id_doc_back" class="form-control" accept="image/*,application/pdf"/>
                     </div>
+                    <div class="mb-2">
+                        <label class="form-label">Work-Authorization Document Type</label>
+                        <t t-set="wd" t-value="vals.get('work_doc_type')"/>
+                        <select name="work_doc_type" class="form-select">
+                            <option value="">-- select the document you're uploading --</option>
+                            <optgroup label="Proves BOTH identity and work authorization (List A)">
+                                <option value="us_passport" t-att-selected="'selected' if wd == 'us_passport' else None">U.S. Passport or Passport Card</option>
+                                <option value="perm_resident_card" t-att-selected="'selected' if wd == 'perm_resident_card' else None">Permanent Resident Card / Green Card (I-551)</option>
+                                <option value="ead_i766" t-att-selected="'selected' if wd == 'ead_i766' else None">Employment Authorization Document (I-766)</option>
+                                <option value="foreign_passport_i551" t-att-selected="'selected' if wd == 'foreign_passport_i551' else None">Foreign Passport with temporary I-551 stamp / MRIV</option>
+                                <option value="foreign_passport_i94" t-att-selected="'selected' if wd == 'foreign_passport_i94' else None">Foreign Passport with Form I-94 / I-94A</option>
+                            </optgroup>
+                            <optgroup label="Proves work authorization — upload with your photo ID (List C)">
+                                <option value="ssn_card" t-att-selected="'selected' if wd == 'ssn_card' else None">Social Security Card</option>
+                                <option value="birth_certificate" t-att-selected="'selected' if wd == 'birth_certificate' else None">U.S. Birth Certificate (certified copy)</option>
+                                <option value="birth_abroad" t-att-selected="'selected' if wd == 'birth_abroad' else None">Certification of Birth Abroad (FS-545 / DS-1350 / FS-240)</option>
+                                <option value="tribal_doc" t-att-selected="'selected' if wd == 'tribal_doc' else None">Native American Tribal Document</option>
+                                <option value="other_dhs" t-att-selected="'selected' if wd == 'other_dhs' else None">Other DHS work-authorization document</option>
+                            </optgroup>
+                        </select>
+                    </div>
                     <div class="mb-3">
-                        <label class="form-label">SSN Card / Work-Authorization Document</label>
+                        <label class="form-label">Upload the Work-Authorization Document</label>
                         <input type="file" name="ssn_doc" class="form-control" accept="image/*,application/pdf"/>
                     </div>
 
                     <h5 class="mt-3">Attestation &amp; Signature</h5>
                     <div class="form-check mb-3">
-                        <input type="checkbox" name="attest" value="1" class="form-check-input" id="attest" required="required"/>
+                        <input type="checkbox" name="attest" value="1" class="form-check-input" id="attest" required="required" t-att-checked="'checked' if vals.get('attest') else None"/>
                         <label class="form-check-label" for="attest">
                             I attest, under penalty of perjury, that the information
                             above is true and correct, that I am authorized to work
@@ -169,17 +253,44 @@
                     <div class="row g-2">
                         <div class="col-12 col-md-8 mb-3">
                             <label class="form-label">Signature (type your legal name) *</label>
-                            <input type="text" name="signature_name" class="form-control" required="required"/>
+                            <input type="text" name="signature_name" class="form-control" required="required" t-att-value="vals.get('signature_name')"/>
                         </div>
                         <div class="col-12 col-md-4 mb-3">
                             <label class="form-label">Date</label>
-                            <input type="date" name="signature_date" class="form-control"/>
+                            <input type="date" name="signature_date" class="form-control" t-att-value="vals.get('signature_date')"/>
                         </div>
                     </div>
 
                     <button type="submit" class="btn btn-primary btn-lg w-100 mb-4">
                         Submit Application
                     </button>
+                    <script type="text/javascript">
+                        (function () {
+                            var form = document.getElementById('onboard1099');
+                            if (!form) { return; }
+                            function toggle(sel, show, reqNames) {
+                                form.querySelectorAll(sel).forEach(function (el) {
+                                    el.style.display = show ? '' : 'none';
+                                    el.querySelectorAll('input,select').forEach(function (f) {
+                                        if (reqNames &amp;&amp; reqNames.indexOf(f.name) !== -1) {
+                                            f.required = show;
+                                        }
+                                    });
+                                });
+                            }
+                            function sync() {
+                                var tax = form.querySelector('#w9_tax_class').value;
+                                toggle('.cond-llc', tax === 'llc', ['w9_llc_class']);
+                                toggle('.cond-other', tax === 'other', ['w9_other_desc']);
+                                var wa = form.querySelector('#work_auth').value;
+                                toggle('.cond-lpr', wa === 'permanent_resident', ['uscis_number']);
+                                toggle('.cond-alien', wa === 'authorized_alien', ['work_auth_expiry']);
+                            }
+                            form.querySelector('#w9_tax_class').addEventListener('change', sync);
+                            form.querySelector('#work_auth').addEventListener('change', sync);
+                            sync();
+                        })();
+                    </script>
                 </form>
             </div>
         </t>

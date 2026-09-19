@@ -48,6 +48,161 @@
             </xpath>
 
             <xpath expr="//field[@name='timesheet_ids']" position="after">
+                <!-- Department call-out sheets + digital mailing live at the
+                     TOP of Timesheets: the coordinator routes managers, prints
+                     or emails the call-outs, and tracks certification before
+                     working the roster/hours below. Coordinator-gated because
+                     the Timesheets tab itself is not. -->
+                <div groups="elksevent.group_event_coordinator"
+                     invisible="not x_is_event">
+                    <group string="Department Managers (route the call-outs)">
+                        <field name="x_bar_manager_id"/>
+                        <field name="x_kitchen_manager_id"/>
+                        <field name="x_custodial_manager_id"/>
+                    </group>
+                    <separator string="Department Call-Outs (print or email a quote request)"/>
+                    <div class="mt-2 mb-3">
+                            <button name="%(action_report_event_callout)d" type="action"
+                                    string="All Departments" class="btn-secondary me-2 mb-2" icon="fa-print"/>
+                            <button name="%(action_report_event_callout_bar)d" type="action"
+                                    string="Bar" class="btn-secondary me-2 mb-2" icon="fa-print"
+                                    invisible="not x_bar_use"/>
+                            <button name="%(action_report_event_callout_kitchen)d" type="action"
+                                    string="Kitchen" class="btn-secondary me-2 mb-2" icon="fa-print"
+                                    invisible="not x_food_by_us"/>
+                            <button name="%(action_report_event_callout_custodial)d" type="action"
+                                    string="Custodial" class="btn-secondary me-2 mb-2" icon="fa-print"
+                                    invisible="not x_cleaning_use"/>
+                    </div>
+                    <separator string="Send Digital Call-Out (manager reviews &amp; certifies in their portal)"/>
+                    <div class="alert alert-warning" role="alert"
+                         invisible="not x_callout_changes_pending">
+                        <strong>Plans changed since a call-out was sent.</strong>
+                        Review the differences below and use the amber
+                        <em>Resend</em> button for any department the manager
+                        needs to re-check. Benign changes can be left — the
+                        manager still sees what was originally asked vs. now.
+                        <field name="x_callout_changes_html" nolabel="1"
+                               readonly="1"/>
+                    </div>
+                    <div class="mt-2 mb-3">
+                            <!-- Bar: Send (first time) -> Re-send / amber Resend on change; green badge when certified. -->
+                            <button name="action_send_bar_callout" type="object"
+                                    string="Send Bar" class="btn-primary me-2 mb-2" icon="fa-paper-plane"
+                                    invisible="not x_bar_use or x_bar_callout_sent"/>
+                            <button name="action_send_bar_callout" type="object"
+                                    string="Resend Bar (changes)" class="btn-warning me-2 mb-2" icon="fa-refresh"
+                                    invisible="not x_bar_callout_changed"/>
+                            <button name="action_notify_bar_callout" type="object"
+                                    string="Re-send Bar" class="btn-outline-secondary me-2 mb-2" icon="fa-envelope"
+                                    invisible="not x_bar_callout_sent or x_bar_callout_certified or x_bar_callout_changed"
+                                    help="Re-send the call-out email to the bar manager (notify them of any update)."/>
+                            <button name="action_send_bar_callout" type="object"
+                                    string="Bar Certified" class="btn-success me-2 mb-2" icon="fa-check"
+                                    invisible="not x_bar_callout_certified or x_bar_callout_changed"/>
+                            <!-- Kitchen -->
+                            <button name="action_send_kitchen_callout" type="object"
+                                    string="Send Kitchen" class="btn-primary me-2 mb-2" icon="fa-paper-plane"
+                                    invisible="not x_food_by_us or x_kitchen_callout_sent"/>
+                            <button name="action_send_kitchen_callout" type="object"
+                                    string="Resend Kitchen (changes)" class="btn-warning me-2 mb-2" icon="fa-refresh"
+                                    invisible="not x_kitchen_callout_changed"/>
+                            <button name="action_notify_kitchen_callout" type="object"
+                                    string="Re-send Kitchen" class="btn-outline-secondary me-2 mb-2" icon="fa-envelope"
+                                    invisible="not x_kitchen_callout_sent or x_kitchen_callout_certified or x_kitchen_callout_changed"
+                                    help="Re-send the call-out email to the kitchen manager."/>
+                            <button name="action_send_kitchen_callout" type="object"
+                                    string="Kitchen Certified" class="btn-success me-2 mb-2" icon="fa-check"
+                                    invisible="not x_kitchen_callout_certified or x_kitchen_callout_changed"/>
+                            <!-- Custodial -->
+                            <button name="action_send_custodial_callout" type="object"
+                                    string="Send Custodial" class="btn-primary me-2 mb-2" icon="fa-paper-plane"
+                                    invisible="not x_cleaning_use or x_custodial_callout_sent"/>
+                            <button name="action_send_custodial_callout" type="object"
+                                    string="Resend Custodial (changes)" class="btn-warning me-2 mb-2" icon="fa-refresh"
+                                    invisible="not x_custodial_callout_changed"/>
+                            <button name="action_notify_custodial_callout" type="object"
+                                    string="Re-send Custodial" class="btn-outline-secondary me-2 mb-2" icon="fa-envelope"
+                                    invisible="not x_custodial_callout_sent or x_custodial_callout_certified or x_custodial_callout_changed"
+                                    help="Re-send the call-out email to the custodial manager."/>
+                            <button name="action_send_custodial_callout" type="object"
+                                    string="Custodial Certified" class="btn-success me-2 mb-2" icon="fa-check"
+                                    invisible="not x_custodial_callout_certified or x_custodial_callout_changed"/>
+                            <button name="action_remind_pending_callouts" type="object"
+                                    string="Remind Pending Managers" class="btn-secondary me-2 mb-2"
+                                    icon="fa-bell"
+                                    help="Email a reminder to every manager whose call-out is still awaiting certification."/>
+                    </div>
+                    <field name="x_callout_ids" readonly="1">
+                        <list decoration-warning="has_plan_changes">
+                            <field name="department_label" string="Department"/>
+                            <field name="state"/>
+                            <field name="has_plan_changes" string="Updated"
+                                   widget="boolean"/>
+                            <field name="manager_partner_id" string="Manager"
+                                   optional="show"/>
+                            <field name="staff_count" string="People"/>
+                            <field name="hours_total" string="Hours"/>
+                            <field name="raw_cost_total" string="Labor Cost"
+                                   optional="show"/>
+                            <field name="cost_total" string="Billed"
+                                   optional="show"/>
+                            <field name="gratuity" optional="show"/>
+                            <field name="certified_on" optional="hide"/>
+                            <field name="currency_id" column_invisible="1"/>
+                            <button name="action_open_portal_form" type="object"
+                                    string="Open Form" icon="fa-external-link"
+                                    title="Open the manager's online call-out form"/>
+                        </list>
+                        <form>
+                            <header>
+                                <button name="action_open_portal_form"
+                                        type="object" class="btn-primary"
+                                        icon="fa-external-link"
+                                        string="Open Online Form"/>
+                            </header>
+                            <group>
+                                <group>
+                                    <field name="department_label" string="Department"/>
+                                    <field name="manager_partner_id"/>
+                                    <field name="state"/>
+                                </group>
+                                <group>
+                                    <field name="gratuity"/>
+                                    <field name="gratuity_distributed"/>
+                                    <field name="gratuity_remaining"/>
+                                    <field name="cost_total"/>
+                                    <field name="certified_on"/>
+                                    <field name="currency_id" column_invisible="1"/>
+                                </group>
+                            </group>
+                            <div class="alert alert-warning" role="alert"
+                                 invisible="not has_plan_changes">
+                                <strong>Plan changed since this was sent.</strong>
+                                Resend from the buttons above if the
+                                manager needs to re-check.
+                                <field name="plan_changes_html" nolabel="1"
+                                       readonly="1"/>
+                            </div>
+                            <separator string="Staff Roster"/>
+                            <field name="line_ids">
+                                <list editable="bottom">
+                                    <field name="employee_id"/>
+                                    <field name="person_name"/>
+                                    <field name="role"/>
+                                    <field name="hours"/>
+                                    <field name="rate"/>
+                                    <field name="bill_rate"/>
+                                    <field name="cost"/>
+                                    <field name="gratuity_share" sum="Gratuity"/>
+                                    <field name="currency_id" column_invisible="1"/>
+                                </list>
+                            </field>
+                            <field name="manager_notes" placeholder="Manager notes..."/>
+                        </form>
+                    </field>
+                </div>
+
                 <separator string="Planned Staff Assignments"
                            invisible="not x_is_event"/>
                 <div class="text-muted" invisible="not x_is_event">
@@ -469,6 +624,11 @@
                                    invisible="x_insurance_by != 'lodge'"/>
                             <field name="x_prohibited_ack"
                                    invisible="x_insurance_by != 'lodge'"/>
+                            <button name="action_create_insurance_task"
+                                    type="object" class="btn-link"
+                                    icon="fa-tasks"
+                                    string="Create Insurance Task"
+                                    help="Add the matching insurance sub-task (Sub-tasks tab), due 4 days before the event: 'Purchase event insurance' when the lodge provides, or 'Collect insurance certificate naming Elks Lodge #896 as additionally insured' when the renter provides. Also created automatically on approval."/>
                             <button name="action_print_insurance_worksheet"
                                     type="object" class="btn-link"
                                     icon="fa-print"
@@ -786,152 +946,6 @@
                                     string="Gratuity (PDF)" class="btn-secondary" icon="fa-money"/>
                         </group>
                     </group>
-                    <group string="Department Managers (route the call-outs)">
-                        <field name="x_bar_manager_id"/>
-                        <field name="x_kitchen_manager_id"/>
-                        <field name="x_custodial_manager_id"/>
-                    </group>
-                    <separator string="Department Call-Outs (print or email a quote request)"/>
-                    <div class="d-flex flex-wrap gap-2 mb-3">
-                            <button name="%(action_report_event_callout)d" type="action"
-                                    string="All Departments" class="btn-secondary" icon="fa-print"/>
-                            <button name="%(action_report_event_callout_bar)d" type="action"
-                                    string="Bar" class="btn-secondary" icon="fa-print"
-                                    invisible="not x_bar_use"/>
-                            <button name="%(action_report_event_callout_kitchen)d" type="action"
-                                    string="Kitchen" class="btn-secondary" icon="fa-print"
-                                    invisible="not x_food_by_us"/>
-                            <button name="%(action_report_event_callout_custodial)d" type="action"
-                                    string="Custodial" class="btn-secondary" icon="fa-print"
-                                    invisible="not x_cleaning_use"/>
-                    </div>
-                    <separator string="Send Digital Call-Out (manager reviews &amp; certifies in their portal)"/>
-                    <div class="alert alert-warning" role="alert"
-                         invisible="not x_callout_changes_pending">
-                        <strong>Plans changed since a call-out was sent.</strong>
-                        Review the differences below and use the amber
-                        <em>Resend</em> button for any department the manager
-                        needs to re-check. Benign changes can be left — the
-                        manager still sees what was originally asked vs. now.
-                        <field name="x_callout_changes_html" nolabel="1"
-                               readonly="1"/>
-                    </div>
-                    <div class="d-flex flex-wrap gap-2 mb-2">
-                            <!-- Bar: Send (first time) -> Re-send / amber Resend on change; green badge when certified. -->
-                            <button name="action_send_bar_callout" type="object"
-                                    string="Send Bar" class="btn-primary" icon="fa-paper-plane"
-                                    invisible="not x_bar_use or x_bar_callout_sent"/>
-                            <button name="action_send_bar_callout" type="object"
-                                    string="Resend Bar (changes)" class="btn-warning" icon="fa-refresh"
-                                    invisible="not x_bar_callout_changed"/>
-                            <button name="action_notify_bar_callout" type="object"
-                                    string="Re-send Bar" class="btn-outline-secondary" icon="fa-envelope"
-                                    invisible="not x_bar_callout_sent or x_bar_callout_certified or x_bar_callout_changed"
-                                    help="Re-send the call-out email to the bar manager (notify them of any update)."/>
-                            <button name="action_send_bar_callout" type="object"
-                                    string="Bar Certified" class="btn-success" icon="fa-check"
-                                    invisible="not x_bar_callout_certified or x_bar_callout_changed"/>
-                            <!-- Kitchen -->
-                            <button name="action_send_kitchen_callout" type="object"
-                                    string="Send Kitchen" class="btn-primary" icon="fa-paper-plane"
-                                    invisible="not x_food_by_us or x_kitchen_callout_sent"/>
-                            <button name="action_send_kitchen_callout" type="object"
-                                    string="Resend Kitchen (changes)" class="btn-warning" icon="fa-refresh"
-                                    invisible="not x_kitchen_callout_changed"/>
-                            <button name="action_notify_kitchen_callout" type="object"
-                                    string="Re-send Kitchen" class="btn-outline-secondary" icon="fa-envelope"
-                                    invisible="not x_kitchen_callout_sent or x_kitchen_callout_certified or x_kitchen_callout_changed"
-                                    help="Re-send the call-out email to the kitchen manager."/>
-                            <button name="action_send_kitchen_callout" type="object"
-                                    string="Kitchen Certified" class="btn-success" icon="fa-check"
-                                    invisible="not x_kitchen_callout_certified or x_kitchen_callout_changed"/>
-                            <!-- Custodial -->
-                            <button name="action_send_custodial_callout" type="object"
-                                    string="Send Custodial" class="btn-primary" icon="fa-paper-plane"
-                                    invisible="not x_cleaning_use or x_custodial_callout_sent"/>
-                            <button name="action_send_custodial_callout" type="object"
-                                    string="Resend Custodial (changes)" class="btn-warning" icon="fa-refresh"
-                                    invisible="not x_custodial_callout_changed"/>
-                            <button name="action_notify_custodial_callout" type="object"
-                                    string="Re-send Custodial" class="btn-outline-secondary" icon="fa-envelope"
-                                    invisible="not x_custodial_callout_sent or x_custodial_callout_certified or x_custodial_callout_changed"
-                                    help="Re-send the call-out email to the custodial manager."/>
-                            <button name="action_send_custodial_callout" type="object"
-                                    string="Custodial Certified" class="btn-success" icon="fa-check"
-                                    invisible="not x_custodial_callout_certified or x_custodial_callout_changed"/>
-                            <button name="action_remind_pending_callouts" type="object"
-                                    string="Remind Pending Managers" class="btn-secondary"
-                                    icon="fa-bell"
-                                    help="Email a reminder to every manager whose call-out is still awaiting certification."/>
-                    </div>
-                    <field name="x_callout_ids" readonly="1">
-                        <list decoration-warning="has_plan_changes">
-                            <field name="department_label" string="Department"/>
-                            <field name="state"/>
-                            <field name="has_plan_changes" string="Updated"
-                                   widget="boolean"/>
-                            <field name="manager_partner_id" string="Manager"
-                                   optional="show"/>
-                            <field name="staff_count" string="People"/>
-                            <field name="hours_total" string="Hours"/>
-                            <field name="raw_cost_total" string="Labor Cost"
-                                   optional="show"/>
-                            <field name="cost_total" string="Billed"
-                                   optional="show"/>
-                            <field name="gratuity" optional="show"/>
-                            <field name="certified_on" optional="hide"/>
-                            <field name="currency_id" column_invisible="1"/>
-                            <button name="action_open_portal_form" type="object"
-                                    string="Open Form" icon="fa-external-link"
-                                    title="Open the manager's online call-out form"/>
-                        </list>
-                        <form>
-                            <header>
-                                <button name="action_open_portal_form"
-                                        type="object" class="btn-primary"
-                                        icon="fa-external-link"
-                                        string="Open Online Form"/>
-                            </header>
-                            <group>
-                                <group>
-                                    <field name="department_label" string="Department"/>
-                                    <field name="manager_partner_id"/>
-                                    <field name="state"/>
-                                </group>
-                                <group>
-                                    <field name="gratuity"/>
-                                    <field name="gratuity_distributed"/>
-                                    <field name="gratuity_remaining"/>
-                                    <field name="cost_total"/>
-                                    <field name="certified_on"/>
-                                    <field name="currency_id" column_invisible="1"/>
-                                </group>
-                            </group>
-                            <div class="alert alert-warning" role="alert"
-                                 invisible="not has_plan_changes">
-                                <strong>Plan changed since this was sent.</strong>
-                                Resend from the event's Documents tab if the
-                                manager needs to re-check.
-                                <field name="plan_changes_html" nolabel="1"
-                                       readonly="1"/>
-                            </div>
-                            <separator string="Staff Roster"/>
-                            <field name="line_ids">
-                                <list editable="bottom">
-                                    <field name="employee_id"/>
-                                    <field name="person_name"/>
-                                    <field name="role"/>
-                                    <field name="hours"/>
-                                    <field name="rate"/>
-                                    <field name="bill_rate"/>
-                                    <field name="cost"/>
-                                    <field name="gratuity_share" sum="Gratuity"/>
-                                    <field name="currency_id" column_invisible="1"/>
-                                </list>
-                            </field>
-                            <field name="manager_notes" placeholder="Manager notes..."/>
-                        </form>
-                    </field>
                 </page>
 
                 <!-- ===== After Action ===== -->

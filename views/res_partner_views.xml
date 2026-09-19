@@ -10,6 +10,16 @@
             <field name="category_id" position="after">
                 <field name="x_is_catering"
                        invisible="company_type != 'company'"/>
+                <field name="x_caterer_insurance_on_file"
+                       string="Insurance Certificate on File (Lodge additionally insured)"
+                       invisible="not x_is_catering"/>
+                <field name="x_caterer_insurance_expiry"
+                       invisible="not x_is_catering"/>
+                <field name="x_caterer_insurance_doc"
+                       filename="x_caterer_insurance_doc_name"
+                       string="Insurance Certificate"
+                       invisible="not x_is_catering"/>
+                <field name="x_caterer_insurance_doc_name" invisible="1"/>
             </field>
         </field>
     </record>
