@@ -5,6 +5,7 @@ from . import maintenance_location
 from . import event_room_booking
 from . import event_cost_type
 from . import event_cost_line
+from . import catering_menu
 from . import event_staff_assignment
 from . import event_access_window
 from . import event_callout

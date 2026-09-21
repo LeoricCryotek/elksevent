@@ -299,6 +299,18 @@
                                     <div class="small text-muted">Other Requests</div>
                                     <div style="white-space:pre-line;"><t t-out="callout._chg('x_kitchen_customer_request', evt.x_kitchen_customer_request or '')"/></div>
                                 </div>
+                                <t t-set="menus" t-value="evt.x_catering_menu_ids.filtered('selected') or evt.x_catering_menu_ids"/>
+                                <div class="col-12" t-if="menus">
+                                    <div class="small text-muted">Menu Package(s) to Prepare</div>
+                                    <t t-foreach="menus" t-as="m">
+                                        <div class="fw-semibold">
+                                            <t t-esc="m.menu_id.name"/>
+                                            <t t-if="m.selected"> (chosen)</t>
+                                            <t t-if="m.guest_count"> — <t t-esc="m.guest_count"/> guests</t>
+                                        </div>
+                                        <div class="small" style="white-space:pre-line;"><t t-esc="', '.join(m.menu_id.component_lines())"/></div>
+                                    </t>
+                                </div>
                             </t>
                             <t t-if="callout.department == 'custodial'">
                                 <div class="col-6 col-md-3" t-if="evt.x_cleanup_before_datetime or 'x_cleanup_before_datetime' in chgmap">

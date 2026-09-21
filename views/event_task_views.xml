@@ -668,6 +668,41 @@
                             <field name="x_caterer_insurance_on_file"
                                    invisible="not x_food_request or not x_caterer_id or x_food_by_us"/>
                         </group>
+                    </group>
+                    <separator string="Catering Menu Quote"
+                               invisible="not x_food_request"/>
+                    <div class="text-muted" invisible="not x_food_request">
+                        Add menu packages and a guest count to build a catering
+                        quote — each line is guests x per-person. Pick a menu, or
+                        type a new name and choose "Create and edit" to add an
+                        entree, sides and price. Tick "Chosen" for the option the
+                        customer picked, then print the quote.
+                    </div>
+                    <field name="x_catering_menu_ids"
+                           invisible="not x_food_request"
+                           context="{'default_guest_count': x_guest_count}">
+                        <list editable="bottom">
+                            <field name="sequence" widget="handle"/>
+                            <field name="menu_id"/>
+                            <field name="guest_count"/>
+                            <field name="price_per_person"/>
+                            <field name="line_total"/>
+                            <field name="selected" string="Chosen"/>
+                            <field name="currency_id" column_invisible="1"/>
+                        </list>
+                    </field>
+                    <group invisible="not x_food_request">
+                        <group>
+                            <field name="x_catering_selected_total"
+                                   invisible="x_catering_selected_total == 0"/>
+                        </group>
+                        <group>
+                            <button name="action_print_catering_quote"
+                                    type="object" class="btn-secondary me-2 mb-2"
+                                    icon="fa-print" string="Print Catering Quote"/>
+                        </group>
+                    </group>
+                    <group>
                         <group string="Other">
                             <field name="x_gratuity_amount" readonly="1"
                                    string="Gratuity (total)"/>

@@ -284,10 +284,32 @@ class ProjectTask(models.Model):
         "Duration (hrs)", compute='_compute_event_duration', store=True,
     )
     x_guest_count = fields.Integer("Expected Guests", tracking=True)
+    x_catering_menu_ids = fields.One2many(
+        "elks.event.catering.line", "event_id",
+        string="Catering Menu Options",
+        help="Menu packages quoted for this event. Each line multiplies the "
+             "per-person price by the guest count.")
+    x_catering_selected_total = fields.Monetary(
+        "Selected Catering Total", compute="_compute_catering_totals",
+        currency_field="x_currency_id",
+        help="Total of the menu option(s) ticked as Chosen.")
     x_event_description = fields.Text(
         "Calendar Event Details",
         help="The event details that appear on the lodge calendar entry.",
     )
+
+    @api.depends("x_catering_menu_ids.line_total",
+                 "x_catering_menu_ids.selected")
+    def _compute_catering_totals(self):
+        for rec in self:
+            rec.x_catering_selected_total = sum(
+                rec.x_catering_menu_ids.filtered("selected").mapped(
+                    "line_total"))
+
+    def action_print_catering_quote(self):
+        self.ensure_one()
+        return self.env.ref(
+            "elksevent.action_report_catering_quote").report_action(self)
     x_special_requests = fields.Text("Special Requests")
 
     # Customer contact (separate from partner_id for public submissions)

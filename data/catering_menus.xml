@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Starter catering catalogue. noupdate so the lodge's edits/prices
+         survive upgrades. -->
+    <data noupdate="1">
+        <record id="catering_menu_steak" model="elks.catering.menu">
+            <field name="name">Bite-Size Steak Dinner</field>
+            <field name="sequence">10</field>
+            <field name="price_per_person">24.00</field>
+            <field name="components">Bite-Size Steak
+Baked Potato
+Vegetables
+Salad Bar
+Roll
+Dessert</field>
+        </record>
+
+        <record id="catering_menu_pulled_pork" model="elks.catering.menu">
+            <field name="name">Pulled Pork Dinner</field>
+            <field name="sequence">20</field>
+            <field name="price_per_person">15.00</field>
+            <field name="components">Pulled Pork
+Slider Buns
+Coleslaw
+Ambrosia
+Dessert</field>
+        </record>
+
+        <record id="catering_menu_fettuccine" model="elks.catering.menu">
+            <field name="name">Fettuccine Dinner</field>
+            <field name="sequence">30</field>
+            <field name="price_per_person">12.00</field>
+            <field name="components">Fettuccine
+Breadsticks
+Green Beans
+Salad Bar
+Dessert</field>
+        </record>
+
+        <record id="catering_menu_prime_rib_salmon" model="elks.catering.menu">
+            <field name="name">Prime Rib &amp; Salmon Dinner</field>
+            <field name="sequence">40</field>
+            <field name="price_per_person">34.00</field>
+            <field name="components">Prime Rib &amp; Salmon
+Baked Potato
+Vegetable
+Salad Bar
+Roll
+Dessert</field>
+        </record>
+    </data>
+</odoo>

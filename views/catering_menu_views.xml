@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Catering menu package catalogue (Configuration). -->
+    <record id="view_catering_menu_list" model="ir.ui.view">
+        <field name="name">elks.catering.menu.list</field>
+        <field name="model">elks.catering.menu</field>
+        <field name="arch" type="xml">
+            <list editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="price_per_person"/>
+                <field name="components"/>
+                <field name="currency_id" column_invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_catering_menu_form" model="ir.ui.view">
+        <field name="name">elks.catering.menu.form</field>
+        <field name="model">elks.catering.menu</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="price_per_person"/>
+                        <field name="active"/>
+                        <field name="currency_id" invisible="1"/>
+                    </group>
+                    <separator string="Included Items (one per line)"/>
+                    <field name="components" nolabel="1"
+                           placeholder="Bite-Size Steak&#10;Baked Potato&#10;Vegetables&#10;Salad Bar&#10;Roll&#10;Dessert"/>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_catering_menus" model="ir.actions.act_window">
+        <field name="name">Catering Menus</field>
+        <field name="res_model">elks.catering.menu</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Add a catering menu package</p>
+            <p>Each package has a per-person price and its plate components. Add
+               them to an event's Food section to build a catering quote.</p>
+        </field>
+    </record>
+</odoo>

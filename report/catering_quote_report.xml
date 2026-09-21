@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ==========================================================================
+     Catering Quote: lists the menu options quoted for an event, each with its
+     components and (guests x per-person = total). ASCII-only inline styles,
+     ligatures off, so no PDF-engine mojibake.
+     ========================================================================== -->
+<odoo>
+    <record id="action_report_catering_quote" model="ir.actions.report">
+        <field name="name">Catering Quote</field>
+        <field name="model">project.task</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_catering_quote</field>
+        <field name="report_file">elksevent.report_catering_quote</field>
+        <field name="paperformat_id" ref="base.paperformat_us"/>
+        <field name="print_report_name">'Catering Quote - %s' % (object.name or 'Event')</field>
+    </record>
+
+    <template id="report_catering_quote">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="lodge"
+                   t-value="o.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
+                <div class="page"
+                     style="font-family:Helvetica,Arial,sans-serif; color:#111; font-variant-ligatures:none;">
+
+                    <div style="text-align:center; border-bottom:2px solid #4B2E83; padding-bottom:8px; margin-bottom:14px;">
+                        <div style="font-size:20px; font-weight:bold;">Catering Quote</div>
+                        <div style="font-size:12px; color:#444;">
+                            <t t-esc="o.name or 'Event'"/>
+                            <t t-if="o.x_event_date"> - <span t-field="o.x_event_date"/></t>
+                        </div>
+                    </div>
+
+                    <div style="font-size:12px; margin-bottom:12px;">
+                        <strong>Estimated Guest Count:</strong>
+                        <t t-esc="o.x_guest_count or 0"/> People
+                    </div>
+
+                    <t t-set="lines" t-value="o.x_catering_menu_ids"/>
+                    <t t-if="not lines">
+                        <p style="color:#666;">No catering options have been added to this event yet.</p>
+                    </t>
+
+                    <t t-foreach="lines" t-as="ln">
+                        <div t-att-style="'border:1px solid %s; border-radius:6px; padding:10px 14px; margin-bottom:12px;' % ('#4B2E83' if ln.selected else '#ccc')">
+                            <div style="font-size:15px; font-weight:bold;">
+                                <t t-esc="ln.menu_id.name"/>
+                                <t t-if="ln.selected"><span style="font-size:11px; color:#4B2E83;"> (Selected)</span></t>
+                                <span style="float:right;">
+                                    $<t t-esc="'%.2f' % (ln.price_per_person or 0.0)"/> per person
+                                </span>
+                            </div>
+                            <ul style="margin:6px 0 8px 18px; font-size:12px;">
+                                <li t-foreach="ln.menu_id.component_lines()" t-as="c">
+                                    <t t-esc="c"/>
+                                </li>
+                            </ul>
+                            <div style="font-size:13px; font-weight:bold; text-align:right;">
+                                <t t-esc="ln.guest_count or 0"/> Guests
+                                x $<t t-esc="'%.2f' % (ln.price_per_person or 0.0)"/>
+                                = $<t t-esc="'%.2f' % (ln.line_total or 0.0)"/>
+                            </div>
+                        </div>
+                    </t>
+
+                    <p style="font-size:10.5px; color:#666; margin-top:16px;">
+                        Pricing is based on an estimated attendance of
+                        <t t-esc="o.x_guest_count or 0"/> guests. Final pricing
+                        may be adjusted based on the confirmed guest count.
+                    </p>
+                </div>
+            </t>
+        </t>
+    </template>
+</odoo>
