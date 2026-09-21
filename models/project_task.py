@@ -882,6 +882,15 @@ class ProjectTask(models.Model):
         help="What the customer is actually billed for the room after the "
              "member / Celebration-of-Life discount ($0 for a COL waiver).",
     )
+    x_room_auto_discount = fields.Monetary(
+        "Member / Non-Profit Room Discount", currency_field='x_currency_id',
+        compute='_compute_financials', store=True,
+        help="The automatic 50% member or non-profit reduction taken off the "
+             "room subtotal. Shown on the Billing Summary; separate from any "
+             "Additional (courtesy) Discount.",
+    )
+    x_room_auto_discount_label = fields.Char(
+        "Room Discount Label", compute='_compute_financials', store=True)
 
     # ------------------------------------------------------------------
     # Cost lines (the 'PO section')
@@ -2155,6 +2164,17 @@ class ProjectTask(models.Model):
             # the billed room after that discount (0 for a COL waiver).
             rooms_net, room_disc = rec._event_room_discount()
             rec.x_room_net = rooms_net
+            # The automatic 50% member / non-profit reduction (room charged
+            # minus billed minus any additional courtesy discount), surfaced as
+            # its own Billing Summary line so it's visible, not just baked in.
+            rec.x_room_auto_discount = max(
+                (rec.x_room_income or 0.0) - rooms_net - room_disc, 0.0)
+            if rec.x_is_member:
+                rec.x_room_auto_discount_label = _("Member Discount (50%)")
+            elif rec.x_is_nonprofit:
+                rec.x_room_auto_discount_label = _("Non-Profit Discount (50%)")
+            else:
+                rec.x_room_auto_discount_label = _("Room Discount")
 
             # Taxable base = GOODS (rooms + items flagged Taxable). Event costs
             # are billed at FULL (no discount); services (coordinator + items
@@ -2881,6 +2901,31 @@ class ProjectTask(models.Model):
                 'price_unit': nontax_total,
                 'tax_ids': [(6, 0, [])],
                 'x_event_source': 'event_rental_nt',
+            })
+        # Discount note: spell out the member/non-profit reduction and any
+        # additional courtesy discount (with its reason) so the customer sees
+        # what was taken off, even though the room rolls into one rental line.
+        room_charged = self.x_room_income or 0.0
+        auto_disc = max(room_charged - rooms_net - _room_disc, 0.0)
+        disc_bits = []
+        if auto_disc > 0.005:
+            disc_bits.append(_("%(lbl)s: -%(cur)s%(amt).2f",
+                               lbl=(self.x_room_auto_discount_label
+                                    or _("Room Discount")),
+                               cur=(self.x_currency_id.symbol or '$'),
+                               amt=auto_disc))
+        if _room_disc > 0.005:
+            why = _(" (%s)", self.x_discount_note) if self.x_discount_note else ""
+            disc_bits.append(_("%(lbl)s: -%(cur)s%(amt).2f%(why)s",
+                               lbl=self._event_discount_label(),
+                               cur=(self.x_currency_id.symbol or '$'),
+                               amt=_room_disc, why=why))
+        if disc_bits:
+            SOL.create({
+                'order_id': so.id,
+                'display_type': 'line_note',
+                'name': _("Discount applied - %s", "; ".join(disc_bits)),
+                'x_event_source': 'discount_note',
             })
         # Disclaimer note under the totals.
         SOL.create({
@@ -4498,33 +4543,48 @@ class ProjectTask(models.Model):
 
         _base, _d, deposit_pct = self._event_invoice_base()
         rooms_net, room_disc = self._event_room_discount()
-        room_retail = self.x_room_retail or 0.0
+        room_charged = self.x_room_income or 0.0
+        # The automatic member / non-profit 50% reduction (room charged minus
+        # billed minus any additional courtesy discount).
+        auto_disc = max(room_charged - rooms_net - room_disc, 0.0)
         ec_taxable = sum(c.total for c in self.x_cost_line_ids if c.x_taxable)
         ec_nontax = (self.x_eventcosts_total or 0.0) - ec_taxable
         coord = self.x_coordinator_fee or 0.0
         taxable_net = rooms_net + ec_taxable          # taxed
         nontax_net = ec_nontax + coord                # exempt
-        disc_label = self._event_discount_label()
 
         if kind == 'deposit':
             portion, line_prod = deposit_pct / 100.0, dep_product
         else:  # final = the whole total
             portion, line_prod = 1.0, facility
 
-        show_disc = (room_disc > 0.005
+        # Show the discount breakout for BOTH the automatic member/non-profit
+        # reduction and any additional courtesy discount (respecting the
+        # Lodge-Settings toggle).
+        show_disc = ((room_disc + auto_disc) > 0.005
                      and (not settings or settings.x_invoice_show_discount))
 
         lines = []
-        # ---- TAXABLE side (goods): room at retail + the discount ----
+        # ---- TAXABLE side (goods): room at charged price + the discount(s) ----
         if show_disc:
-            if room_retail:
-                lines.append(_line(_("Facility / Room Rental (retail)"),
-                                   room_retail * portion, line_prod, True))
+            if room_charged:
+                lines.append(_line(_("Facility / Room Rental"),
+                                   room_charged * portion, line_prod, True))
             if ec_taxable:
                 lines.append(_line(_("Taxable Event Costs"),
                                    ec_taxable * portion, line_prod, True))
-            lines.append(_line(_("Less: %s", disc_label),
-                               -room_disc * portion, line_prod, True))
+            if auto_disc > 0.005:
+                lines.append(_line(
+                    _("Less: %s",
+                      self.x_room_auto_discount_label or _("Room Discount")),
+                    -auto_disc * portion, line_prod, True))
+            if room_disc > 0.005:
+                why = (_(" - %s", self.x_discount_note)
+                       if self.x_discount_note else "")
+                lines.append(_line(
+                    _("Less: %(lbl)s%(why)s",
+                      lbl=self._event_discount_label(), why=why),
+                    -room_disc * portion, line_prod, True))
         elif taxable_net:
             tlabel = (_("Reservation Fee") if kind == 'deposit'
                       else _("Facility Usage and Rental"))

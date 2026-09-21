@@ -858,6 +858,18 @@
                                    invisible="x_room_retail == x_room_income"/>
                             <field name="x_room_income" readonly="1"
                                    string="Rooms Subtotal (charged)"/>
+                            <label for="x_room_auto_discount"
+                                   string="Member / Non-Profit Discount"
+                                   invisible="not x_room_auto_discount"/>
+                            <div class="o_row text-success"
+                                 invisible="not x_room_auto_discount">
+                                &#8722; <field name="x_room_auto_discount" readonly="1"
+                                       nolabel="1" class="oe_inline"/>
+                                <span class="text-muted">(<field name="x_room_auto_discount_label" readonly="1" nolabel="1" class="oe_inline"/>)</span>
+                            </div>
+                            <field name="x_room_net" readonly="1"
+                                   string="Rooms (net after discount)"
+                                   invisible="not x_room_auto_discount"/>
                             <field name="x_eventcosts_total" readonly="1"
                                    string="Event Costs Subtotal"/>
                             <label for="x_coordinator_fee"/>
