@@ -293,6 +293,20 @@ class ProjectTask(models.Model):
         "Selected Catering Total", compute="_compute_catering_totals",
         currency_field="x_currency_id",
         help="Total of the menu option(s) ticked as Chosen.")
+    x_menu_item_ids = fields.One2many(
+        "elks.event.menu.item", "event_id", string="Kitchen Menu Items",
+        help="Menu items the kitchen manager entered on their call-out. "
+             "Approve the customer's picks and set plate counts here.")
+    x_menu_approved_total = fields.Monetary(
+        "Approved Menu Total", compute="_compute_menu_totals",
+        currency_field="x_currency_id",
+        help="Total of the approved menu item(s): plates x price per plate.")
+
+    @api.depends("x_menu_item_ids.line_total", "x_menu_item_ids.approved")
+    def _compute_menu_totals(self):
+        for rec in self:
+            rec.x_menu_approved_total = sum(
+                rec.x_menu_item_ids.filtered("approved").mapped("line_total"))
     x_event_description = fields.Text(
         "Calendar Event Details",
         help="The event details that appear on the lodge calendar entry.",
@@ -3060,6 +3074,28 @@ class ProjectTask(models.Model):
                         'x_line_cogs': 0.0,
                         'x_taxable': False,
                         'x_auto_source': src,
+                    })
+
+            # Kitchen Menu — each APPROVED menu item (entered by the kitchen
+            # manager on the call-out, approved on the Approval tab) posts one
+            # Catering Food line: plates x price-per-plate, so it lands on the
+            # invoice and the P&L.
+            cat_type = tid('catering_food')
+            if cat_type:
+                cat_taxable = Type.browse(cat_type).taxable
+                for mi in rec.x_menu_item_ids.filtered('approved'):
+                    if not (mi.plates and mi.price_per_plate):
+                        continue
+                    Line.create({
+                        'event_id': rec.id,
+                        'cost_type_id': cat_type,
+                        'name': _("Kitchen Menu: %s (%s plates)",
+                                  mi.entree or _("Menu"), mi.plates or 0),
+                        'quantity': mi.plates or 0,
+                        'unit_cost': mi.price_per_plate or 0.0,
+                        'x_line_cogs': 0.0,
+                        'x_taxable': cat_taxable,
+                        'x_auto_source': 'menu_item_%s' % mi.id,
                     })
 
             # Insurance — the lodge charges a general liability-insurance fee on

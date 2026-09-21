@@ -305,7 +305,7 @@
                                     <t t-foreach="menus" t-as="m">
                                         <div class="fw-semibold">
                                             <t t-esc="m.menu_id.name"/>
-                                            <t t-if="m.selected"> (chosen)</t>
+                                            <t t-if="m.selected"> (ordered)</t>
                                             <t t-if="m.guest_count"> — <t t-esc="m.guest_count"/> guests</t>
                                         </div>
                                         <div class="small" style="white-space:pre-line;"><t t-esc="', '.join(m.menu_id.component_lines())"/></div>
@@ -410,6 +410,66 @@
                             <button type="button" id="roster_add" class="btn btn-sm btn-outline-secondary">+ Add person</button>
                             <button type="button" id="roster_split_grat" class="btn btn-sm btn-outline-secondary" t-if="has_grat">Split gratuity evenly</button>
                         </div>
+
+                        <t t-if="callout.department == 'kitchen'">
+                            <hr/>
+                            <h6 class="fw-bold">Menu Entry</h6>
+                            <p class="text-muted small mb-2">
+                                Enter each dish you can prepare — the entree, its
+                                sides, and the price per plate. The coordinator
+                                approves the customer's picks and sets plate
+                                counts on the event's Approval tab.
+                            </p>
+                            <t t-set="mitems" t-value="list(callout.event_id.x_menu_item_ids)"/>
+                            <div id="menu_entry">
+                                <t t-foreach="mitems" t-as="mi">
+                                    <div class="menu-row border rounded p-2 mb-2">
+                                        <div class="row g-2">
+                                            <div class="col-12 col-md-5">
+                                                <label class="form-label small mb-0">Entree</label>
+                                                <input type="text" t-attf-name="menu_entree_{{mi_index}}" class="form-control" t-att-value="mi.entree or ''" t-att-readonly="ro"/>
+                                                <input type="hidden" t-attf-name="menu_id_{{mi_index}}" t-att-value="mi.id"/>
+                                            </div>
+                                            <div class="col-12 col-md-4">
+                                                <label class="form-label small mb-0">Sides</label>
+                                                <textarea t-attf-name="menu_sides_{{mi_index}}" class="form-control" rows="2" t-att-readonly="ro"><t t-esc="mi.sides or ''"/></textarea>
+                                            </div>
+                                            <div class="col-8 col-md-2">
+                                                <label class="form-label small mb-0">Price / Plate</label>
+                                                <input type="number" step="0.01" t-attf-name="menu_price_{{mi_index}}" class="form-control" t-att-value="mi.price_per_plate or ''" t-att-readonly="ro"/>
+                                            </div>
+                                            <div class="col-4 col-md-1 d-flex align-items-end">
+                                                <button type="button" class="btn btn-sm btn-link text-danger menu-remove p-0" t-if="not ro" title="Remove">&#10005;</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </t>
+                                <!-- one blank row to fill in -->
+                                <div class="menu-row border rounded p-2 mb-2" t-if="not ro">
+                                    <div class="row g-2">
+                                        <div class="col-12 col-md-5">
+                                            <label class="form-label small mb-0">Entree</label>
+                                            <input type="text" t-attf-name="menu_entree_{{len(mitems)}}" class="form-control"/>
+                                            <input type="hidden" t-attf-name="menu_id_{{len(mitems)}}" value=""/>
+                                        </div>
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label small mb-0">Sides</label>
+                                            <textarea t-attf-name="menu_sides_{{len(mitems)}}" class="form-control" rows="2"></textarea>
+                                        </div>
+                                        <div class="col-8 col-md-2">
+                                            <label class="form-label small mb-0">Price / Plate</label>
+                                            <input type="number" step="0.01" t-attf-name="menu_price_{{len(mitems)}}" class="form-control"/>
+                                        </div>
+                                        <div class="col-4 col-md-1 d-flex align-items-end">
+                                            <button type="button" class="btn btn-sm btn-link text-danger menu-remove p-0" title="Remove">&#10005;</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3" t-if="not ro">
+                                <button type="button" id="menu_add" class="btn btn-sm btn-outline-secondary">+ Add Menu Item</button>
+                            </div>
+                        </t>
 
                         <div class="row g-3 mb-3">
                             <t t-if="has_grat">
@@ -554,6 +614,34 @@
                         });
                     }
                     recalc();
+
+                    // ----- Menu Entry (kitchen call-out) -----
+                    var menuWrap = document.getElementById('menu_entry');
+                    if (menuWrap) {
+                        var menuCounter = menuWrap.querySelectorAll('.menu-row').length;
+                        var menuAdd = document.getElementById('menu_add');
+                        if (menuAdd) {
+                            menuAdd.addEventListener('click', function () {
+                                var rows = menuWrap.querySelectorAll('.menu-row');
+                                var clone = rows[rows.length - 1].cloneNode(true);
+                                var idx = menuCounter;
+                                clone.querySelectorAll('[name]').forEach(function (el) {
+                                    el.name = el.name.replace(/_\d+$/, '_' + idx);
+                                    el.value = '';
+                                });
+                                menuWrap.appendChild(clone);
+                                menuCounter += 1;
+                            });
+                        }
+                        menuWrap.addEventListener('click', function (ev) {
+                            var btn = ev.target.closest('.menu-remove');
+                            if (!btn) { return; }
+                            var rows = menuWrap.querySelectorAll('.menu-row');
+                            var row = btn.closest('.menu-row');
+                            if (rows.length > 1) { row.remove(); }
+                            else { row.querySelectorAll('input,textarea').forEach(function (el) { el.value = ''; }); }
+                        });
+                    }
                 })();
             </script>
         </t>

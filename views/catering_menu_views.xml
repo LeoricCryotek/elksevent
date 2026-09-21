@@ -8,8 +8,9 @@
             <list editable="bottom">
                 <field name="sequence" widget="handle"/>
                 <field name="name"/>
+                <field name="entree"/>
+                <field name="sides"/>
                 <field name="price_per_person"/>
-                <field name="components"/>
                 <field name="currency_id" column_invisible="1"/>
             </list>
         </field>
@@ -23,13 +24,14 @@
                 <sheet>
                     <group>
                         <field name="name"/>
+                        <field name="entree"/>
                         <field name="price_per_person"/>
                         <field name="active"/>
                         <field name="currency_id" invisible="1"/>
                     </group>
-                    <separator string="Included Items (one per line)"/>
-                    <field name="components" nolabel="1"
-                           placeholder="Bite-Size Steak&#10;Baked Potato&#10;Vegetables&#10;Salad Bar&#10;Roll&#10;Dessert"/>
+                    <separator string="Sides (one per line)"/>
+                    <field name="sides" nolabel="1"
+                           placeholder="Baked Potato&#10;Vegetables&#10;Salad Bar&#10;Roll&#10;Dessert"/>
                 </sheet>
             </form>
         </field>

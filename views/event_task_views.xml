@@ -669,14 +669,15 @@
                                    invisible="not x_food_request or not x_caterer_id or x_food_by_us"/>
                         </group>
                     </group>
-                    <separator string="Catering Menu Quote"
+                    <separator string="Customer Catering Quote (options to present)"
                                invisible="not x_food_request"/>
                     <div class="text-muted" invisible="not x_food_request">
-                        Add menu packages and a guest count to build a catering
-                        quote — each line is guests x per-person. Pick a menu, or
-                        type a new name and choose "Create and edit" to add an
-                        entree, sides and price. Tick "Chosen" for the option the
-                        customer picked, then print the quote.
+                        Build the quote of menu options for the customer — each
+                        line is guests x per-person. Pick a menu, or type a new
+                        name and choose "Create and edit" to add an entree, sides
+                        and price. Print the quote for the customer. (Actual
+                        billing comes from the kitchen's Menu Items once the
+                        customer's picks are approved — see the Approval tab.)
                     </div>
                     <field name="x_catering_menu_ids"
                            invisible="not x_food_request"
@@ -692,10 +693,7 @@
                         </list>
                     </field>
                     <group invisible="not x_food_request">
-                        <group>
-                            <field name="x_catering_selected_total"
-                                   invisible="x_catering_selected_total == 0"/>
-                        </group>
+                        <group/>
                         <group>
                             <button name="action_print_catering_quote"
                                     type="object" class="btn-secondary me-2 mb-2"
@@ -813,6 +811,33 @@
                             <field name="x_board_denial_reason" nolabel="1"
                                    invisible="x_approval_state != 'rejected'"
                                    placeholder="Reason for rejection..."/>
+                        </group>
+                    </group>
+
+                    <separator string="Kitchen Menu — Customer Approval"/>
+                    <div class="text-muted">
+                        The kitchen manager enters menu items on their call-out.
+                        Tick "Approved by Customer" for the item(s) the customer
+                        chose and set how many plates to prepare — approved items
+                        post to Event Costs as "Kitchen Menu" (plates x price per
+                        plate).
+                    </div>
+                    <field name="x_menu_item_ids">
+                        <list editable="bottom">
+                            <field name="sequence" widget="handle"/>
+                            <field name="entree"/>
+                            <field name="sides"/>
+                            <field name="price_per_plate"/>
+                            <field name="approved" string="Approved by Customer"/>
+                            <field name="plates" string="Plates to Prepare"/>
+                            <field name="line_total" string="Total"/>
+                            <field name="currency_id" column_invisible="1"/>
+                        </list>
+                    </field>
+                    <group>
+                        <group>
+                            <field name="x_menu_approved_total"
+                                   invisible="x_menu_approved_total == 0"/>
                         </group>
                     </group>
                 </page>

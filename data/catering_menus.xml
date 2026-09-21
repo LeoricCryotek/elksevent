@@ -7,8 +7,8 @@
             <field name="name">Bite-Size Steak Dinner</field>
             <field name="sequence">10</field>
             <field name="price_per_person">24.00</field>
-            <field name="components">Bite-Size Steak
-Baked Potato
+            <field name="entree">Bite-Size Steak</field>
+            <field name="sides">Baked Potato
 Vegetables
 Salad Bar
 Roll
@@ -19,8 +19,8 @@ Dessert</field>
             <field name="name">Pulled Pork Dinner</field>
             <field name="sequence">20</field>
             <field name="price_per_person">15.00</field>
-            <field name="components">Pulled Pork
-Slider Buns
+            <field name="entree">Pulled Pork</field>
+            <field name="sides">Slider Buns
 Coleslaw
 Ambrosia
 Dessert</field>
@@ -30,8 +30,8 @@ Dessert</field>
             <field name="name">Fettuccine Dinner</field>
             <field name="sequence">30</field>
             <field name="price_per_person">12.00</field>
-            <field name="components">Fettuccine
-Breadsticks
+            <field name="entree">Fettuccine</field>
+            <field name="sides">Breadsticks
 Green Beans
 Salad Bar
 Dessert</field>
@@ -41,8 +41,8 @@ Dessert</field>
             <field name="name">Prime Rib &amp; Salmon Dinner</field>
             <field name="sequence">40</field>
             <field name="price_per_person">34.00</field>
-            <field name="components">Prime Rib &amp; Salmon
-Baked Potato
+            <field name="entree">Prime Rib &amp; Salmon</field>
+            <field name="sides">Baked Potato
 Vegetable
 Salad Bar
 Roll

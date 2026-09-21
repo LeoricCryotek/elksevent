@@ -46,3 +46,7 @@ access_event_catering_line_coord,elks.event.catering.line.coord,model_elks_event
 access_event_catering_line_user,elks.event.catering.line.user,model_elks_event_catering_line,project.group_project_user,1,0,0,0
 access_event_catering_line_deptmgr,elks.event.catering.line.deptmgr,model_elks_event_catering_line,elksevent.group_event_dept_manager,1,0,0,0
 access_event_catering_line_portal,elks.event.catering.line.portal,model_elks_event_catering_line,base.group_portal,1,0,0,0
+access_event_menu_item_coord,elks.event.menu.item.coord,model_elks_event_menu_item,elksevent.group_event_coordinator,1,1,1,1
+access_event_menu_item_user,elks.event.menu.item.user,model_elks_event_menu_item,project.group_project_user,1,0,0,0
+access_event_menu_item_deptmgr,elks.event.menu.item.deptmgr,model_elks_event_menu_item,elksevent.group_event_dept_manager,1,1,1,1
+access_event_menu_item_portal,elks.event.menu.item.portal,model_elks_event_menu_item,base.group_portal,1,0,0,0

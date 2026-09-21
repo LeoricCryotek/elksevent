@@ -286,6 +286,38 @@ class CalloutPortal(CustomerPortal):
             i += 1
         co.sudo().write({'line_ids': line_cmds})
 
+        # Kitchen: save the manager-entered menu items onto the event. Existing
+        # items are UPDATED (so the coordinator's approved/plates survive), new
+        # ones created, and removed ones unlinked.
+        if co.department == 'kitchen' and co.event_id:
+            Menu = request.env['elks.event.menu.item'].sudo()
+            existing = {m.id: m for m in co.event_id.x_menu_item_ids}
+            kept_ids = set()
+            i = 0
+            while ('menu_entree_%d' % i) in post or ('menu_id_%d' % i) in post:
+                entree = (post.get('menu_entree_%d' % i) or '').strip()
+                sides = (post.get('menu_sides_%d' % i) or '').strip()
+                price = _float(post.get('menu_price_%d' % i))
+                raw_id = (post.get('menu_id_%d' % i) or '').strip()
+                rec_id = int(raw_id) if raw_id.isdigit() else False
+                if not (entree or sides or price):
+                    i += 1
+                    continue  # blank row -> skip (and drop if it was existing)
+                if rec_id and rec_id in existing:
+                    existing[rec_id].write({
+                        'entree': entree, 'sides': sides,
+                        'price_per_plate': price})
+                    kept_ids.add(rec_id)
+                else:
+                    Menu.create({
+                        'event_id': co.event_id.id, 'entree': entree,
+                        'sides': sides, 'price_per_plate': price})
+                i += 1
+            # Remove items the manager cleared/deleted.
+            stale = [m for mid, m in existing.items() if mid not in kept_ids]
+            for m in stale:
+                m.unlink()
+
         if post.get('certify'):
             co.sudo().action_certify()
         return request.redirect('/my/callout/%s?saved=1' % co.id)
