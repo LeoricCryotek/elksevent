@@ -97,7 +97,7 @@
                                 <strong>Event Time:</strong>
                                 <t t-esc="o.x_event_start_time_text or ''"/>
                                 <t t-if="o.x_event_end_time_text">
-                                    &#8211; <t t-esc="o.x_event_end_time_text"/>
+                                    - <t t-esc="o.x_event_end_time_text"/>
                                 </t>
                             </td>
                             <td style="padding:3px;">
@@ -155,7 +155,34 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <t t-if="so">
+                            <t t-set="has_disc" t-value="(o.x_room_auto_discount or 0.0) + (o.x_discount_amount or 0.0) &gt; 0.005"/>
+                            <t t-if="has_disc">
+                                <!-- Itemize the room at its charged price, then
+                                     break out the member/non-profit and any
+                                     additional discount, so the customer sees it. -->
+                                <t t-set="ec_tax" t-value="(o.x_taxable_subtotal or 0.0) - (o.x_room_net or 0.0)"/>
+                                <tr t-if="o.x_room_income">
+                                    <td style="padding:6px; border-bottom:1px solid #ddd;">Facility / Room Rental</td>
+                                    <td style="padding:6px; text-align:right; border-bottom:1px solid #ddd;">$<t t-esc="'{:,.2f}'.format(o.x_room_income)"/></td>
+                                </tr>
+                                <tr t-if="ec_tax &gt; 0.005">
+                                    <td style="padding:6px; border-bottom:1px solid #ddd;">Taxable Event Costs</td>
+                                    <td style="padding:6px; text-align:right; border-bottom:1px solid #ddd;">$<t t-esc="'{:,.2f}'.format(ec_tax)"/></td>
+                                </tr>
+                                <tr t-if="o.x_room_auto_discount &gt; 0.005">
+                                    <td style="padding:6px; border-bottom:1px solid #ddd;">Less: <t t-esc="o.x_room_auto_discount_label or 'Room Discount'"/></td>
+                                    <td style="padding:6px; text-align:right; border-bottom:1px solid #ddd; color:#0a7a24;">-$<t t-esc="'{:,.2f}'.format(o.x_room_auto_discount)"/></td>
+                                </tr>
+                                <tr t-if="o.x_discount_amount &gt; 0.005">
+                                    <td style="padding:6px; border-bottom:1px solid #ddd;">Less: <t t-esc="o._event_discount_label()"/><t t-if="o.x_discount_note"> - <t t-esc="o.x_discount_note"/></t></td>
+                                    <td style="padding:6px; text-align:right; border-bottom:1px solid #ddd; color:#0a7a24;">-$<t t-esc="'{:,.2f}'.format(o.x_discount_amount)"/></td>
+                                </tr>
+                                <tr t-if="(o.x_nontaxable_subtotal or 0.0) &gt; 0.005">
+                                    <td style="padding:6px; border-bottom:1px solid #ddd;">Event Services (non-taxable)</td>
+                                    <td style="padding:6px; text-align:right; border-bottom:1px solid #ddd;">$<t t-esc="'{:,.2f}'.format(o.x_nontaxable_subtotal)"/></td>
+                                </tr>
+                            </t>
+                            <t t-elif="so">
                                 <t t-foreach="so.order_line.filtered(lambda l: not l.display_type)" t-as="line">
                                     <tr>
                                         <td style="padding:6px; border-bottom:1px solid #ddd;"><t t-esc="line.name"/></td>
