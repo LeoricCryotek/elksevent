@@ -2413,16 +2413,30 @@ class ProjectTask(models.Model):
             rec._notify_board_submission()
 
     def _notify_board_submission(self):
-        """Schedule an activity for a Floor Recorder / Secretary."""
+        """Schedule an activity for the lodge Secretary to add the event to the
+        Board agenda.
+
+        The recipient is the CURRENT Secretary — the login whose contact is
+        flagged Officer Position = Secretary (Contacts > Officers). Whoever
+        holds that seat gets the reminder automatically, no per-user config.
+        Falls back to the first Event Officer if the Secretary has no login."""
         self.ensure_one()
-        floor_group = self.env.ref(
-            'elksevent.group_event_officer', raise_if_not_found=False,
-        )
-        if not floor_group:
-            return
-        recorder = self.env['res.users'].search(
-            [('group_ids', 'in', floor_group.id)], limit=1,
-        )
+        recorder = self.env['res.users']
+        # Current Secretary from the lodge officer contacts.
+        if 'x_elks_officer_position' in self.env['res.partner']._fields:
+            recorder = self.env['res.users'].sudo().search([
+                ('partner_id.x_elks_officer_position', '=', 'secretary'),
+                ('active', '=', True),
+            ], limit=1)
+        # Fallback: first user in the Event Officer group (previous behavior).
+        if not recorder:
+            floor_group = self.env.ref(
+                'elksevent.group_event_officer', raise_if_not_found=False,
+            )
+            if floor_group:
+                recorder = self.env['res.users'].search(
+                    [('group_ids', 'in', floor_group.id)], limit=1,
+                )
         if not recorder:
             return
         self.activity_schedule(
