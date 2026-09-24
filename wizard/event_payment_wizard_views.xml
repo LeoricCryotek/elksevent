@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_event_payment_wizard_form" model="ir.ui.view">
+        <field name="name">elks.event.payment.wizard.form</field>
+        <field name="model">elks.event.payment.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Record Payment">
+                <group>
+                    <field name="event_id" invisible="1"/>
+                    <field name="currency_id" invisible="1"/>
+                    <field name="balance_remaining" readonly="1"/>
+                    <field name="amount"/>
+                    <field name="method"/>
+                    <field name="reference"
+                           placeholder="Check # / transaction reference"
+                           invisible="method not in ('check','card','other')"/>
+                    <field name="date"/>
+                    <field name="note" placeholder="Optional note"/>
+                </group>
+                <footer>
+                    <button name="action_record" type="object"
+                            string="Record Payment" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary"
+                            special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_event_payment_wizard" model="ir.actions.act_window">
+        <field name="name">Record Payment</field>
+        <field name="res_model">elks.event.payment.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

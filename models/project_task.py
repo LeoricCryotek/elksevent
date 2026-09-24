@@ -836,6 +836,44 @@ class ProjectTask(models.Model):
         "Deposit Reference",
         help="Check number, transaction ID, etc.",
     )
+    x_payment_ids = fields.One2many(
+        "elks.event.payment", "event_id", string="Payments")
+    x_total_paid = fields.Monetary(
+        "Total Paid", compute="_compute_payments",
+        currency_field="x_currency_id",
+        help="Sum of all payments recorded against this event.")
+    x_balance_remaining = fields.Monetary(
+        "Balance Remaining", compute="_compute_payments",
+        currency_field="x_currency_id",
+        help="Grand total minus everything paid so far.")
+
+    @api.depends("x_payment_ids.amount", "x_event_grand_total",
+                 "x_deposit_amount", "x_deposit_received")
+    def _compute_payments(self):
+        for rec in self:
+            rec.x_total_paid = rec._amount_paid()
+            rec.x_balance_remaining = max(
+                (rec.x_event_grand_total or 0.0) - rec.x_total_paid, 0.0)
+
+    def _amount_paid(self):
+        """Total the customer has paid: the payment log if any is recorded,
+        otherwise the legacy single deposit fields."""
+        self.ensure_one()
+        logged = sum(self.x_payment_ids.mapped("amount"))
+        if logged:
+            return logged
+        return self.x_deposit_amount if self.x_deposit_received else 0.0
+
+    def action_record_payment(self):
+        self.ensure_one()
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("Record Payment"),
+            "res_model": "elks.event.payment.wizard",
+            "view_mode": "form",
+            "target": "new",
+            "context": {"default_event_id": self.id},
+        }
 
     # ------------------------------------------------------------------
     # Room bookings
@@ -979,9 +1017,20 @@ class ProjectTask(models.Model):
         "Net incl. Event Sales", currency_field='x_currency_id',
         compute='_compute_event_sales', store=True,
         help="Rental P&L net plus the net on-site event sales income.")
+    # Analytics ratios (stored so they aggregate in pivot/graph reports).
+    x_profit_per_guest = fields.Monetary(
+        "Profit / Guest", currency_field='x_currency_id',
+        compute='_compute_event_sales', store=True, aggregator='avg',
+        help="Net profit divided by the expected guest count — how much each "
+             "guest is worth for this event.")
+    x_profit_margin_pct = fields.Float(
+        "Profit Margin %", compute='_compute_event_sales', store=True,
+        aggregator='avg',
+        help="Net profit as a percent of what the customer was billed.")
 
     @api.depends('x_sales_drink', 'x_sales_food', 'x_sales_entry',
-                 'x_sales_other', 'x_net_income')
+                 'x_sales_other', 'x_net_income', 'x_total_billed',
+                 'x_guest_count')
     def _compute_event_sales(self):
         for rec in self:
             rec.x_event_sales_income = (
@@ -989,6 +1038,12 @@ class ProjectTask(models.Model):
                 + (rec.x_sales_entry or 0.0) + (rec.x_sales_other or 0.0))
             rec.x_pl_net_total = (
                 (rec.x_net_income or 0.0) + rec.x_event_sales_income)
+            rec.x_profit_per_guest = (
+                rec.x_pl_net_total / rec.x_guest_count
+                if rec.x_guest_count else 0.0)
+            rec.x_profit_margin_pct = (
+                rec.x_pl_net_total / rec.x_total_billed * 100.0
+                if rec.x_total_billed else 0.0)
 
     # ------------------------------------------------------------------
     # Coordinator fee
@@ -2109,6 +2164,7 @@ class ProjectTask(models.Model):
         'x_cost_line_ids.cost_type_id',
         'x_cost_line_ids.x_auto_source',
         'x_deposit_amount', 'x_deposit_received',
+        'x_payment_ids.amount',
         'x_purchase_order_ids.amount_total',
         'x_purchase_order_ids.state',
         'x_attendance_ids.worked_hours', 'x_attendance_ids.x_event_role',
@@ -2256,9 +2312,9 @@ class ProjectTask(models.Model):
             rec.x_ubi_room_income = 0.0 if rec.x_is_member else (room_income or 0.0)
             rec.x_ubi_tax_reserve = rec.x_ubi_room_income * ubi_pct
 
-            # Balance due
-            deposit = rec.x_deposit_amount if rec.x_deposit_received else 0.0
-            rec.x_balance_due = rec.x_total_billed - deposit
+            # Balance due = billed minus everything paid (payment log if any,
+            # else the legacy single deposit).
+            rec.x_balance_due = rec.x_total_billed - rec._amount_paid()
 
             # Budget remaining (billed minus real costs)
             rec.x_budget_remaining = rec.x_total_billed - rec.x_total_costs
@@ -4609,21 +4665,38 @@ class ProjectTask(models.Model):
                       else _("Event Services (non-taxable)"))
             lines.append(_line(slabel, nontax_net * portion, line_prod, False))
 
-        # Deposit handling.
-        dep_paid = self.x_deposit_amount or 0.0
-        date_txt = (_(" on %s", self.x_deposit_date)
-                    if self.x_deposit_date else "")
-        if kind == 'final' and self.x_deposit_received and dep_paid > 0:
-            # FULL total less the deposit already paid = remaining balance.
+        # Payment handling. Prefer the payment log (multiple payments with
+        # dates); fall back to the single legacy deposit fields.
+        payments = self.x_payment_ids.sorted('date')
+        if kind == 'final' and payments:
+            # FULL total less every payment already made = remaining balance.
+            # One credit line per payment so each date/method is on the bill.
+            for p in payments:
+                when = _(" on %s", p.date) if p.date else ""
+                how = dict(p._fields['method'].selection).get(p.method, '')
+                ref = _(" #%s", p.reference) if p.reference else ""
+                lines.append(_line(
+                    _("Less: Payment%(when)s (%(how)s%(ref)s)",
+                      when=when, how=how, ref=ref),
+                    -(p.amount or 0.0), dep_product, False))
+        elif kind == 'final' and self.x_deposit_received and (
+                self.x_deposit_amount or 0.0) > 0:
+            date_txt = (_(" on %s", self.x_deposit_date)
+                        if self.x_deposit_date else "")
             lines.append(_line(_("Less: Deposit PAID%s", date_txt),
-                               -dep_paid, dep_product, False))
-        if kind == 'deposit' and self.x_deposit_received and dep_paid > 0:
-            # Flag the reservation fee as paid on the deposit invoice.
-            lines.append((0, 0, {
-                'display_type': 'line_note',
-                'name': _("*** DEPOSIT PAID%(when)s - $%(amt).2f ***",
-                          when=date_txt, amt=dep_paid),
-            }))
+                               -(self.x_deposit_amount or 0.0),
+                               dep_product, False))
+        if kind == 'deposit':
+            paid = self._amount_paid()
+            if paid > 0:
+                # Flag the reservation fee as paid on the deposit invoice.
+                latest = payments[-1].date if payments else self.x_deposit_date
+                when = _(" on %s", latest) if latest else ""
+                lines.append((0, 0, {
+                    'display_type': 'line_note',
+                    'name': _("*** PAYMENT RECEIVED%(when)s - $%(amt).2f ***",
+                              when=when, amt=paid),
+                }))
         return lines
 
     def _build_event_invoice(self, kind):

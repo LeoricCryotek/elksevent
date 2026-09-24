@@ -17,6 +17,12 @@
             <xpath expr="//field[@name='date_deadline']" position="attributes">
                 <attribute name="string">Event Date</attribute>
             </xpath>
+            <!-- Show the guest count in the header, next to Event Date, so it's
+                 visible on every tab. -->
+            <xpath expr="//field[@name='date_deadline']" position="after">
+                <field name="x_guest_count" string="Guest Count"
+                       invisible="not x_is_event"/>
+            </xpath>
 
             <!-- Event Description: the internal working description of the
                  event (the calendar entry is fed by "Calendar Event Details"
@@ -825,10 +831,10 @@
                     <field name="x_menu_item_ids">
                         <list editable="bottom">
                             <field name="sequence" widget="handle"/>
+                            <field name="approved" string="Approved by Customer"/>
                             <field name="entree"/>
                             <field name="sides"/>
                             <field name="price_per_plate"/>
-                            <field name="approved" string="Approved by Customer"/>
                             <field name="plates" string="Plates to Prepare"/>
                             <field name="line_total" string="Total"/>
                             <field name="currency_id" column_invisible="1"/>
@@ -942,6 +948,37 @@
                                    string="Property Tax Reserve"/>
                         </group>
                     </group>
+
+                    <separator string="Payments" invisible="x_is_elks_event"/>
+                    <div class="mt-1 mb-2" invisible="x_is_elks_event">
+                        <button name="action_record_payment" type="object"
+                                class="btn-primary me-2 mb-2" icon="fa-money"
+                                string="Record Payment"/>
+                        <span class="text-muted">Log each check / cash / card
+                            payment as it comes in. The balance updates and the
+                            final invoice credits what's been paid.</span>
+                    </div>
+                    <field name="x_payment_ids" invisible="x_is_elks_event">
+                        <list editable="bottom">
+                            <field name="date"/>
+                            <field name="amount"/>
+                            <field name="method"/>
+                            <field name="reference"/>
+                            <field name="note" optional="hide"/>
+                            <field name="currency_id" column_invisible="1"/>
+                        </list>
+                    </field>
+                    <group invisible="x_is_elks_event">
+                        <group>
+                            <field name="x_total_paid" readonly="1"/>
+                            <field name="x_balance_remaining" readonly="1"
+                                   class="oe_subtotal_footer_separator"
+                                   decoration-danger="x_balance_remaining &gt; 0"
+                                   decoration-success="x_balance_remaining &lt;= 0"/>
+                        </group>
+                        <group/>
+                    </group>
+
                     <group>
                         <group string="Cost Summary (P&amp;L)">
                             <field name="x_cogs" readonly="1"
@@ -1099,7 +1136,7 @@
         <field name="name">elksevent.task.list</field>
         <field name="model">project.task</field>
         <field name="arch" type="xml">
-            <list string="Event Bookings">
+            <list string="Event Bookings" default_order="x_event_date asc, id desc">
                 <field name="x_event_date" string="Date"/>
                 <field name="name" string="Event Name"/>
                 <field name="x_event_type" string="Type" optional="show"/>

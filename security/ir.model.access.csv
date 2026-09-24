@@ -50,3 +50,7 @@ access_event_menu_item_coord,elks.event.menu.item.coord,model_elks_event_menu_it
 access_event_menu_item_user,elks.event.menu.item.user,model_elks_event_menu_item,project.group_project_user,1,0,0,0
 access_event_menu_item_deptmgr,elks.event.menu.item.deptmgr,model_elks_event_menu_item,elksevent.group_event_dept_manager,1,1,1,1
 access_event_menu_item_portal,elks.event.menu.item.portal,model_elks_event_menu_item,base.group_portal,1,0,0,0
+access_event_payment_coord,elks.event.payment.coord,model_elks_event_payment,elksevent.group_event_coordinator,1,1,1,1
+access_event_payment_user,elks.event.payment.user,model_elks_event_payment,project.group_project_user,1,0,0,0
+access_event_payment_wizard_coord,elks.event.payment.wizard.coord,model_elks_event_payment_wizard,elksevent.group_event_coordinator,1,1,1,1
+access_event_payment_wizard_user,elks.event.payment.wizard.user,model_elks_event_payment_wizard,project.group_project_user,1,1,1,1
