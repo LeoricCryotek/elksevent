@@ -64,6 +64,55 @@ class HrApplicant(models.Model):
         help="This application came in through the 'Join as a 1099' onboarding "
              "form and carries the I-9 / W-9 details below.")
 
+    # ==================================================================
+    # W-2 Employment Application (full lodge packet)
+    # ==================================================================
+    x_is_employment_app = fields.Boolean(
+        "Employment Application",
+        help="Came in through the full 'Apply for Employment' packet form.")
+    x_position_applied = fields.Char("Position Applied For")
+    x_date_available = fields.Date("Date Available")
+    x_desired_salary = fields.Char("Desired Salary")
+    x_is_citizen = fields.Boolean("U.S. Citizen")
+    x_worked_here_before = fields.Boolean("Worked Here Before")
+    x_worked_here_when = fields.Char("If so, when")
+    x_felony = fields.Boolean("Convicted of a Felony")
+    x_felony_explain = fields.Char("Felony Explanation")
+    # Military service
+    x_mil_branch = fields.Char("Military Branch")
+    x_mil_from = fields.Char("Military From")
+    x_mil_to = fields.Char("Military To")
+    x_mil_rank = fields.Char("Rank at Discharge")
+    x_mil_discharge = fields.Char("Type of Discharge")
+    x_mil_explain = fields.Char("Discharge Explanation (if not honorable)")
+    # Repeating sections
+    x_education_ids = fields.One2many(
+        "elks.job.education", "applicant_id", string="Education")
+    x_reference_ids = fields.One2many(
+        "elks.job.reference", "applicant_id", string="References")
+    x_prior_employer_ids = fields.One2many(
+        "elks.job.prior.employer", "applicant_id", string="Prior Employers")
+    # W-4 (federal withholding)
+    x_w4_filing = fields.Selection([
+        ('single', 'Single or Married filing separately'),
+        ('married', 'Married filing jointly or Qualifying surviving spouse'),
+        ('hoh', 'Head of Household'),
+    ], string="W-4 Filing Status")
+    x_w4_multiple_jobs = fields.Boolean("W-4 Step 2 (multiple jobs) applies")
+    x_w4_dependents_amt = fields.Char("W-4 Dependents Amount (Step 3)")
+    x_w4_other_income = fields.Char("W-4 Other Income (Step 4a)")
+    x_w4_deductions = fields.Char("W-4 Deductions (Step 4b)")
+    x_w4_extra_withholding = fields.Char("W-4 Extra Withholding (Step 4c)")
+    # Direct deposit
+    x_dd_bank_name = fields.Char("Bank / Credit Union")
+    x_dd_bank_address = fields.Char("Bank Address")
+    x_dd_account_type = fields.Selection([
+        ('checking', 'Checking'), ('savings', 'Savings')],
+        string="Account Type")
+    x_dd_routing = fields.Char("Routing Number")
+    x_dd_account = fields.Char("Account Number")
+    x_dd_authorized = fields.Boolean("Direct Deposit Authorized")
+
     # Identity — split for the I-9 (which has separate name boxes). The W-9
     # uses the full assembled name on line 1.
     x_first_name = fields.Char("First Name (Given Name)")
@@ -544,6 +593,73 @@ class HrApplicant(models.Model):
                 _logger.warning(
                     "Could not attach filled %s for applicant %s: %s",
                     label, self.id, e)
+
+    def action_print_employment_packet(self):
+        self.ensure_one()
+        return self.env.ref(
+            'elksevent.action_report_employment_packet').report_action(self)
+
+    def _copy_application_to_employee(self, emp):
+        """Put the whole application on the employee file so managers/admins
+        have the documents and data: copy every uploaded attachment (photo ID,
+        voided check, ...) and attach the complete filled Application Packet
+        PDF (application + I-9 + W-4 + Direct Deposit) for signing day one."""
+        self.ensure_one()
+        Att = self.env['ir.attachment'].sudo()
+        for att in Att.search([
+                ('res_model', '=', 'hr.applicant'), ('res_id', '=', self.id),
+                ('res_field', '=', False)]):
+            att.copy({'res_model': 'hr.employee', 'res_id': emp.id,
+                      'res_field': False, 'name': att.name})
+        try:
+            pdf, _dummy = self.env['ir.actions.report'].sudo()._render_qweb_pdf(
+                'elksevent.report_employment_packet', res_ids=[self.id])
+            Att.create({
+                'name': 'Application Packet - %s.pdf' % (emp.name or 'employee'),
+                'datas': base64.b64encode(pdf),
+                'res_model': 'hr.employee', 'res_id': emp.id,
+                'res_field': False, 'mimetype': 'application/pdf'})
+        except Exception as e:  # noqa: BLE001 - never block conversion
+            _logger.warning(
+                "Could not attach application packet for applicant %s: %s",
+                self.id, e)
+
+    def action_create_employment_employee(self):
+        """Create a W-2 hr.employee from a completed employment application."""
+        self.ensure_one()
+        Employee = self.env['hr.employee']
+        name = self.x_legal_name or self.partner_name
+        if not name:
+            raise UserError(_("Enter the applicant's legal name first."))
+        emp = Employee.create({
+            'name': name,
+            'work_email': self.email_from or False,
+            'work_phone': self.partner_phone or False,
+            'x_pay_category': 'w2',
+        })
+        extra = {
+            'private_street': self.x_addr_street or False,
+            'private_city': self.x_addr_city or False,
+            'private_zip': self.x_addr_zip or False,
+            'birthday': self.x_dob or False,
+            'ssnid': self.x_ssn or False,
+        }
+        extra = {k: v for k, v in extra.items() if v and k in emp._fields}
+        if extra:
+            try:
+                emp.write(extra)
+            except Exception:  # noqa: BLE001
+                pass
+        self._copy_application_to_employee(emp)
+        self.message_post(body=_(
+            "Created employee %s from this employment application.", emp.name))
+        return {
+            'type': 'ir.actions.act_window',
+            'res_model': 'hr.employee',
+            'res_id': emp.id,
+            'view_mode': 'form',
+            'target': 'current',
+        }
 
     def action_create_1099_employee(self):
         """Create the hr.employee for an approved 1099 applicant, marked as a

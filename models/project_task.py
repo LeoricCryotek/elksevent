@@ -1006,13 +1006,25 @@ class ProjectTask(models.Model):
     x_sales_other = fields.Monetary(
         "Other Sales (net)", currency_field='x_currency_id',
         help="Any other NET on-site sales income (raffle, merchandise, etc.).")
+    x_sales_clover = fields.Monetary(
+        "Clover Net Sales", currency_field='x_currency_id',
+        help="NET Clover sales pulled from the point-of-sale for the event "
+             "window (auto-filled by 'Pull Clover Sales').")
     x_sales_notes = fields.Char(
         "Sales Notes",
         help="Where the numbers came from (Clover net batch, cash count, etc.).")
     x_event_sales_income = fields.Monetary(
         "Event Sales Income (net total)", currency_field='x_currency_id',
         compute='_compute_event_sales', store=True,
-        help="Net drink + food + entry + other on-site sales.")
+        help="Net drink + food + entry + other + Clover on-site sales.")
+    # --- Clover point-of-sale pull (top items + net for the event window) ---
+    x_clover_top_item_ids = fields.One2many(
+        "elks.event.clover.item", "event_id", string="Top Clover Items")
+    x_clover_sales_net = fields.Monetary(
+        "Clover Window Net", currency_field='x_currency_id', readonly=True)
+    x_clover_sales_gross = fields.Monetary(
+        "Clover Window Gross", currency_field='x_currency_id', readonly=True)
+    x_clover_synced_on = fields.Datetime("Clover Pulled On", readonly=True)
     x_pl_net_total = fields.Monetary(
         "Net incl. Event Sales", currency_field='x_currency_id',
         compute='_compute_event_sales', store=True,
@@ -1029,13 +1041,14 @@ class ProjectTask(models.Model):
         help="Net profit as a percent of what the customer was billed.")
 
     @api.depends('x_sales_drink', 'x_sales_food', 'x_sales_entry',
-                 'x_sales_other', 'x_net_income', 'x_total_billed',
-                 'x_guest_count')
+                 'x_sales_other', 'x_sales_clover', 'x_net_income',
+                 'x_total_billed', 'x_guest_count')
     def _compute_event_sales(self):
         for rec in self:
             rec.x_event_sales_income = (
                 (rec.x_sales_drink or 0.0) + (rec.x_sales_food or 0.0)
-                + (rec.x_sales_entry or 0.0) + (rec.x_sales_other or 0.0))
+                + (rec.x_sales_entry or 0.0) + (rec.x_sales_other or 0.0)
+                + (rec.x_sales_clover or 0.0))
             rec.x_pl_net_total = (
                 (rec.x_net_income or 0.0) + rec.x_event_sales_income)
             rec.x_profit_per_guest = (
@@ -4104,6 +4117,145 @@ class ProjectTask(models.Model):
         except Exception as e:  # noqa: BLE001 - never block the workflow
             _logger.warning(
                 "After-action activity failed for task %s: %s", self.id, e)
+
+    # ==================================================================
+    # SECTION: Clover point-of-sale pull (top items + net -> P&L)
+    # HUMAN: Pull the day's Clover sales around the event, list the top
+    #        sellers, and drop the net into Event Sales Income for the P&L.
+    # AI: Window = event start/end padded by the Lodge-Settings buffer.
+    #     Aggregates clover.sale.line by item; nets from clover.sale.
+    # ==================================================================
+    def _clover_window(self):
+        """(start, end) naive-UTC datetimes for the Clover pull, padded by the
+        Lodge-Settings buffer hours."""
+        self.ensure_one()
+        start, end = self._event_calendar_window()
+        if not (start and end):
+            return False, False
+        settings = self._event_settings()
+        buf = (settings.x_clover_buffer_hours if settings
+               and 'x_clover_buffer_hours' in settings._fields else 0.0) or 0.0
+        return (start - timedelta(hours=buf), end + timedelta(hours=buf))
+
+    def action_pull_clover_sales(self):
+        self.ensure_one()
+        if 'clover.sale' not in self.env:
+            raise UserError(_(
+                "The Clover point-of-sale module isn't installed, so there are "
+                "no sales to pull."))
+        start, end = self._clover_window()
+        if not start:
+            raise UserError(_(
+                "Set the event date and start/end time before pulling Clover "
+                "sales."))
+        Sale = self.env['clover.sale'].sudo()
+        Line = self.env['clover.sale.line'].sudo()
+        sales = Sale.search([('date', '>=', start), ('date', '<=', end)])
+        net = sum(sales.mapped('net_amount'))
+        gross = sum(sales.mapped('total_amount'))
+        # Aggregate lines by item name.
+        agg = {}
+        if sales:
+            for ln in Line.search([('sale_id', 'in', sales.ids)]):
+                name = (ln.product_id.name or ln.description
+                        or ln.clover_item_id or _("Item"))
+                q, a = agg.get(name, (0.0, 0.0))
+                agg[name] = (q + (ln.unit_qty or 0.0),
+                             a + (ln.amount or 0.0))
+        top = sorted(agg.items(), key=lambda kv: kv[1][0], reverse=True)[:10]
+        self.x_clover_top_item_ids.unlink()
+        Item = self.env['elks.event.clover.item']
+        seq = 10
+        for name, (q, a) in top:
+            Item.create({'event_id': self.id, 'sequence': seq,
+                         'name': name, 'qty': q, 'amount': a})
+            seq += 10
+        # Fill Event Sales Income (net) from the window -> feeds the P&L.
+        self.x_sales_clover = net
+        self.x_clover_sales_net = net
+        self.x_clover_sales_gross = gross
+        self.x_clover_synced_on = fields.Datetime.now()
+        if not self.x_sales_notes:
+            self.x_sales_notes = _("Clover net batch (event window +/- buffer)")
+        self.message_post(
+            body=_("Pulled Clover sales for the event window: %(n)s orders, "
+                   "$%(net).2f net, %(items)s top items.",
+                   n=len(sales), net=net, items=len(top)),
+            subtype_xmlid='mail.mt_note')
+        return True
+
+    # ==================================================================
+    # SECTION: Events by business/contact
+    # ==================================================================
+    x_business_event_count = fields.Integer(
+        "Business Events", compute="_compute_business_event_count")
+
+    @api.depends('partner_id')
+    def _compute_business_event_count(self):
+        Task = self.env['project.task']
+        for rec in self:
+            rec.x_business_event_count = (
+                Task.search_count([
+                    ('x_is_event', '=', True),
+                    ('partner_id', '=', rec.partner_id.id),
+                ]) if rec.partner_id else 0)
+
+    def action_view_business_events(self):
+        self.ensure_one()
+        if not self.partner_id:
+            raise UserError(_("Set the Contact (person or business) first."))
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _("Events for %s", self.partner_id.name),
+            'res_model': 'project.task',
+            'view_mode': 'list,form',
+            'domain': [('x_is_event', '=', True),
+                       ('partner_id', '=', self.partner_id.id)],
+            'context': {'search_default_partner_id': self.partner_id.id},
+        }
+
+    def action_print_aar(self):
+        self.ensure_one()
+        return self.env.ref(
+            'elksevent.action_report_event_aar').report_action(self)
+
+    def _aar_survey_qa(self):
+        """[(question, answer)] from the customer's survey response, if any —
+        built defensively across survey field-name variations."""
+        self.ensure_one()
+        ui = self.x_customer_survey_input_id
+        if not ui:
+            return []
+        lines = getattr(ui, 'user_input_line_ids', False)
+        if not lines:
+            return []
+
+        def _ans(l):
+            sug = getattr(l, 'suggested_answer_id', False)
+            if sug:
+                return sug.value or sug.display_name or ''
+            for f in ('value_text_box', 'value_char_box',
+                      'value_numerical_box', 'value_scale', 'value_date',
+                      'value_datetime', 'value_text', 'value_char',
+                      'value_numerical'):
+                v = getattr(l, f, False)
+                if v:
+                    return str(v)
+            return ''
+
+        grouped = {}
+        order = []
+        for l in lines:
+            q = l.question_id
+            label = (q.title if q else '') or _("Question")
+            a = _ans(l)
+            if not a:
+                continue
+            if label not in grouped:
+                grouped[label] = []
+                order.append(label)
+            grouped[label].append(a)
+        return [(label, ", ".join(grouped[label])) for label in order]
 
     def _send_customer_survey(self):
         """Create a feedback-survey response for the customer and email the

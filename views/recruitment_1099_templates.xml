@@ -9,6 +9,7 @@
         <record id="job_1099_contractor" model="hr.job">
             <field name="name">Join as a 1099 Contractor (On-Call Event Staff)</field>
             <field name="is_published" eval="True"/>
+            <field name="x_hide_apply_button" eval="True"/>
             <field name="website_description" type="html">
                 <section class="s_text_block pt16 pb16">
                     <div class="container">
@@ -26,6 +27,19 @@
             </field>
         </record>
     </data>
+
+    <!-- Hide the default "Apply Now" button on job pages flagged to route to
+         their own form (the 1099 posting). Scoped to that page only. -->
+    <template id="jobs_hide_apply_button" name="Hide Apply for flagged jobs"
+              inherit_id="website_hr_recruitment.detail">
+        <xpath expr="." position="inside">
+            <t t-if="job and job.x_hide_apply_button">
+                <style>
+                    a[href*="/jobs/apply"] { display: none !important; }
+                </style>
+            </t>
+        </xpath>
+    </template>
 
     <!-- ================= Mobile onboarding form ================= -->
     <template id="onboard_1099_form" name="1099 Onboarding">

@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lodge Employment Application packet: application + I-9 Section 1 + W-4 +
+     Direct Deposit, filled from the applicant. ASCII-only, ligatures off. -->
+<odoo>
+    <record id="action_report_employment_packet" model="ir.actions.report">
+        <field name="name">Employment Application Packet</field>
+        <field name="model">hr.applicant</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_employment_packet</field>
+        <field name="report_file">elksevent.report_employment_packet</field>
+        <field name="paperformat_id" ref="base.paperformat_us"/>
+        <field name="print_report_name">'Application Packet - %s' % (object.x_legal_name or object.partner_name or 'Applicant')</field>
+    </record>
+
+    <template id="report_employment_packet">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="line" t-value="'border-bottom:1px solid #000; display:inline-block; min-width:120px;'"/>
+                <t t-set="hdr" t-value="'background:#444; color:#fff; padding:3px 6px; font-weight:bold; font-size:11px; margin:10px 0 6px;'"/>
+                <div class="page" style="font-family:Helvetica,Arial,sans-serif; color:#111; font-size:11px; font-variant-ligatures:none;">
+
+                    <!-- ===== PAGE 1-2: EMPLOYMENT APPLICATION ===== -->
+                    <div style="text-align:center; border-bottom:2px solid #000; padding-bottom:4px; margin-bottom:8px;">
+                        <div style="font-size:17px; font-weight:bold;">Lewiston Elks Lodge #896</div>
+                        <div style="font-size:13px; font-weight:bold;">Employment Application</div>
+                    </div>
+
+                    <div t-att-style="hdr">Applicant Information</div>
+                    <div style="line-height:1.9;">
+                        <strong>Name:</strong> <span t-att-style="line"><t t-esc="o.x_legal_name or o.partner_name or ''"/></span>
+                        &#160;&#160;<strong>Date:</strong> <span t-att-style="line"><t t-esc="o.x_signature_date or ''"/></span><br/>
+                        <strong>Address:</strong> <span t-att-style="line + 'min-width:260px;'"><t t-esc="o.x_addr_street or ''"/><t t-if="o.x_addr_apt">, <t t-esc="o.x_addr_apt"/></t></span>
+                        &#160;<t t-esc="o.x_addr_city or ''"/>, <t t-esc="o.x_addr_state or ''"/> <t t-esc="o.x_addr_zip or ''"/><br/>
+                        <strong>Phone:</strong> <span t-att-style="line"><t t-esc="o.partner_phone or ''"/></span>
+                        &#160;<strong>Email:</strong> <span t-att-style="line + 'min-width:200px;'"><t t-esc="o.email_from or ''"/></span><br/>
+                        <strong>Date Available:</strong> <span t-att-style="line"><t t-esc="o.x_date_available or ''"/></span>
+                        &#160;<strong>SSN:</strong> <span t-att-style="line"><t t-esc="o.x_ssn or ''"/></span>
+                        &#160;<strong>Desired Salary:</strong> <span t-att-style="line"><t t-esc="o.x_desired_salary or ''"/></span><br/>
+                        <strong>Position Applied For:</strong> <span t-att-style="line + 'min-width:300px;'"><t t-esc="o.x_position_applied or ''"/></span><br/>
+                        <strong>U.S. Citizen?</strong> <t t-esc="'Yes' if o.x_is_citizen else 'No'"/>
+                        &#160;<strong>If no, authorized to work in the U.S.?</strong> <t t-esc="'Yes' if o.x_work_auth and o.x_work_auth != 'citizen' else ('Yes' if o.x_is_citizen else 'No')"/><br/>
+                        <strong>Worked here before?</strong> <t t-esc="'Yes' if o.x_worked_here_before else 'No'"/>
+                        <t t-if="o.x_worked_here_when">&#160;When: <t t-esc="o.x_worked_here_when"/></t><br/>
+                        <strong>Convicted of a felony?</strong> <t t-esc="'Yes' if o.x_felony else 'No'"/>
+                        <t t-if="o.x_felony_explain">&#160;Explain: <t t-esc="o.x_felony_explain"/></t>
+                    </div>
+
+                    <div t-att-style="hdr">Education</div>
+                    <table style="width:100%; border-collapse:collapse; font-size:10.5px;">
+                        <tr style="background:#eee;"><td style="padding:3px;">Level</td><td style="padding:3px;">School</td><td style="padding:3px;">From-To</td><td style="padding:3px;">Grad?</td><td style="padding:3px;">Degree</td></tr>
+                        <tr t-foreach="o.x_education_ids" t-as="e">
+                            <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="dict(e._fields['level'].selection).get(e.level,'')"/></td>
+                            <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="e.school or ''"/></td>
+                            <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="e.date_from or ''"/> - <t t-esc="e.date_to or ''"/></td>
+                            <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="'Yes' if e.graduated else 'No'"/></td>
+                            <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="e.degree or ''"/></td>
+                        </tr>
+                    </table>
+
+                    <div t-att-style="hdr">References</div>
+                    <table style="width:100%; border-collapse:collapse; font-size:10.5px;">
+                        <tr style="background:#eee;"><td style="padding:3px;">Name</td><td style="padding:3px;">Relationship</td><td style="padding:3px;">Company</td><td style="padding:3px;">Phone</td></tr>
+                        <tr t-foreach="o.x_reference_ids" t-as="r">
+                            <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="r.name or ''"/></td>
+                            <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="r.relationship or ''"/></td>
+                            <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="r.company or ''"/></td>
+                            <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="r.phone or ''"/></td>
+                        </tr>
+                    </table>
+
+                    <div t-att-style="hdr">Previous Employment</div>
+                    <t t-foreach="o.x_prior_employer_ids" t-as="p">
+                        <div style="border:1px solid #ccc; padding:5px; margin-bottom:5px;">
+                            <strong><t t-esc="p.company or ''"/></strong> - <t t-esc="p.title or ''"/>
+                            <t t-if="p.phone">&#160;(<t t-esc="p.phone"/>)</t><br/>
+                            <t t-if="p.supervisor">Supervisor: <t t-esc="p.supervisor"/>&#160; (may contact: <t t-esc="'Yes' if p.may_contact else 'No'"/>)<br/></t>
+                            <t t-if="p.date_from or p.date_to"><t t-esc="p.date_from or ''"/> - <t t-esc="p.date_to or ''"/>&#160;</t>
+                            <t t-if="p.salary_start or p.salary_end">Salary: <t t-esc="p.salary_start or ''"/> to <t t-esc="p.salary_end or ''"/><br/></t>
+                            <t t-if="p.responsibilities">Responsibilities: <t t-esc="p.responsibilities"/><br/></t>
+                            <t t-if="p.reason_leaving">Reason for leaving: <t t-esc="p.reason_leaving"/></t>
+                        </div>
+                    </t>
+
+                    <div t-att-style="hdr">Military Service</div>
+                    <div>Branch: <span t-att-style="line"><t t-esc="o.x_mil_branch or ''"/></span>
+                        &#160;From: <t t-esc="o.x_mil_from or ''"/> To: <t t-esc="o.x_mil_to or ''"/>
+                        &#160;Rank: <t t-esc="o.x_mil_rank or ''"/> Discharge: <t t-esc="o.x_mil_discharge or ''"/>
+                        <t t-if="o.x_mil_explain"><br/>Explanation: <t t-esc="o.x_mil_explain"/></t>
+                    </div>
+
+                    <div t-att-style="hdr">Disclaimer &amp; Signature</div>
+                    <div style="font-style:italic;">I certify that my answers are true and complete to the best of my knowledge. If this application leads to employment, I understand that false or misleading information in my application or interview may result in my release.</div>
+                    <div style="margin-top:14px;">Signature: <strong><t t-esc="o.x_signature_name or ''"/></strong>
+                        &#160;&#160;Date: <t t-esc="o.x_signature_date or ''"/></div>
+
+                    <!-- ===== I-9 Section 1 (record copy) ===== -->
+                    <p style="page-break-before:always;"/>
+                    <div t-att-style="hdr">Form I-9 - Section 1 (Employee Information &amp; Attestation)</div>
+                    <div style="line-height:1.9;">
+                        <strong>Last Name:</strong> <span t-att-style="line"><t t-esc="o.x_last_name or ''"/></span>
+                        &#160;<strong>First:</strong> <span t-att-style="line"><t t-esc="o.x_first_name or ''"/></span>
+                        &#160;<strong>M.I.:</strong> <t t-esc="o.x_middle_initial or ''"/><br/>
+                        <strong>Address:</strong> <span t-att-style="line + 'min-width:260px;'"><t t-esc="o.x_addr_street or ''"/></span>
+                        &#160;<t t-esc="o.x_addr_city or ''"/>, <t t-esc="o.x_addr_state or ''"/> <t t-esc="o.x_addr_zip or ''"/><br/>
+                        <strong>Date of Birth:</strong> <span t-att-style="line"><t t-esc="o.x_dob or ''"/></span>
+                        &#160;<strong>SSN:</strong> <span t-att-style="line"><t t-esc="o.x_ssn or ''"/></span>
+                        &#160;<strong>Email:</strong> <t t-esc="o.email_from or ''"/> <strong>Phone:</strong> <t t-esc="o.partner_phone or ''"/><br/>
+                        <strong>Attestation:</strong>
+                        <t t-esc="dict(o._fields['x_work_auth'].selection).get(o.x_work_auth,'(not selected)')"/>
+                        <t t-if="o.x_uscis_number">&#160; A/USCIS #: <t t-esc="o.x_uscis_number"/></t>
+                        <t t-if="o.x_work_auth_expiry">&#160; Work-auth expires: <t t-esc="o.x_work_auth_expiry"/></t><br/>
+                        Signature: <strong><t t-esc="o.x_signature_name or ''"/></strong> &#160; Date: <t t-esc="o.x_signature_date or ''"/>
+                    </div>
+                    <div style="font-size:9px; color:#666; margin-top:6px;">Employer completes I-9 Section 2 in person against original documents. Print the official USCIS I-9 for the signed original.</div>
+
+                    <!-- ===== W-4 summary ===== -->
+                    <p style="page-break-before:always;"/>
+                    <div t-att-style="hdr">Form W-4 - Employee's Withholding Certificate</div>
+                    <div style="line-height:1.9;">
+                        <strong>Name:</strong> <t t-esc="o.x_legal_name or ''"/>&#160; <strong>SSN:</strong> <t t-esc="o.x_ssn or ''"/><br/>
+                        <strong>Address:</strong> <t t-esc="o.x_addr_street or ''"/>, <t t-esc="o.x_addr_city or ''"/>, <t t-esc="o.x_addr_state or ''"/> <t t-esc="o.x_addr_zip or ''"/><br/>
+                        <strong>Step 1(c) Filing status:</strong> <t t-esc="dict(o._fields['x_w4_filing'].selection).get(o.x_w4_filing,'(not selected)')"/><br/>
+                        <strong>Step 2 (multiple jobs) applies:</strong> <t t-esc="'Yes' if o.x_w4_multiple_jobs else 'No'"/><br/>
+                        <strong>Step 3 Dependents amount:</strong> <t t-esc="o.x_w4_dependents_amt or '0'"/><br/>
+                        <strong>Step 4a Other income:</strong> <t t-esc="o.x_w4_other_income or '0'"/>
+                        &#160; <strong>4b Deductions:</strong> <t t-esc="o.x_w4_deductions or '0'"/>
+                        &#160; <strong>4c Extra withholding:</strong> <t t-esc="o.x_w4_extra_withholding or '0'"/><br/>
+                        Signature: <strong><t t-esc="o.x_signature_name or ''"/></strong> &#160; Date: <t t-esc="o.x_signature_date or ''"/>
+                    </div>
+
+                    <!-- ===== Direct Deposit ===== -->
+                    <p style="page-break-before:always;"/>
+                    <div t-att-style="hdr">Direct Deposit Authorization</div>
+                    <div style="line-height:1.9;">
+                        <strong>Name:</strong> <t t-esc="o.x_legal_name or ''"/>&#160; <strong>SSN:</strong> <t t-esc="o.x_ssn or ''"/><br/>
+                        <strong>Bank / Credit Union:</strong> <t t-esc="o.x_dd_bank_name or ''"/><br/>
+                        <strong>Bank Address:</strong> <t t-esc="o.x_dd_bank_address or ''"/><br/>
+                        <strong>Account Type:</strong> <t t-esc="dict(o._fields['x_dd_account_type'].selection).get(o.x_dd_account_type,'')"/><br/>
+                        <strong>Routing #:</strong> <t t-esc="o.x_dd_routing or ''"/>&#160; <strong>Account #:</strong> <t t-esc="o.x_dd_account or ''"/><br/>
+                        <strong>Authorized:</strong> <t t-esc="'Yes' if o.x_dd_authorized else 'No'"/><br/>
+                        Signature: <strong><t t-esc="o.x_signature_name or ''"/></strong> &#160; Date: <t t-esc="o.x_signature_date or ''"/>
+                    </div>
+                    <div style="font-size:9px; color:#666; margin-top:6px;">Attach a voided check or bank verification letter. The Lodge is not liable for deposits misdirected due to inaccurate information provided by the employee.</div>
+                </div>
+            </t>
+        </t>
+    </template>
+</odoo>

@@ -153,6 +153,8 @@
                                    optional="show"/>
                             <field name="cost_total" string="Billed"
                                    optional="show"/>
+                            <field name="coverage_total" string="Coverage"
+                                   optional="show"/>
                             <field name="gratuity" optional="show"/>
                             <field name="certified_on" optional="hide"/>
                             <field name="currency_id" column_invisible="1"/>
@@ -324,6 +326,14 @@
 
             <!-- Smart / action buttons -->
             <xpath expr="//div[hasclass('oe_button_box')]" position="inside">
+                <button name="action_view_business_events"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-building-o"
+                        invisible="not x_is_event or not partner_id">
+                    <field name="x_business_event_count" widget="statinfo"
+                           string="Business Events"/>
+                </button>
                 <button name="action_submit"
                         string="Submit for Approval"
                         type="object"
@@ -1084,12 +1094,47 @@
                             <field name="x_sales_food"/>
                             <field name="x_sales_entry"/>
                             <field name="x_sales_other"/>
+                            <field name="x_sales_clover" readonly="1"
+                                   string="Clover (auto-pulled)"/>
                             <field name="x_sales_notes"
                                    placeholder="e.g. Clover NET batch 9/17, cash drawer count..."/>
                             <field name="x_event_sales_income" readonly="1"
                                    class="oe_subtotal_footer_separator"/>
                         </group>
                     </group>
+
+                    <separator string="Clover Point-of-Sale (event window)"/>
+                    <div class="mt-1 mb-2">
+                        <button name="action_pull_clover_sales" type="object"
+                                class="btn-primary me-2 mb-2" icon="fa-cash-register"
+                                string="Pull Clover Sales"/>
+                        <span class="text-muted">Pulls the top items and net sales
+                            for the event window (+/- the buffer in Lodge
+                            Settings) and fills Clover into Event Sales Income.</span>
+                        <div class="text-muted mt-1"
+                             invisible="not x_clover_synced_on">
+                            Last pulled <field name="x_clover_synced_on" readonly="1" class="oe_inline"/> ·
+                            net <field name="x_clover_sales_net" readonly="1" class="oe_inline"/> ·
+                            gross <field name="x_clover_sales_gross" readonly="1" class="oe_inline"/>
+                        </div>
+                    </div>
+                    <field name="x_clover_top_item_ids" readonly="1"
+                           invisible="not x_clover_top_item_ids">
+                        <list>
+                            <field name="name" string="Item"/>
+                            <field name="qty" string="Qty Sold"/>
+                            <field name="amount" string="Sales"/>
+                            <field name="currency_id" column_invisible="1"/>
+                        </list>
+                    </field>
+
+                    <separator string="Records"/>
+                    <div class="mb-2">
+                        <button name="action_print_aar" type="object"
+                                class="btn-secondary me-2 mb-2" icon="fa-print"
+                                string="Print After Action Report (AAR)"/>
+                    </div>
+
                     <separator string="After-Action Notes / Thoughts"/>
                     <field name="x_after_action_notes"
                            placeholder="What went well? Any issues, damages, or follow-ups? Would we host this again?"/>

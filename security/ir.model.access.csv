@@ -54,3 +54,11 @@ access_event_payment_coord,elks.event.payment.coord,model_elks_event_payment,elk
 access_event_payment_user,elks.event.payment.user,model_elks_event_payment,project.group_project_user,1,0,0,0
 access_event_payment_wizard_coord,elks.event.payment.wizard.coord,model_elks_event_payment_wizard,elksevent.group_event_coordinator,1,1,1,1
 access_event_payment_wizard_user,elks.event.payment.wizard.user,model_elks_event_payment_wizard,project.group_project_user,1,1,1,1
+access_event_clover_item_coord,elks.event.clover.item.coord,model_elks_event_clover_item,elksevent.group_event_coordinator,1,1,1,1
+access_event_clover_item_user,elks.event.clover.item.user,model_elks_event_clover_item,project.group_project_user,1,0,0,0
+access_job_education_recruit,elks.job.education.recruit,model_elks_job_education,hr_recruitment.group_hr_recruitment_user,1,1,1,1
+access_job_education_hr,elks.job.education.hr,model_elks_job_education,hr.group_hr_user,1,1,1,1
+access_job_reference_recruit,elks.job.reference.recruit,model_elks_job_reference,hr_recruitment.group_hr_recruitment_user,1,1,1,1
+access_job_reference_hr,elks.job.reference.hr,model_elks_job_reference,hr.group_hr_user,1,1,1,1
+access_job_prior_employer_recruit,elks.job.prior.employer.recruit,model_elks_job_prior_employer,hr_recruitment.group_hr_recruitment_user,1,1,1,1
+access_job_prior_employer_hr,elks.job.prior.employer.hr,model_elks_job_prior_employer,hr.group_hr_user,1,1,1,1

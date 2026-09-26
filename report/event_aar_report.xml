@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ==========================================================================
+     After Action Report (AAR): a records sheet for the bar & event manager —
+     people/contacts, event workers + hours, resources, top sold items, and the
+     customer survey results. ASCII-only, ligatures off (no PDF mojibake).
+     ========================================================================== -->
+<odoo>
+    <record id="action_report_event_aar" model="ir.actions.report">
+        <field name="name">After Action Report (AAR)</field>
+        <field name="model">project.task</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_event_aar</field>
+        <field name="report_file">elksevent.report_event_aar</field>
+        <field name="paperformat_id" ref="base.paperformat_us"/>
+        <field name="print_report_name">'AAR - %s' % (object.name or 'Event')</field>
+    </record>
+
+    <template id="report_event_aar">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="settings" t-value="o.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
+                <t t-set="types" t-value="dict(o._fields['x_event_type'].selection)"/>
+                <div class="page" style="font-family:Helvetica,Arial,sans-serif; color:#111; font-size:12px; font-variant-ligatures:none;">
+
+                    <div style="text-align:center; border-bottom:2px solid #46166a; padding-bottom:6px; margin-bottom:12px;">
+                        <div style="font-size:19px; font-weight:bold;">After Action Report</div>
+                        <div style="font-size:13px;"><t t-esc="o.name or 'Event'"/></div>
+                    </div>
+
+                    <table style="width:100%; font-size:12px; margin-bottom:12px;">
+                        <tr>
+                            <td style="padding:2px;"><strong>Date:</strong> <t t-if="o.x_event_date"><span t-field="o.x_event_date"/></t></td>
+                            <td style="padding:2px;"><strong>Type:</strong> <t t-esc="types.get(o.x_event_type, '')"/></td>
+                            <td style="padding:2px;"><strong>Guests:</strong> <t t-esc="o.x_guest_count or 0"/></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:2px;"><strong>Business / Contact:</strong> <t t-esc="o.partner_id.name or o.x_customer_name or ''"/></td>
+                            <td style="padding:2px;"><strong>Host:</strong> <t t-esc="o.x_customer_name or ''"/></td>
+                            <td style="padding:2px;"><strong>Phone:</strong> <t t-esc="o.x_customer_phone or ''"/></td>
+                        </tr>
+                    </table>
+
+                    <!-- People / contacts -->
+                    <div style="font-weight:bold; background:#f0ecf5; padding:4px 6px; margin-bottom:4px;">People &amp; Contacts</div>
+                    <table style="width:100%; font-size:11.5px; margin-bottom:12px;">
+                        <tr t-if="o.x_coordinator_employee_id"><td style="padding:2px; width:35%;">Event Coordinator</td><td style="padding:2px;"><t t-esc="o.x_coordinator_employee_id.name"/></td></tr>
+                        <tr t-if="o.x_bar_manager_id"><td style="padding:2px;">Bar Manager</td><td style="padding:2px;"><t t-esc="o.x_bar_manager_id.name"/></td></tr>
+                        <tr t-if="o.x_kitchen_manager_id"><td style="padding:2px;">Kitchen Manager</td><td style="padding:2px;"><t t-esc="o.x_kitchen_manager_id.name"/></td></tr>
+                        <tr t-if="o.x_custodial_manager_id"><td style="padding:2px;">Custodial Manager</td><td style="padding:2px;"><t t-esc="o.x_custodial_manager_id.name"/></td></tr>
+                        <tr t-if="o.x_customer_email"><td style="padding:2px;">Host Email</td><td style="padding:2px;"><t t-esc="o.x_customer_email"/></td></tr>
+                    </table>
+
+                    <!-- Event workers + hours (certified call-out rosters) -->
+                    <div style="font-weight:bold; background:#f0ecf5; padding:4px 6px; margin-bottom:4px;">Event Workers &amp; Hours</div>
+                    <t t-set="callouts" t-value="o.x_callout_ids.filtered(lambda c: c.state == 'certified')"/>
+                    <t t-if="callouts">
+                        <t t-set="cover_all" t-value="sum(callouts.mapped('coverage_total'))"/>
+                        <t t-foreach="callouts" t-as="co">
+                            <div style="font-weight:bold; margin-top:4px;"><t t-esc="co.department_label"/> <span style="font-weight:normal; color:#555;">(<t t-esc="co.staff_count"/> people, <t t-esc="'%.2f' % (co.hours_total or 0.0)"/> hrs · billed $<t t-esc="'%.2f' % (co.cost_total or 0.0)"/> · paid $<t t-esc="'%.2f' % (co.raw_cost_total or 0.0)"/> · coverage $<t t-esc="'%.2f' % (co.coverage_total or 0.0)"/>)</span></div>
+                            <table style="width:100%; font-size:11px; border-collapse:collapse; margin-bottom:4px;">
+                                <tr style="background:#eee;"><td style="padding:3px;">Name</td><td style="padding:3px;">Role</td><td style="padding:3px; text-align:right;">Hours</td><td style="padding:3px; text-align:right;">Rate</td></tr>
+                                <tr t-foreach="co.line_ids" t-as="l">
+                                    <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="l.employee_id.name or l.person_name or ''"/></td>
+                                    <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="l.role or ''"/></td>
+                                    <td style="padding:3px; border-top:1px solid #ddd; text-align:right;"><t t-esc="'%.2f' % (l.hours or 0.0)"/></td>
+                                    <td style="padding:3px; border-top:1px solid #ddd; text-align:right;">$<t t-esc="'%.2f' % (l.rate or 0.0)"/></td>
+                                </tr>
+                            </table>
+                        </t>
+                        <div style="text-align:right; font-weight:bold; margin:4px 0 8px; border-top:1px solid #ccc; padding-top:3px;">
+                            Total Coverage (billed − paid, toward the bartender pay pool): $<t t-esc="'%.2f' % (cover_all or 0.0)"/>
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <div style="color:#777; margin-bottom:8px;">No certified call-out rosters recorded.</div>
+                    </t>
+
+                    <!-- Resources -->
+                    <div style="font-weight:bold; background:#f0ecf5; padding:4px 6px; margin-bottom:4px;">Resources</div>
+                    <table style="width:100%; font-size:11.5px; margin-bottom:8px;">
+                        <tr t-if="o.x_room_booking_ids"><td style="padding:2px; width:35%;">Rooms</td><td style="padding:2px;"><t t-esc="', '.join(o.x_room_booking_ids.mapped('room_id.name'))"/></td></tr>
+                        <tr t-if="o.x_catering_details"><td style="padding:2px;">Catering</td><td style="padding:2px;"><t t-esc="o.x_catering_details"/></td></tr>
+                        <tr t-if="o.x_bar_drink_requests"><td style="padding:2px;">Bar Requests</td><td style="padding:2px;"><t t-esc="o.x_bar_drink_requests"/></td></tr>
+                    </table>
+                    <t t-set="menus" t-value="o.x_menu_item_ids.filtered('approved')"/>
+                    <t t-if="menus">
+                        <table style="width:100%; font-size:11px; border-collapse:collapse; margin-bottom:8px;">
+                            <tr style="background:#eee;"><td style="padding:3px;">Menu Served</td><td style="padding:3px; text-align:right;">Plates</td></tr>
+                            <tr t-foreach="menus" t-as="m">
+                                <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="m.entree or ''"/><t t-if="m.sides"> - <t t-esc="m.sides"/></t></td>
+                                <td style="padding:3px; border-top:1px solid #ddd; text-align:right;"><t t-esc="m.plates or 0"/></td>
+                            </tr>
+                        </table>
+                    </t>
+
+                    <!-- Top sold items (Clover) -->
+                    <div style="font-weight:bold; background:#f0ecf5; padding:4px 6px; margin-bottom:4px;">Top Sold Items (Point of Sale)</div>
+                    <t t-if="o.x_clover_top_item_ids">
+                        <div style="font-size:11px; color:#555; margin-bottom:2px;">
+                            Window net: $<t t-esc="'%.2f' % (o.x_clover_sales_net or 0.0)"/> ·
+                            gross: $<t t-esc="'%.2f' % (o.x_clover_sales_gross or 0.0)"/>
+                        </div>
+                        <table style="width:100%; font-size:11px; border-collapse:collapse; margin-bottom:8px;">
+                            <tr style="background:#eee;"><td style="padding:3px;">Item</td><td style="padding:3px; text-align:right;">Qty</td><td style="padding:3px; text-align:right;">Sales</td></tr>
+                            <tr t-foreach="o.x_clover_top_item_ids" t-as="it">
+                                <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="it.name or ''"/></td>
+                                <td style="padding:3px; border-top:1px solid #ddd; text-align:right;"><t t-esc="'%.0f' % (it.qty or 0.0)"/></td>
+                                <td style="padding:3px; border-top:1px solid #ddd; text-align:right;">$<t t-esc="'%.2f' % (it.amount or 0.0)"/></td>
+                            </tr>
+                        </table>
+                    </t>
+                    <t t-else="">
+                        <div style="color:#777; margin-bottom:8px;">No point-of-sale items pulled. Use "Pull Clover Sales" on the After Action tab.</div>
+                    </t>
+
+                    <!-- Survey results -->
+                    <div style="font-weight:bold; background:#f0ecf5; padding:4px 6px; margin-bottom:4px;">Customer Survey</div>
+                    <t t-set="qa" t-value="o._aar_survey_qa()"/>
+                    <t t-if="qa">
+                        <table style="width:100%; font-size:11.5px; border-collapse:collapse;">
+                            <tr t-foreach="qa" t-as="row">
+                                <td style="padding:3px; border-top:1px solid #ddd; width:45%; vertical-align:top;"><strong><t t-esc="row[0]"/></strong></td>
+                                <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="row[1]"/></td>
+                            </tr>
+                        </table>
+                    </t>
+                    <t t-else="">
+                        <div style="color:#777;">No survey responses recorded.</div>
+                    </t>
+
+                    <div style="margin-top:14px; font-size:10px; color:#666;">
+                        Prepared for the records of Lewiston Elks Lodge #896 - retain for future-year planning.
+                    </div>
+                </div>
+            </t>
+        </t>
+    </template>
+</odoo>

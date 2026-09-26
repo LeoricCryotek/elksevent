@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Published "Apply for Employment" careers posting (own form + hidden
+         default Apply button). -->
+    <data noupdate="1">
+        <record id="job_employment" model="hr.job">
+            <field name="name">Apply for Employment (Lodge Staff)</field>
+            <field name="is_published" eval="True"/>
+            <field name="x_hide_apply_button" eval="True"/>
+            <field name="website_description" type="html">
+                <section class="s_text_block pt16 pb16">
+                    <div class="container">
+                        <p>Apply to join the Lewiston Elks Lodge #896 staff. The
+                            application collects your employment history, I-9,
+                            W-4, and direct deposit in one packet.</p>
+                        <a href="/elks/apply" class="btn btn-primary btn-lg">
+                            Start Employment Application
+                        </a>
+                    </div>
+                </section>
+            </field>
+        </record>
+    </data>
+
+    <template id="employment_application_form" name="Employment Application">
+        <t t-call="website.layout">
+            <t t-set="vals" t-value="vals or {}"/>
+            <t t-set="errors" t-value="errors or []"/>
+            <div class="container my-4" style="max-width:720px;">
+                <h2 class="mb-1">Employment Application</h2>
+                <p class="text-muted">Lewiston Elks Lodge #896. Complete every
+                    section and sign at the bottom. Your information is kept
+                    confidential and used only for hiring and payroll.</p>
+
+                <div t-if="errors" class="alert alert-danger">
+                    <strong>Please complete:</strong>
+                    <ul class="mb-0"><li t-foreach="errors" t-as="e"><t t-esc="e"/></li></ul>
+                </div>
+
+                <form action="/elks/apply/submit" method="post"
+                      enctype="multipart/form-data" class="mt-3" id="applyform">
+                    <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+
+                    <h5 class="mt-3">Applicant Information</h5>
+                    <div class="row g-2">
+                        <div class="col-12 col-md-5 mb-2"><label class="form-label">First Name *</label><input type="text" name="first_name" class="form-control" required="required" t-att-value="vals.get('first_name')"/></div>
+                        <div class="col-4 col-md-2 mb-2"><label class="form-label">M.I.</label><input type="text" name="middle_initial" maxlength="1" class="form-control" t-att-value="vals.get('middle_initial')"/></div>
+                        <div class="col-8 col-md-5 mb-2"><label class="form-label">Last Name *</label><input type="text" name="last_name" class="form-control" required="required" t-att-value="vals.get('last_name')"/></div>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-9 mb-2"><label class="form-label">Street Address</label><input type="text" name="addr_street" class="form-control" t-att-value="vals.get('addr_street')"/></div>
+                        <div class="col-3 mb-2"><label class="form-label">Apt</label><input type="text" name="addr_apt" class="form-control" t-att-value="vals.get('addr_apt')"/></div>
+                        <div class="col-6 mb-2"><label class="form-label">City</label><input type="text" name="addr_city" class="form-control" t-att-value="vals.get('addr_city')"/></div>
+                        <div class="col-3 mb-2"><label class="form-label">State</label><input type="text" name="addr_state" maxlength="2" class="form-control" t-att-value="vals.get('addr_state')"/></div>
+                        <div class="col-3 mb-2"><label class="form-label">ZIP</label><input type="text" name="addr_zip" class="form-control" t-att-value="vals.get('addr_zip')"/></div>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-12 col-md-6 mb-2"><label class="form-label">Phone *</label><input type="tel" name="phone" class="form-control" required="required" t-att-value="vals.get('phone')"/></div>
+                        <div class="col-12 col-md-6 mb-2"><label class="form-label">Email *</label><input type="email" name="email" class="form-control" required="required" t-att-value="vals.get('email')"/></div>
+                        <div class="col-6 col-md-3 mb-2"><label class="form-label">Date of Birth</label><input type="date" name="dob" class="form-control" t-att-value="vals.get('dob')"/></div>
+                        <div class="col-6 col-md-3 mb-2"><label class="form-label">SSN</label><input type="text" name="ssn" class="form-control" autocomplete="off" t-att-value="vals.get('ssn')"/></div>
+                        <div class="col-6 col-md-3 mb-2"><label class="form-label">Date Available</label><input type="date" name="date_available" class="form-control" t-att-value="vals.get('date_available')"/></div>
+                        <div class="col-6 col-md-3 mb-2"><label class="form-label">Desired Salary</label><input type="text" name="desired_salary" class="form-control" t-att-value="vals.get('desired_salary')"/></div>
+                    </div>
+                    <div class="mb-2"><label class="form-label">Position Applied For *</label><input type="text" name="position" class="form-control" required="required" t-att-value="vals.get('position')"/></div>
+                    <div class="form-check"><input type="checkbox" name="is_citizen" value="1" class="form-check-input" id="cz" t-att-checked="'checked' if vals.get('is_citizen') else None"/><label class="form-check-label" for="cz">I am a U.S. citizen</label></div>
+                    <div class="form-check"><input type="checkbox" name="worked_before" value="1" class="form-check-input" id="wb"/><label class="form-check-label" for="wb">I have worked for this lodge before</label></div>
+                    <div class="mb-2"><label class="form-label">If so, when</label><input type="text" name="worked_when" class="form-control" t-att-value="vals.get('worked_when')"/></div>
+                    <div class="form-check"><input type="checkbox" name="felony" value="1" class="form-check-input" id="fel"/><label class="form-check-label" for="fel">I have been convicted of a felony</label></div>
+                    <div class="mb-3"><label class="form-label">If yes, explain</label><input type="text" name="felony_explain" class="form-control" t-att-value="vals.get('felony_explain')"/></div>
+
+                    <h5 class="mt-3">Education</h5>
+                    <div id="edu_wrap">
+                        <div class="edu-row border rounded p-2 mb-2">
+                            <div class="row g-2">
+                                <div class="col-6 col-md-3"><label class="form-label small mb-0">Level</label><select name="edu_level_0" class="form-select"><option value="hs">High School</option><option value="college">College</option><option value="other">Other</option></select></div>
+                                <div class="col-6 col-md-5"><label class="form-label small mb-0">School</label><input type="text" name="edu_school_0" class="form-control"/></div>
+                                <div class="col-6 col-md-2"><label class="form-label small mb-0">From</label><input type="text" name="edu_from_0" class="form-control"/></div>
+                                <div class="col-6 col-md-2"><label class="form-label small mb-0">To</label><input type="text" name="edu_to_0" class="form-control"/></div>
+                                <div class="col-12 col-md-6"><label class="form-label small mb-0">Degree</label><input type="text" name="edu_degree_0" class="form-control"/></div>
+                                <div class="col-12 col-md-6 d-flex align-items-end"><div class="form-check"><input type="checkbox" name="edu_grad_0" value="1" class="form-check-input"/><label class="form-check-label">Graduated</label></div></div>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" id="edu_add" class="btn btn-sm btn-outline-secondary mb-3">+ Add Education</button>
+
+                    <h5 class="mt-3">References (three professional)</h5>
+                    <div id="ref_wrap">
+                        <div class="ref-row border rounded p-2 mb-2">
+                            <div class="row g-2">
+                                <div class="col-12 col-md-6"><label class="form-label small mb-0">Full Name</label><input type="text" name="ref_name_0" class="form-control"/></div>
+                                <div class="col-12 col-md-6"><label class="form-label small mb-0">Relationship</label><input type="text" name="ref_rel_0" class="form-control"/></div>
+                                <div class="col-12 col-md-6"><label class="form-label small mb-0">Company</label><input type="text" name="ref_company_0" class="form-control"/></div>
+                                <div class="col-12 col-md-6"><label class="form-label small mb-0">Phone</label><input type="text" name="ref_phone_0" class="form-control"/></div>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" id="ref_add" class="btn btn-sm btn-outline-secondary mb-3">+ Add Reference</button>
+
+                    <h5 class="mt-3">Previous Employment</h5>
+                    <div id="emp_wrap">
+                        <div class="emp-row border rounded p-2 mb-2">
+                            <div class="row g-2">
+                                <div class="col-12 col-md-6"><label class="form-label small mb-0">Company</label><input type="text" name="emp_company_0" class="form-control"/></div>
+                                <div class="col-12 col-md-6"><label class="form-label small mb-0">Phone</label><input type="text" name="emp_phone_0" class="form-control"/></div>
+                                <div class="col-12 col-md-6"><label class="form-label small mb-0">Job Title</label><input type="text" name="emp_title_0" class="form-control"/></div>
+                                <div class="col-12 col-md-6"><label class="form-label small mb-0">Supervisor</label><input type="text" name="emp_supervisor_0" class="form-control"/></div>
+                                <div class="col-6 col-md-3"><label class="form-label small mb-0">From</label><input type="text" name="emp_from_0" class="form-control"/></div>
+                                <div class="col-6 col-md-3"><label class="form-label small mb-0">To</label><input type="text" name="emp_to_0" class="form-control"/></div>
+                                <div class="col-6 col-md-3"><label class="form-label small mb-0">Start $</label><input type="text" name="emp_salstart_0" class="form-control"/></div>
+                                <div class="col-6 col-md-3"><label class="form-label small mb-0">End $</label><input type="text" name="emp_salend_0" class="form-control"/></div>
+                                <div class="col-12"><label class="form-label small mb-0">Responsibilities</label><input type="text" name="emp_resp_0" class="form-control"/></div>
+                                <div class="col-12 col-md-8"><label class="form-label small mb-0">Reason for Leaving</label><input type="text" name="emp_reason_0" class="form-control"/></div>
+                                <div class="col-12 col-md-4 d-flex align-items-end"><div class="form-check"><input type="checkbox" name="emp_contact_0" value="1" class="form-check-input"/><label class="form-check-label">May contact supervisor</label></div></div>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" id="emp_add" class="btn btn-sm btn-outline-secondary mb-3">+ Add Employer</button>
+
+                    <h5 class="mt-3">Military Service (if any)</h5>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6 col-md-4"><label class="form-label small mb-0">Branch</label><input type="text" name="mil_branch" class="form-control"/></div>
+                        <div class="col-3 col-md-2"><label class="form-label small mb-0">From</label><input type="text" name="mil_from" class="form-control"/></div>
+                        <div class="col-3 col-md-2"><label class="form-label small mb-0">To</label><input type="text" name="mil_to" class="form-control"/></div>
+                        <div class="col-6 col-md-2"><label class="form-label small mb-0">Rank</label><input type="text" name="mil_rank" class="form-control"/></div>
+                        <div class="col-6 col-md-2"><label class="form-label small mb-0">Discharge</label><input type="text" name="mil_discharge" class="form-control"/></div>
+                        <div class="col-12"><label class="form-label small mb-0">If other than honorable, explain</label><input type="text" name="mil_explain" class="form-control"/></div>
+                    </div>
+
+                    <h5 class="mt-3">Work Authorization (I-9)</h5>
+                    <div class="mb-2"><label class="form-label">I attest that I am *</label>
+                        <select name="work_auth" class="form-select" required="required">
+                            <option value="">-- select --</option>
+                            <option value="citizen">A U.S. Citizen</option>
+                            <option value="noncitizen_national">A Noncitizen National of the U.S.</option>
+                            <option value="permanent_resident">A Lawful Permanent Resident</option>
+                            <option value="authorized_alien">An Alien Authorized to Work</option>
+                        </select>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-12 col-md-6"><label class="form-label small mb-0">USCIS / A-Number (if applicable)</label><input type="text" name="uscis_number" class="form-control"/></div>
+                        <div class="col-12 col-md-6"><label class="form-label small mb-0">Work Auth. Expiration (if any)</label><input type="date" name="work_auth_expiry" class="form-control"/></div>
+                    </div>
+
+                    <h5 class="mt-3">Federal Withholding (W-4)</h5>
+                    <div class="mb-2"><label class="form-label">Filing status</label>
+                        <select name="w4_filing" class="form-select">
+                            <option value="">-- select --</option>
+                            <option value="single">Single or Married filing separately</option>
+                            <option value="married">Married filing jointly / Qualifying surviving spouse</option>
+                            <option value="hoh">Head of Household</option>
+                        </select>
+                    </div>
+                    <div class="form-check"><input type="checkbox" name="w4_multiple_jobs" value="1" class="form-check-input" id="w4m"/><label class="form-check-label" for="w4m">Step 2 applies (multiple jobs / spouse works)</label></div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6 col-md-3"><label class="form-label small mb-0">Dependents $ (3)</label><input type="text" name="w4_dependents" class="form-control"/></div>
+                        <div class="col-6 col-md-3"><label class="form-label small mb-0">Other income (4a)</label><input type="text" name="w4_other_income" class="form-control"/></div>
+                        <div class="col-6 col-md-3"><label class="form-label small mb-0">Deductions (4b)</label><input type="text" name="w4_deductions" class="form-control"/></div>
+                        <div class="col-6 col-md-3"><label class="form-label small mb-0">Extra withholding (4c)</label><input type="text" name="w4_extra" class="form-control"/></div>
+                    </div>
+
+                    <h5 class="mt-3">Direct Deposit</h5>
+                    <div class="row g-2 mb-3">
+                        <div class="col-12 col-md-6"><label class="form-label small mb-0">Bank / Credit Union</label><input type="text" name="dd_bank_name" class="form-control"/></div>
+                        <div class="col-12 col-md-6"><label class="form-label small mb-0">Bank Address</label><input type="text" name="dd_bank_address" class="form-control"/></div>
+                        <div class="col-6 col-md-3"><label class="form-label small mb-0">Account Type</label><select name="dd_account_type" class="form-select"><option value="">--</option><option value="checking">Checking</option><option value="savings">Savings</option></select></div>
+                        <div class="col-6 col-md-4"><label class="form-label small mb-0">Routing #</label><input type="text" name="dd_routing" class="form-control" autocomplete="off"/></div>
+                        <div class="col-12 col-md-5"><label class="form-label small mb-0">Account #</label><input type="text" name="dd_account" class="form-control" autocomplete="off"/></div>
+                        <div class="col-12"><label class="form-label small mb-0">Voided check / bank letter (optional)</label><input type="file" name="void_check" class="form-control" accept="image/*,application/pdf"/></div>
+                    </div>
+                    <div class="form-check mb-3"><input type="checkbox" name="dd_authorized" value="1" class="form-check-input" id="dda"/><label class="form-check-label" for="dda">I authorize the Lodge to deposit my pay to this account.</label></div>
+
+                    <h5 class="mt-3">Photo ID (optional upload)</h5>
+                    <div class="mb-3"><input type="file" name="id_doc" class="form-control" accept="image/*,application/pdf"/></div>
+
+                    <h5 class="mt-3">Certification &amp; Signature</h5>
+                    <div class="form-check mb-2"><input type="checkbox" name="attest" value="1" class="form-check-input" id="att" required="required"/><label class="form-check-label" for="att">I certify that my answers are true and complete to the best of my knowledge. I understand that false or misleading information may result in my release.</label></div>
+                    <div class="row g-2">
+                        <div class="col-12 col-md-8 mb-3"><label class="form-label">Signature (type your legal name) *</label><input type="text" name="signature_name" class="form-control" required="required" t-att-value="vals.get('signature_name')"/></div>
+                        <div class="col-12 col-md-4 mb-3"><label class="form-label">Date</label><input type="date" name="signature_date" class="form-control" t-att-value="vals.get('signature_date')"/></div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-lg w-100 mb-4">Submit Application</button>
+
+                    <script type="text/javascript">
+                        (function () {
+                            var form = document.getElementById('applyform');
+                            function adder(wrapId, rowSel, btnId) {
+                                var wrap = document.getElementById(wrapId);
+                                var btn = document.getElementById(btnId);
+                                if (!wrap || !btn) { return; }
+                                var n = wrap.querySelectorAll(rowSel).length;
+                                btn.addEventListener('click', function () {
+                                    var rows = wrap.querySelectorAll(rowSel);
+                                    var clone = rows[rows.length - 1].cloneNode(true);
+                                    var idx = n;
+                                    clone.querySelectorAll('[name]').forEach(function (el) {
+                                        el.name = el.name.replace(/_\d+$/, '_' + idx);
+                                        if (el.type === 'checkbox') { el.checked = false; }
+                                        else if (el.tagName === 'SELECT') { el.selectedIndex = 0; }
+                                        else { el.value = ''; }
+                                    });
+                                    wrap.appendChild(clone);
+                                    n += 1;
+                                });
+                            }
+                            adder('edu_wrap', '.edu-row', 'edu_add');
+                            adder('ref_wrap', '.ref-row', 'ref_add');
+                            adder('emp_wrap', '.emp-row', 'emp_add');
+                        })();
+                    </script>
+                </form>
+            </div>
+        </t>
+    </template>
+
+    <template id="employment_application_thanks" name="Employment Application Submitted">
+        <t t-call="website.layout">
+            <div class="container my-5 text-center" style="max-width:640px;">
+                <h2>Thank you!</h2>
+                <p class="lead">Your employment application has been submitted.</p>
+                <p class="text-muted">Our team will review it and contact you. You
+                    may be asked to complete the signed originals (I-9, W-4) in
+                    person.</p>
+                <a href="/jobs" class="btn btn-outline-secondary mt-2">Back to Careers</a>
+            </div>
+        </t>
+    </template>
+</odoo>

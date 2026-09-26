@@ -22,6 +22,14 @@
                         string="Print File" class="btn-secondary"
                         invisible="not x_is_1099"
                         help="One PDF for the records folder: the filled W-9, the filled I-9, and the uploaded photo ID and SSN / work-authorization document."/>
+                <field name="x_is_employment_app" invisible="1"/>
+                <button name="action_create_employment_employee" type="object"
+                        string="Create Employee" class="btn-primary"
+                        invisible="not x_is_employment_app"/>
+                <button name="action_print_employment_packet" type="object"
+                        string="Print Application Packet" class="btn-secondary"
+                        invisible="not x_is_employment_app"
+                        help="Print the full packet: Employment Application, I-9 Section 1, W-4, and Direct Deposit."/>
             </xpath>
             <xpath expr="//notebook" position="inside">
                 <page string="1099 Onboarding" name="onboarding_1099"
@@ -82,6 +90,108 @@
                         <field name="x_ssn_doc" filename="x_ssn_doc_name"
                                string="Work-Authorization Document"/>
                         <field name="x_ssn_doc_name" invisible="1"/>
+                    </group>
+                </page>
+                <page string="Employment Application" name="employment_app"
+                      invisible="not x_is_employment_app">
+                    <group>
+                        <group string="Applicant">
+                            <field name="x_first_name"/>
+                            <field name="x_middle_initial"/>
+                            <field name="x_last_name"/>
+                            <field name="x_dob"/>
+                            <field name="x_ssn" password="True"/>
+                            <field name="x_position_applied"/>
+                            <field name="x_date_available"/>
+                            <field name="x_desired_salary"/>
+                        </group>
+                        <group string="Address / Eligibility">
+                            <field name="x_addr_street"/>
+                            <field name="x_addr_apt"/>
+                            <field name="x_addr_city"/>
+                            <field name="x_addr_state"/>
+                            <field name="x_addr_zip"/>
+                            <field name="x_is_citizen"/>
+                            <field name="x_worked_here_before"/>
+                            <field name="x_worked_here_when"
+                                   invisible="not x_worked_here_before"/>
+                            <field name="x_felony"/>
+                            <field name="x_felony_explain"
+                                   invisible="not x_felony"/>
+                        </group>
+                    </group>
+                    <separator string="Education"/>
+                    <field name="x_education_ids">
+                        <list editable="bottom">
+                            <field name="sequence" widget="handle"/>
+                            <field name="level"/>
+                            <field name="school"/>
+                            <field name="date_from"/>
+                            <field name="date_to"/>
+                            <field name="graduated"/>
+                            <field name="degree"/>
+                        </list>
+                    </field>
+                    <separator string="References"/>
+                    <field name="x_reference_ids">
+                        <list editable="bottom">
+                            <field name="sequence" widget="handle"/>
+                            <field name="name"/>
+                            <field name="relationship"/>
+                            <field name="company"/>
+                            <field name="phone"/>
+                        </list>
+                    </field>
+                    <separator string="Previous Employment"/>
+                    <field name="x_prior_employer_ids">
+                        <list editable="bottom">
+                            <field name="sequence" widget="handle"/>
+                            <field name="company"/>
+                            <field name="title"/>
+                            <field name="supervisor"/>
+                            <field name="date_from"/>
+                            <field name="date_to"/>
+                            <field name="reason_leaving"/>
+                            <field name="may_contact"/>
+                        </list>
+                    </field>
+                    <group>
+                        <group string="Military Service">
+                            <field name="x_mil_branch"/>
+                            <field name="x_mil_from"/>
+                            <field name="x_mil_to"/>
+                            <field name="x_mil_rank"/>
+                            <field name="x_mil_discharge"/>
+                            <field name="x_mil_explain"/>
+                        </group>
+                        <group string="Work Authorization (I-9)">
+                            <field name="x_work_auth"/>
+                            <field name="x_uscis_number"/>
+                            <field name="x_work_auth_expiry"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Federal Withholding (W-4)">
+                            <field name="x_w4_filing"/>
+                            <field name="x_w4_multiple_jobs"/>
+                            <field name="x_w4_dependents_amt"/>
+                            <field name="x_w4_other_income"/>
+                            <field name="x_w4_deductions"/>
+                            <field name="x_w4_extra_withholding"/>
+                        </group>
+                        <group string="Direct Deposit">
+                            <field name="x_dd_bank_name"/>
+                            <field name="x_dd_bank_address"/>
+                            <field name="x_dd_account_type"/>
+                            <field name="x_dd_routing" password="True"/>
+                            <field name="x_dd_account" password="True"/>
+                            <field name="x_dd_authorized"/>
+                        </group>
+                    </group>
+                    <group string="Signature">
+                        <field name="x_i9_signed"/>
+                        <field name="x_signature_name"/>
+                        <field name="x_signature_date"/>
                     </group>
                 </page>
             </xpath>

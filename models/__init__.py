@@ -7,6 +7,7 @@ from . import event_cost_type
 from . import event_cost_line
 from . import catering_menu
 from . import event_payment
+from . import event_clover
 from . import event_staff_assignment
 from . import event_access_window
 from . import event_callout
@@ -19,6 +20,8 @@ from . import calendar_event
 from . import hr_attendance
 from . import hr_employee
 from . import hr_applicant
+from . import hr_applicant_employment
+from . import hr_job
 from . import res_partner
 from . import survey_user_input
 from . import lodge_settings

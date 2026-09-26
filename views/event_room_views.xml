@@ -85,6 +85,19 @@
                         <field name="x_default_event_hours"/>
                         <field name="x_default_cleaning_hours"/>
                     </group>
+                    <group string="Call-Out Charge Rates (billed to the event)">
+                        <div colspan="2" class="text-muted">
+                            The hourly rate billed to the customer for each
+                            call-out worker. The manager still enters what they
+                            pay; the difference (charge − pay) is the Coverage
+                            margin toward the bartender pay pool. Leave $0 to
+                            fall back to pay-rate + overhead.
+                        </div>
+                        <field name="x_callout_charge_bar"/>
+                        <field name="x_callout_charge_kitchen"/>
+                        <field name="x_callout_charge_custodial"/>
+                        <field name="x_labor_overhead_per_hour"/>
+                    </group>
                     <group string="Deposit &amp; Tax">
                         <field name="x_deposit_pct"/>
                         <field name="x_balance_due_days_before"/>
@@ -92,6 +105,7 @@
                         <field name="x_event_tax_id"/>
                         <field name="x_ubi_tax_pct"
                                string="UBI / Property Tax % (non-member)"/>
+                        <field name="x_clover_buffer_hours"/>
                     </group>
                     <group string="Marketing / Exclusive Use Fees">
                         <field name="x_marketing_signage_fee"/>

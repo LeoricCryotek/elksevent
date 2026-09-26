@@ -35,6 +35,11 @@ class ElksLodgeSettings(models.Model):
         'res.currency', string="Currency",
         default=lambda self: self.env.company.currency_id,
     )
+    x_clover_buffer_hours = fields.Float(
+        "Clover Window Buffer (hrs)", default=2.0,
+        help="When pulling Clover point-of-sale for an event, extend the "
+             "event's start/end by this many hours before and after to catch "
+             "pre- and post-event sales.")
 
     # ------------------------------------------------------------------
     # Coordinator fee
@@ -127,9 +132,29 @@ class ElksLodgeSettings(models.Model):
     x_labor_overhead_per_hour = fields.Monetary(
         "Labor Overhead / hr", currency_field='x_event_currency_id',
         default=5.0,
-        help="Lodge overhead added to each call-out staff rate/hr. The billed "
-             "rate = the manager's rate + this overhead, rounded to the nearest "
-             "$5 (e.g. $15 entered -> $20 billed to the event).")
+        help="Fallback lodge overhead added to a call-out staff rate/hr when no "
+             "department charge rate is set below. Billed = manager's rate + "
+             "this overhead, rounded up to the nearest $5.")
+    # Flat per-department CHARGE rates billed to the event for call-out labor.
+    # When set (> 0) they override the overhead fallback: the event is billed at
+    # this rate/hr regardless of what the manager pays, and the difference
+    # (charge - pay) is the Coverage margin. Floored at the pay rate so we never
+    # bill below cost.
+    x_callout_charge_bar = fields.Monetary(
+        "Bartender Charge / hr (call-out)",
+        currency_field='x_event_currency_id',
+        help="Rate/hr the event is billed for each bartender on a call-out. "
+             "e.g. pay $15, charge $20 -> $5/hr Coverage.")
+    x_callout_charge_kitchen = fields.Monetary(
+        "Kitchen Charge / hr (call-out)",
+        currency_field='x_event_currency_id',
+        help="Rate/hr the event is billed for each kitchen worker on a "
+             "call-out.")
+    x_callout_charge_custodial = fields.Monetary(
+        "Custodial Charge / hr (call-out)",
+        currency_field='x_event_currency_id',
+        help="Rate/hr the event is billed for each custodial worker on a "
+             "call-out.")
 
     x_marketing_signage_fee = fields.Monetary(
         "Marketing Signage Use Fee", currency_field='x_event_currency_id',

@@ -12,11 +12,34 @@ AI
 - Adds boolean x_is_catering. The "Catered By" field on project.task domains on
   this flag; the seeded partner elksevent.partner_lodge_kitchen carries it.
 """
-from odoo import fields, models
+from odoo import _, api, fields, models
 
 
 class ResPartner(models.Model):
     _inherit = "res.partner"
+
+    x_event_count = fields.Integer(
+        "Lodge Events", compute="_compute_x_event_count")
+
+    def _compute_x_event_count(self):
+        Task = self.env['project.task']
+        for partner in self:
+            partner.x_event_count = Task.search_count([
+                ('x_is_event', '=', True),
+                ('partner_id', '=', partner.id),
+            ]) if partner.id else 0
+
+    def action_view_lodge_events(self):
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _("Events with %s", self.name),
+            'res_model': 'project.task',
+            'view_mode': 'list,form',
+            'domain': [('x_is_event', '=', True),
+                       ('partner_id', '=', self.id)],
+            'context': {'default_partner_id': self.id},
+        }
 
     x_is_catering = fields.Boolean(
         "Is Catering",
