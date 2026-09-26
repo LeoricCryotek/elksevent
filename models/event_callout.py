@@ -633,8 +633,8 @@ class EventCalloutLine(models.Model):
     bill_rate = fields.Monetary(
         "Billed / hr", currency_field='currency_id',
         compute='_compute_cost', store=True, readonly=True,
-        help="Rate/hr charged to the event: the department's charge rate from "
-             "Lodge Settings (or, if unset, your rate + overhead rounded up).")
+        help="Rate/hr charged to the event: your pay rate + the department's "
+             "markup per hour from Lodge Settings.")
     raw_cost = fields.Monetary(
         "Labor Cost", currency_field='currency_id',
         compute='_compute_cost', store=True, readonly=True,
@@ -663,8 +663,10 @@ class EventCalloutLine(models.Model):
     @api.depends('hours', 'rate', 'callout_id.department')
     def _compute_cost(self):
         settings = self.env['elks.lodge.settings'].sudo().search([], limit=1)
-        overhead = settings.x_labor_overhead_per_hour if settings else 5.0
-        charge_map = {
+        # Default markup/hr used when a department has no specific markup.
+        default_markup = (settings.x_labor_overhead_per_hour
+                          if settings else 5.0) or 0.0
+        markup_map = {
             'bar': (settings.x_callout_charge_bar if settings else 0.0),
             'kitchen': (settings.x_callout_charge_kitchen if settings else 0.0),
             'custodial': (
@@ -673,15 +675,11 @@ class EventCalloutLine(models.Model):
         for rec in self:
             raw = rec.rate or 0.0
             hrs = rec.hours or 0.0
-            charge = charge_map.get(rec.callout_id.department, 0.0) or 0.0
-            if charge > 0 and raw:
-                # Flat department charge rate — never bill below what we pay.
-                rec.bill_rate = max(charge, raw)
-            elif raw:
-                # Fallback: manager's rate + overhead rounded up to $5.
-                rec.bill_rate = self._round_up_5(raw + overhead)
-            else:
-                rec.bill_rate = 0.0
+            dept_markup = markup_map.get(rec.callout_id.department, 0.0) or 0.0
+            markup = dept_markup if dept_markup > 0 else default_markup
+            # Billed = the manager's pay rate + the markup per hour. The markup
+            # x hours is the Coverage pool. No rounding.
+            rec.bill_rate = (raw + markup) if raw else 0.0
             rec.raw_cost = hrs * raw
             rec.cost = hrs * rec.bill_rate
             rec.coverage = rec.cost - rec.raw_cost

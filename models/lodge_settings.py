@@ -130,31 +130,35 @@ class ElksLodgeSettings(models.Model):
         "Labor Markup %", default=15.0,
         help="Markup added to labor lines (charge = cost x (1 + this%)).")
     x_labor_overhead_per_hour = fields.Monetary(
-        "Labor Overhead / hr", currency_field='x_event_currency_id',
+        "Default Markup / hr", currency_field='x_event_currency_id',
         default=5.0,
-        help="Fallback lodge overhead added to a call-out staff rate/hr when no "
-             "department charge rate is set below. Billed = manager's rate + "
-             "this overhead, rounded up to the nearest $5.")
-    # Flat per-department CHARGE rates billed to the event for call-out labor.
-    # When set (> 0) they override the overhead fallback: the event is billed at
-    # this rate/hr regardless of what the manager pays, and the difference
-    # (charge - pay) is the Coverage margin. Floored at the pay rate so we never
-    # bill below cost.
+        help="DEFAULT markup per hour, used for any department whose own markup "
+             "below is left at $0.\n\n"
+             "On a call-out the manager enters only what they PAY each person. "
+             "The event is BILLED at pay rate + markup, and markup x hours is "
+             "the Coverage pool.\n"
+             "Example: pay $15 + $5 default markup = $20 billed, $5/hr Coverage.")
+    # Per-department MARKUP per hour added to the manager's pay rate. markup x
+    # hours is that department's Coverage pool. $0 => use the Default Markup.
     x_callout_charge_bar = fields.Monetary(
-        "Bartender Charge / hr (call-out)",
-        currency_field='x_event_currency_id',
-        help="Rate/hr the event is billed for each bartender on a call-out. "
-             "e.g. pay $15, charge $20 -> $5/hr Coverage.")
+        "Bar Markup / hr", currency_field='x_event_currency_id',
+        help="Markup per hour for BAR call-outs, added to each bartender's pay "
+             "rate to set what the event is billed and the Coverage pool.\n"
+             "Billed = pay + this markup; Coverage = this markup x hours.\n"
+             "Example: pay $15 + $5 Bar markup = $20 billed, $5/hr Coverage.\n"
+             "Leave $0 to use the Default Markup.")
     x_callout_charge_kitchen = fields.Monetary(
-        "Kitchen Charge / hr (call-out)",
-        currency_field='x_event_currency_id',
-        help="Rate/hr the event is billed for each kitchen worker on a "
-             "call-out.")
+        "Kitchen Markup / hr", currency_field='x_event_currency_id',
+        help="Markup per hour for KITCHEN call-outs, added to each kitchen "
+             "worker's pay rate.\n"
+             "Billed = pay + this markup; Coverage = this markup x hours.\n"
+             "Leave $0 to use the Default Markup.")
     x_callout_charge_custodial = fields.Monetary(
-        "Custodial Charge / hr (call-out)",
-        currency_field='x_event_currency_id',
-        help="Rate/hr the event is billed for each custodial worker on a "
-             "call-out.")
+        "Custodial Markup / hr", currency_field='x_event_currency_id',
+        help="Markup per hour for CUSTODIAL call-outs, added to each custodial "
+             "worker's pay rate.\n"
+             "Billed = pay + this markup; Coverage = this markup x hours.\n"
+             "Leave $0 to use the Default Markup.")
 
     x_marketing_signage_fee = fields.Monetary(
         "Marketing Signage Use Fee", currency_field='x_event_currency_id',

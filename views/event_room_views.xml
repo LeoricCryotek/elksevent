@@ -85,18 +85,20 @@
                         <field name="x_default_event_hours"/>
                         <field name="x_default_cleaning_hours"/>
                     </group>
-                    <group string="Call-Out Charge Rates (billed to the event)">
+                    <group string="Call-Out Markup / hr (builds the Coverage pool)">
                         <div colspan="2" class="text-muted">
-                            The hourly rate billed to the customer for each
-                            call-out worker. The manager still enters what they
-                            pay; the difference (charge − pay) is the Coverage
-                            margin toward the bartender pay pool. Leave $0 to
-                            fall back to pay-rate + overhead.
+                            Set a markup per hour for each department. On a
+                            call-out the manager enters only what they PAY each
+                            person; the event is BILLED at pay + this markup, and
+                            markup x hours is that department's Coverage pool
+                            (e.g. pay $15 + $5 Bar markup = $20 billed, $5/hr
+                            Coverage). A department left at $0 uses the Default
+                            Markup.
                         </div>
+                        <field name="x_labor_overhead_per_hour"/>
                         <field name="x_callout_charge_bar"/>
                         <field name="x_callout_charge_kitchen"/>
                         <field name="x_callout_charge_custodial"/>
-                        <field name="x_labor_overhead_per_hour"/>
                     </group>
                     <group string="Deposit &amp; Tax">
                         <field name="x_deposit_pct"/>
