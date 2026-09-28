@@ -549,9 +549,11 @@ class ProjectTask(models.Model):
             ('event_id', '=', self.id), ('department', '=', dept),
         ], limit=1)
 
-    # department -> the event flag that means "this department is in use"
+    # department -> the event flag that means "this department is in use".
+    # Kitchen uses x_food_by_us (food catered BY the Lodge Kitchen) — an outside
+    # caterer needs no kitchen call-out even though food is requested.
     _DEPT_USED_FIELD = {'bar': 'x_bar_use',
-                        'kitchen': 'x_food_request',
+                        'kitchen': 'x_food_by_us',
                         'custodial': 'x_cleaning_use'}
 
     def _kickoff_department_callouts(self):
@@ -841,19 +843,52 @@ class ProjectTask(models.Model):
     x_total_paid = fields.Monetary(
         "Total Paid", compute="_compute_payments",
         currency_field="x_currency_id",
-        help="Sum of all payments recorded against this event.")
+        help="Cash/check/card payments recorded against this event (excludes "
+             "write-offs).")
+    x_writeoff_total = fields.Monetary(
+        "Written Off", compute="_compute_payments",
+        currency_field="x_currency_id",
+        help="Amount waived / written off (a lodge-side courtesy, not "
+             "collected).")
     x_balance_remaining = fields.Monetary(
         "Balance Remaining", compute="_compute_payments",
         currency_field="x_currency_id",
-        help="Grand total minus everything paid so far.")
+        help="Grand total minus payments and any write-off.")
 
-    @api.depends("x_payment_ids.amount", "x_event_grand_total",
-                 "x_deposit_amount", "x_deposit_received")
+    @api.depends("x_payment_ids.amount", "x_payment_ids.method",
+                 "x_event_grand_total", "x_deposit_amount",
+                 "x_deposit_received")
     def _compute_payments(self):
         for rec in self:
-            rec.x_total_paid = rec._amount_paid()
+            cash = sum(rec.x_payment_ids.filtered(
+                lambda p: p.method != 'writeoff').mapped('amount'))
+            wo = sum(rec.x_payment_ids.filtered(
+                lambda p: p.method == 'writeoff').mapped('amount'))
+            # Fall back to the legacy single deposit only if no log lines.
+            if not rec.x_payment_ids:
+                cash = (rec.x_deposit_amount
+                        if rec.x_deposit_received else 0.0)
+            rec.x_total_paid = cash
+            rec.x_writeoff_total = wo
             rec.x_balance_remaining = max(
-                (rec.x_event_grand_total or 0.0) - rec.x_total_paid, 0.0)
+                (rec.x_event_grand_total or 0.0) - cash - wo, 0.0)
+
+    def action_write_off_balance(self):
+        """Open the payment dialog pre-set to write off the outstanding
+        balance (lodge-side courtesy — no charge to the customer)."""
+        self.ensure_one()
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("Write Off Balance"),
+            "res_model": "elks.event.payment.wizard",
+            "view_mode": "form",
+            "target": "new",
+            "context": {
+                "default_event_id": self.id,
+                "default_method": "writeoff",
+                "default_amount": self.x_balance_remaining,
+            },
+        }
 
     def _amount_paid(self):
         """Total the customer has paid: the payment log if any is recorded,
@@ -863,6 +898,39 @@ class ProjectTask(models.Model):
         if logged:
             return logged
         return self.x_deposit_amount if self.x_deposit_received else 0.0
+
+    # Deposit fields that, when changed, keep the deposit payment line in sync.
+    _DEPOSIT_SYNC_KEYS = {
+        'x_deposit_received', 'x_deposit_amount', 'x_deposit_date',
+        'x_deposit_method', 'x_deposit_reference'}
+
+    def _sync_deposit_payment(self):
+        """Mirror the recorded deposit as a payment-log line so it counts in
+        Total Paid / Balance and is credited on the invoices. One 'From
+        Deposit' line per event; removed if the deposit is un-received or $0."""
+        Payment = self.env['elks.event.payment'].sudo()
+        method_map = {'cash': 'cash', 'check': 'check',
+                      'card': 'card', 'other': 'other'}
+        for rec in self:
+            if not rec.x_is_event:
+                continue
+            existing = rec.x_payment_ids.filtered('is_deposit')[:1]
+            if rec.x_deposit_received and (rec.x_deposit_amount or 0.0) > 0:
+                vals = {
+                    'amount': rec.x_deposit_amount,
+                    'date': rec.x_deposit_date or fields.Date.context_today(
+                        rec),
+                    'method': method_map.get(rec.x_deposit_method, 'other'),
+                    'reference': rec.x_deposit_reference or False,
+                    'note': _("Deposit"),
+                    'is_deposit': True,
+                }
+                if existing:
+                    existing.write(vals)
+                else:
+                    Payment.create(dict(vals, event_id=rec.id))
+            elif existing:
+                existing.unlink()
 
     def action_record_payment(self):
         self.ensure_one()
@@ -1106,7 +1174,7 @@ class ProjectTask(models.Model):
     # Event-cost (customer charges) roll-up + tax/total mirrors of the quote.
     x_eventcosts_total = fields.Monetary(
         "Event Costs Total", currency_field='x_currency_id',
-        compute='_compute_financials', store=True,
+        compute='_compute_financials', store=True, tracking=True,
         help="Sum of the Event Costs lines (customer charges).",
     )
     x_taxable_subtotal = fields.Monetary(
@@ -1127,7 +1195,7 @@ class ProjectTask(models.Model):
     )
     x_event_grand_total = fields.Monetary(
         "Grand Total (incl. tax)", currency_field='x_currency_id',
-        compute='_compute_financials', store=True,
+        compute='_compute_financials', store=True, tracking=True,
     )
 
     # ------------------------------------------------------------------
@@ -1493,6 +1561,7 @@ class ProjectTask(models.Model):
         records._sync_requested_rooms()
         records._reconcile_event_datetime()
         records.with_context(_labor_sync=True)._sync_labor_cost_lines()
+        records.with_context(_deposit_sync=True)._sync_deposit_payment()
         records.filtered('x_is_elks_event')._sync_marketing_event()
         return records
 
@@ -1508,6 +1577,9 @@ class ProjectTask(models.Model):
         if (not self.env.context.get('_labor_sync')
                 and (vals.keys() & self._LABOR_PLAN_KEYS)):
             self.with_context(_labor_sync=True)._sync_labor_cost_lines()
+        if (not self.env.context.get('_deposit_sync')
+                and (vals.keys() & self._DEPOSIT_SYNC_KEYS)):
+            self.with_context(_deposit_sync=True)._sync_deposit_payment()
         if 'stage_id' in vals:
             self._close_children_on_fold()
             aa = self.env.ref('elksevent.stage_after_action',
@@ -4219,6 +4291,72 @@ class ProjectTask(models.Model):
         return self.env.ref(
             'elksevent.action_report_event_aar').report_action(self)
 
+    def _aar_person_coverage(self):
+        """Per-person coverage from ACTUAL clocked hours: worked hours x pay
+        rate = paid; worked hours x (pay + markup) = billed; the difference is
+        coverage. Aggregated by person + department, plus the caller totals."""
+        self.ensure_one()
+        settings = self._event_settings()
+        default_markup = (settings.x_labor_overhead_per_hour
+                          if settings else 0.0) or 0.0
+        dept_markup = {
+            'bar': (settings.x_callout_charge_bar if settings else 0.0)
+            or default_markup,
+            'kitchen': (settings.x_callout_charge_kitchen if settings else 0.0)
+            or default_markup,
+            'custodial': (
+                settings.x_callout_charge_custodial if settings else 0.0)
+            or default_markup,
+            'event': default_markup,
+        }
+        settings_rate = {
+            'bar': (settings.x_bartender_rate if settings else 0.0) or 0.0,
+            'kitchen': (settings.x_cook_rate if settings else 0.0) or 0.0,
+            'custodial': (settings.x_custodial_rate if settings else 0.0) or 0.0,
+            'event': (settings.x_event_staff_rate if settings else 0.0) or 0.0,
+        }
+        dept_label = {'bar': _('Bar'), 'kitchen': _('Kitchen'),
+                      'custodial': _('Custodial'), 'event': _('Event Worker')}
+        role_dept = {'bartender': 'bar', 'kitchen': 'kitchen',
+                     'custodial': 'custodial', 'event': 'event'}
+        Line = self.env['elks.event.callout.line'].sudo()
+        agg = {}
+        for att in self.x_attendance_ids:
+            hrs = att.worked_hours or 0.0
+            if not hrs:
+                continue
+            dept = role_dept.get(att.x_event_role or 'event', 'event')
+            # Pay rate: the certified call-out line for this person+dept, else
+            # the department's default pay rate from Lodge Settings.
+            rate = 0.0
+            if dept in ('bar', 'kitchen', 'custodial') and att.employee_id:
+                ln = Line.search([
+                    ('callout_id.event_id', '=', self.id),
+                    ('callout_id.state', '=', 'certified'),
+                    ('callout_id.department', '=', dept),
+                    ('employee_id', '=', att.employee_id.id)], limit=1)
+                rate = ln.rate or 0.0
+            if not rate:
+                rate = settings_rate.get(dept, 0.0)
+            key = (att.employee_id.id, dept, att.employee_id.name
+                   or _('Worker'))
+            d = agg.setdefault(key, {'hours': 0.0, 'rate': rate})
+            d['hours'] += hrs
+            if rate:
+                d['rate'] = rate
+        rows = []
+        for (emp_id, dept, name), d in agg.items():
+            markup = dept_markup.get(dept, default_markup)
+            paid = d['hours'] * d['rate']
+            billed = d['hours'] * (d['rate'] + markup)
+            rows.append({
+                'name': name, 'dept': dept_label.get(dept, dept),
+                'hours': d['hours'], 'rate': d['rate'], 'markup': markup,
+                'paid': paid, 'billed': billed,
+                'coverage': d['hours'] * markup})
+        rows.sort(key=lambda r: (r['dept'], r['name']))
+        return rows
+
     def _aar_survey_qa(self):
         """[(question, answer)] from the customer's survey response, if any —
         built defensively across survey field-name variations."""
@@ -4825,12 +4963,16 @@ class ProjectTask(models.Model):
             # One credit line per payment so each date/method is on the bill.
             for p in payments:
                 when = _(" on %s", p.date) if p.date else ""
-                how = dict(p._fields['method'].selection).get(p.method, '')
-                ref = _(" #%s", p.reference) if p.reference else ""
-                lines.append(_line(
-                    _("Less: Payment%(when)s (%(how)s%(ref)s)",
-                      when=when, how=how, ref=ref),
-                    -(p.amount or 0.0), dep_product, False))
+                if p.method == 'writeoff':
+                    why = _(" - %s", p.note) if p.note else ""
+                    label = _("Less: Balance Written Off%(why)s", why=why)
+                else:
+                    how = dict(p._fields['method'].selection).get(p.method, '')
+                    ref = _(" #%s", p.reference) if p.reference else ""
+                    label = _("Less: Payment%(when)s (%(how)s%(ref)s)",
+                              when=when, how=how, ref=ref)
+                lines.append(_line(label, -(p.amount or 0.0),
+                                   dep_product, False))
         elif kind == 'final' and self.x_deposit_received and (
                 self.x_deposit_amount or 0.0) > 0:
             date_txt = (_(" on %s", self.x_deposit_date)

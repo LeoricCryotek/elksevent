@@ -964,6 +964,11 @@
                         <button name="action_record_payment" type="object"
                                 class="btn-primary me-2 mb-2" icon="fa-money"
                                 string="Record Payment"/>
+                        <button name="action_write_off_balance" type="object"
+                                class="btn-secondary me-2 mb-2" icon="fa-eraser"
+                                string="Write Off Balance"
+                                invisible="x_balance_remaining &lt;= 0"
+                                help="Waive the remaining balance (a lodge-side courtesy, e.g. our mistake) — records a write-off, zeroes the balance, and credits it on the invoice. A reason is required."/>
                         <span class="text-muted">Log each check / cash / card
                             payment as it comes in. The balance updates and the
                             final invoice credits what's been paid.</span>
@@ -981,6 +986,9 @@
                     <group invisible="x_is_elks_event">
                         <group>
                             <field name="x_total_paid" readonly="1"/>
+                            <field name="x_writeoff_total" readonly="1"
+                                   invisible="x_writeoff_total == 0"
+                                   decoration-warning="x_writeoff_total &gt; 0"/>
                             <field name="x_balance_remaining" readonly="1"
                                    class="oe_subtotal_footer_separator"
                                    decoration-danger="x_balance_remaining &gt; 0"

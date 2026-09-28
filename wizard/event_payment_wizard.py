@@ -25,6 +25,7 @@ class ElksEventPaymentWizard(models.TransientModel):
         ("check", "Check"),
         ("card", "Credit/Debit Card"),
         ("other", "Other"),
+        ("writeoff", "Write-Off / Waived"),
     ], string="Payment Type", required=True, default="check")
     reference = fields.Char(
         "Reference / Check #",
@@ -44,9 +45,12 @@ class ElksEventPaymentWizard(models.TransientModel):
     def action_record(self):
         self.ensure_one()
         if self.amount <= 0:
-            raise UserError(_("Enter a payment amount greater than zero."))
+            raise UserError(_("Enter an amount greater than zero."))
         if self.method == "check" and not self.reference:
             raise UserError(_("Enter the check number in Reference."))
+        if self.method == "writeoff" and not (self.note or self.reference):
+            raise UserError(_(
+                "Enter a reason for the write-off in the Note field."))
         self.env["elks.event.payment"].create({
             "event_id": self.event_id.id,
             "date": self.date,

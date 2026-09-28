@@ -33,10 +33,14 @@ class ElksEventPayment(models.Model):
         ("check", "Check"),
         ("card", "Credit/Debit Card"),
         ("other", "Other"),
+        ("writeoff", "Write-Off / Waived"),
     ], string="Method", required=True, default="check")
     reference = fields.Char(
         "Reference", help="Check number, card/transaction reference, etc.")
     note = fields.Char("Note")
+    is_deposit = fields.Boolean(
+        "From Deposit", help="This payment line was created from the event's "
+        "recorded deposit; it stays in sync with the Deposit fields.")
     currency_id = fields.Many2one(
         "res.currency", default=lambda self: self.env.company.currency_id)
 
