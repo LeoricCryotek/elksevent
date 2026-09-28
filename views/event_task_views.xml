@@ -184,8 +184,14 @@
                                     <field name="currency_id" column_invisible="1"/>
                                 </group>
                             </group>
+                            <div class="alert alert-danger" role="alert"
+                                 invisible="state != 'cancelled'">
+                                <strong>This call-out was cancelled.</strong>
+                                <field name="cancel_reason" nolabel="1"
+                                       readonly="1"/>
+                            </div>
                             <div class="alert alert-warning" role="alert"
-                                 invisible="not has_plan_changes">
+                                 invisible="not has_plan_changes or state == 'cancelled'">
                                 <strong>Plan changed since this was sent.</strong>
                                 Resend from the buttons above if the
                                 manager needs to re-check.
@@ -679,12 +685,35 @@
                                    context="{'default_x_is_catering': True, 'default_is_company': True, 'default_company_type': 'company'}"
                                    options="{'no_create': False, 'no_create_edit': False}"/>
                             <field name="x_food_by_us" invisible="1"/>
+                            <field name="x_kitchen_quote_orphaned" invisible="1"/>
                             <field name="x_caterer_license_on_file"
                                    invisible="not x_food_request or not x_caterer_id or x_food_by_us"/>
                             <field name="x_caterer_insurance_on_file"
                                    invisible="not x_food_request or not x_caterer_id or x_food_by_us"/>
                         </group>
                     </group>
+                    <!-- Outside caterer chosen after the Lodge Kitchen already
+                         quoted / certified: warn + offer to retire the stale
+                         kitchen quote and strip its charges. -->
+                    <div class="alert alert-warning" role="alert"
+                         invisible="not x_kitchen_quote_orphaned"
+                         style="margin-top:8px;">
+                        <strong>The Lodge Kitchen already quoted this event, but
+                        an outside caterer is now selected.</strong>
+                        Its charges are no longer billed. Retire the kitchen
+                        quote to cancel the kitchen call-out (the kitchen manager
+                        is emailed), un-approve the menu items, and clear the
+                        charges. Then re-open the invoices and hit
+                        <i>Update Invoices</i>.
+                        <div style="margin-top:6px;">
+                            <button name="action_retire_kitchen_quote"
+                                    type="object"
+                                    class="btn-warning"
+                                    icon="fa-ban"
+                                    string="Retire Kitchen Quote"
+                                    confirm="Cancel the kitchen call-out, notify the kitchen manager, and remove the kitchen charges from this event?"/>
+                        </div>
+                    </div>
                     <separator string="Customer Catering Quote (options to present)"
                                invisible="not x_food_request"/>
                     <div class="text-muted" invisible="not x_food_request">

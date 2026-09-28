@@ -75,7 +75,12 @@ class EventCallout(models.Model):
         ('draft', 'Draft'),
         ('sent', 'Sent to Manager'),
         ('certified', 'Certified'),
+        ('cancelled', 'Cancelled'),
     ], default='draft', required=True, index=True, tracking=False)
+    cancel_reason = fields.Char(
+        "Cancellation Reason", copy=False,
+        help="Why this call-out was cancelled (e.g. a different caterer was "
+             "selected). Shown to the manager on the call-out page.")
 
     # Generic staffing estimate (mapped per department via FIELD_MAP)
     num_bars = fields.Integer("Number of Bars")
@@ -376,6 +381,61 @@ class EventCallout(models.Model):
             rec.sudo()._notify_coordinator_certified()
         return True
 
+    def action_cancel(self, reason=None, notify=True):
+        """Cancel this call-out (e.g. a different caterer was selected).
+
+        Marks the call-out cancelled with a reason so the manager's portal
+        page shows it's off, optionally emails the manager, and logs it on the
+        event chatter. Does NOT itself touch the event's cost lines — the
+        caller re-syncs those (an outside caterer already stops kitchen
+        billing via _sync_labor_cost_lines)."""
+        for rec in self:
+            if rec.state == 'cancelled':
+                continue
+            rec.write({
+                'state': 'cancelled',
+                'cancel_reason': reason or _("Cancelled"),
+            })
+            rec.event_id.message_post(
+                body=_("%(dept)s call-out cancelled: %(why)s",
+                       dept=rec.department_label,
+                       why=reason or _("no reason given")),
+                subtype_xmlid='mail.mt_note')
+            if notify:
+                rec.sudo()._notify_manager_cancelled(reason)
+        return True
+
+    def _notify_manager_cancelled(self, reason=None):
+        """Email the department manager that their call-out was cancelled."""
+        self.ensure_one()
+        mgr = self.manager_partner_id
+        if not (mgr and mgr.email):
+            return False
+        try:
+            base = self.env['ir.config_parameter'].sudo().get_param(
+                'web.base.url') or ''
+            link = '%s/my/callout/%s' % (base, self.id)
+            self.env['mail.mail'].sudo().create({
+                'subject': _('%(dept)s call-out cancelled - %(evt)s',
+                             dept=self.department_label,
+                             evt=self.event_id.name or 'Event'),
+                'body_html': _(
+                    '<p>Hello %(mgr)s,</p><p>The %(dept)s call-out for '
+                    '<strong>%(evt)s</strong> has been <strong>cancelled</strong>'
+                    '.</p><p>%(why)s</p><p>No action is needed — you can stop '
+                    'any prep for this event. <a href="%(link)s">View the '
+                    'call-out</a>.</p>',
+                    mgr=mgr.name or _('there'),
+                    dept=self.department_label,
+                    evt=self.event_id.name or 'the event',
+                    why=(_('Reason: %s', reason) if reason else ''),
+                    link=link),
+                'email_to': mgr.email,
+            }).send()
+        except Exception:  # noqa: BLE001 - never block the caterer change
+            return False
+        return True
+
     # department -> event gratuity field / planned-roster role
     _DEPT_GRATUITY_FIELD = {'bar': 'x_bar_gratuity',
                             'kitchen': 'x_kitchen_gratuity'}
@@ -574,9 +634,11 @@ class EventCallout(models.Model):
         """Open (not-yet-certified) call-outs the current user should act on —
         for the /my card counter and its visibility."""
         if self.env.user.has_group('elksevent.group_event_coordinator'):
-            return self.sudo().search_count([('state', '!=', 'certified')])
+            return self.sudo().search_count([
+                ('state', 'not in', ('certified', 'cancelled'))])
         return self.sudo().search_count([
-            ('manager_partner_id', 'in', self._current_user_partner_ids())])
+            ('manager_partner_id', 'in', self._current_user_partner_ids()),
+            ('state', '!=', 'cancelled')])
 
     @api.model
     def _current_user_has_callouts(self):
@@ -585,7 +647,8 @@ class EventCallout(models.Model):
         if self.env.user.has_group('elksevent.group_event_coordinator'):
             return True
         return bool(self.sudo().search_count([
-            ('manager_partner_id', 'in', self._current_user_partner_ids())]))
+            ('manager_partner_id', 'in', self._current_user_partner_ids()),
+            ('state', '!=', 'cancelled')]))
 
     @api.model
     def _get_or_create(self, event, department):

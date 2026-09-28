@@ -148,6 +148,16 @@
                         certify.
                     </p>
 
+                    <t t-if="callout.state == 'cancelled'">
+                        <div class="alert alert-danger">
+                            <h5 class="fw-bold mb-1"><i class="fa fa-ban"/> This call-out has been cancelled.</h5>
+                            <p class="mb-0">
+                                <t t-if="callout.cancel_reason"><t t-esc="callout.cancel_reason"/> </t>
+                                No action is needed — you can stop any prep for this event.
+                            </p>
+                        </div>
+                    </t>
+
                     <t t-if="callout.state == 'certified'">
                         <div class="alert alert-success d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <span>
@@ -337,7 +347,7 @@
 
                     <form t-attf-action="/my/callout/{{callout.id}}/submit" method="post">
                         <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
-                        <t t-set="ro" t-value="callout.state == 'certified'"/>
+                        <t t-set="ro" t-value="callout.state in ('certified', 'cancelled')"/>
 
                         <!-- ===== Staff roster: assign people, start/end -> hours, cost ===== -->
                         <h6 class="fw-bold">Staff Roster — assign by name</h6>

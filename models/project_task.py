@@ -766,7 +766,7 @@ class ProjectTask(models.Model):
         help="How the food should be served / set up — e.g. \"two buffet "
              "lines; just provide tables with linens.\"")
     x_caterer_id = fields.Many2one(
-        'res.partner', string="Catered By",
+        'res.partner', string="Catered By", tracking=True,
         help="Who is catering. Defaults to the Lodge Kitchen (which turns on "
              "the kitchen call-out); pick an outside catering company or "
              "create a new one.")
@@ -788,6 +788,26 @@ class ProjectTask(models.Model):
                 self.x_caterer_id = kitchen.id
     x_caterer_license_on_file = fields.Boolean("Caterer License on File")
     x_caterer_insurance_on_file = fields.Boolean("Caterer Insurance on File")
+    # True when the Lodge Kitchen already quoted / certified (there are approved
+    # menu items or an active kitchen call-out) but the selected caterer is now
+    # an outside company — so the stale kitchen quote should be retired. Drives
+    # the warning banner + "Retire Kitchen Quote" button on the event form.
+    x_kitchen_quote_orphaned = fields.Boolean(
+        "Kitchen Quote Needs Retiring",
+        compute='_compute_kitchen_quote_orphaned')
+
+    @api.depends('x_food_by_us', 'x_caterer_id',
+                 'x_menu_item_ids.approved',
+                 'x_callout_ids.department', 'x_callout_ids.state')
+    def _compute_kitchen_quote_orphaned(self):
+        for rec in self:
+            kitchen_work = bool(
+                rec.x_menu_item_ids.filtered('approved')) or bool(
+                rec.x_callout_ids.filtered(
+                    lambda c: c.department == 'kitchen'
+                    and c.state in ('sent', 'certified')))
+            rec.x_kitchen_quote_orphaned = (
+                kitchen_work and not rec.x_food_by_us)
     x_extras = fields.Text("Extras Supplied")
 
     # Marker on a generated subtask so we never duplicate it
@@ -3197,7 +3217,7 @@ class ProjectTask(models.Model):
         'x_bar_gratuity', 'x_kitchen_gratuity',
         'x_marketing_signage', 'x_exclusive_use', 'x_antlers_service',
         'x_bar_use', 'x_food_request', 'x_is_elks_event',
-        'x_insurance_by'))
+        'x_insurance_by', 'x_caterer_id', 'x_food_by_us'))
 
     def _sync_labor_cost_lines(self):
         """(Re)build the auto service cost lines from the planned hours and the
@@ -3235,6 +3255,12 @@ class ProjectTask(models.Model):
                          'custodial': 'cleaning_service'}
             for co in rec.x_callout_ids.filtered(
                     lambda c: c.state == 'certified'):
+                # A kitchen call-out only bills when the Lodge Kitchen is the
+                # selected caterer. If an outside caterer was picked (even after
+                # the kitchen certified), the kitchen isn't cooking — so its
+                # roster labor is NOT charged to the customer.
+                if co.department == 'kitchen' and not rec.x_food_by_us:
+                    continue
                 ctype = tid(dept_code.get(co.department))
                 if ctype and (co.cost_total or co.raw_cost_total):
                     Line.create({
@@ -3280,8 +3306,11 @@ class ProjectTask(models.Model):
             # manager on the call-out, approved on the Approval tab) posts one
             # Catering Food line: plates x price-per-plate, so it lands on the
             # invoice and the P&L.
+            # Only bill the kitchen menu when the Lodge Kitchen is the caterer.
+            # If an outside caterer was selected, the in-house menu quote does
+            # not post to the customer's charges.
             cat_type = tid('catering_food')
-            if cat_type:
+            if cat_type and rec.x_food_by_us:
                 cat_taxable = Type.browse(cat_type).taxable
                 for mi in rec.x_menu_item_ids.filtered('approved'):
                     if not (mi.plates and mi.price_per_plate):
@@ -3719,6 +3748,52 @@ class ProjectTask(models.Model):
 
     def action_notify_custodial_callout(self):
         self._send_digital_callout('custodial', keep_state=True)
+
+    def action_retire_kitchen_quote(self):
+        """Retire the in-house kitchen quote when a different caterer is chosen.
+
+        Called from the "Retire Kitchen Quote" button that appears once an
+        outside caterer is selected but the Lodge Kitchen already quoted /
+        certified. It: cancels the kitchen call-out (and emails the kitchen
+        manager so they stop prepping), un-approves the kitchen menu items, and
+        rebuilds the cost lines — which now drop the kitchen charges because an
+        outside caterer is selected — then logs the financial change on the
+        event chatter.
+        """
+        self.ensure_one()
+        caterer = self.x_caterer_id.name or _("another caterer")
+        reason = _("Another caterer selected (%s).", caterer)
+        # Cancel + notify the kitchen manager for any active kitchen call-out.
+        kitchen_cos = self.x_callout_ids.filtered(
+            lambda c: c.department == 'kitchen'
+            and c.state in ('draft', 'sent', 'certified'))
+        kitchen_cos.action_cancel(reason=reason, notify=True)
+        # Un-approve the kitchen menu items so they no longer bill (and the
+        # orphan flag clears). The quote itself is preserved for reference.
+        approved = self.x_menu_item_ids.filtered('approved')
+        if approved:
+            approved.write({'approved': False})
+        # Snapshot what was billed before, so the chatter note quantifies the
+        # removed charges, then rebuild the cost lines (kitchen now excluded).
+        before = self.x_event_grand_total or 0.0
+        self._sync_labor_cost_lines()
+        if self.x_sale_order_id:
+            try:
+                self._sync_quote_lines()
+            except Exception as e:  # noqa: BLE001
+                _logger.warning("Quote refresh failed for %s: %s", self.id, e)
+        removed = max(before - (self.x_event_grand_total or 0.0), 0.0)
+        self.message_post(
+            body=_(
+                "<b>Kitchen quote retired</b> — %(caterer)s selected as the "
+                "caterer. The in-house kitchen call-out was cancelled, the "
+                "kitchen menu items un-approved, and their charges removed from "
+                "the event%(amt)s. Re-open the invoices and hit <i>Update "
+                "Invoices</i> to re-bill the customer.",
+                caterer=caterer,
+                amt=(_(" (-$%.2f)", removed) if removed > 0.005 else "")),
+            subtype_xmlid='mail.mt_note')
+        return True
 
     def action_build_labor_costs(self):
         """Button: rebuild the auto service cost lines and refresh the quote."""
@@ -4789,11 +4864,24 @@ class ProjectTask(models.Model):
         return Markup('').join(parts)
 
     def _attach_event_agreement(self, move):
-        """Attach the signable Facility Usage Agreement PDF to an invoice."""
+        """Attach the signable Facility Usage Agreement PDF to an invoice.
+
+        Idempotent: any prior agreement PDF on this invoice is removed first,
+        so re-running (e.g. on 'Update Invoices') REPLACES the stale copy with
+        one rendered from the current numbers rather than piling up duplicates
+        or leaving an out-of-date agreement behind the fresh invoice lines.
+        """
         self.ensure_one()
         try:
             pdf, _dummy = self.env['ir.actions.report']._render_qweb_pdf(
                 'elksevent.report_event_contract', self.ids)
+            # Drop any previous Facility Usage Agreement on this move so the
+            # attached contract always matches the (re-laid) invoice totals.
+            self.env['ir.attachment'].sudo().search([
+                ('res_model', '=', 'account.move'),
+                ('res_id', '=', move.id),
+                ('name', 'like', 'Facility Usage Agreement%'),
+            ]).unlink()
             self.env['ir.attachment'].create({
                 'name': 'Facility Usage Agreement - %s.pdf' % (
                     self.name or 'Event'),
@@ -5119,6 +5207,7 @@ class ProjectTask(models.Model):
             except Exception as e:  # noqa: BLE001
                 _logger.warning(
                     "Quote refresh failed for %s: %s", self.id, e)
+        settings = self._event_settings()
         drafts = self.x_invoice_ids.filtered(lambda m: m.state == 'draft')
         for mv in drafts:
             kind = mv.x_event_invoice_kind or 'final'
@@ -5126,6 +5215,12 @@ class ProjectTask(models.Model):
                 'invoice_line_ids': [(5, 0, 0)] + self._event_invoice_lines(kind),
                 'narration': self._event_invoice_narration(),
             })
+            # Re-render the attached Facility Usage Agreement so the signable
+            # contract PDF reflects the SAME updated totals as the invoice
+            # lines (otherwise it stays frozen at the figures from when the
+            # invoice was first created).
+            if not settings or settings.x_invoice_attach_agreement:
+                self._attach_event_agreement(mv)
         posted = self.x_invoice_ids.filtered(lambda m: m.state == 'posted')
         msg = _("Financials refreshed (P&L and bookkeeper breakdown updated).")
         if drafts:
