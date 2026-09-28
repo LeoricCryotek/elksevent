@@ -15,6 +15,10 @@
                 <field name="x_guest_count" type="measure"/>
                 <field name="x_pl_net_total" type="measure"/>
                 <field name="x_total_billed" type="measure"/>
+                <field name="x_coordinator_fee" type="measure"/>
+                <field name="x_nontaxable_subtotal" type="measure"/>
+                <field name="x_cat_event" type="measure"/>
+                <field name="x_discount_amount" type="measure"/>
                 <field name="x_profit_per_guest" type="measure"/>
                 <field name="x_profit_margin_pct" type="measure"/>
             </pivot>
@@ -111,4 +115,129 @@
               parent="menu_event_reports"
               action="action_event_performance"
               sequence="5"/>
+
+    <!-- ==========================================================
+         Coordinator & Services report: how much was billed into the
+         coordinator position, the event-services fees and their cost,
+         and the discounts given away — by coordinator, event type and
+         period. Pivot + graph + list.
+         ========================================================== -->
+    <record id="view_event_coord_services_pivot" model="ir.ui.view">
+        <field name="name">event.coord.services.pivot</field>
+        <field name="model">project.task</field>
+        <field name="arch" type="xml">
+            <pivot string="Coordinator &amp; Services" sample="1">
+                <field name="x_coordinator_employee_id" type="row"/>
+                <field name="x_event_date" interval="month" type="col"/>
+                <field name="x_coordinator_fee" type="measure"/>
+                <field name="x_nontaxable_subtotal" type="measure"/>
+                <field name="x_cat_event" type="measure"/>
+                <field name="x_discount_amount" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="view_event_coord_services_graph" model="ir.ui.view">
+        <field name="name">event.coord.services.graph</field>
+        <field name="model">project.task</field>
+        <field name="arch" type="xml">
+            <graph string="Coordinator &amp; Services" type="bar" sample="1"
+                   stacked="0">
+                <field name="x_coordinator_employee_id"/>
+                <field name="x_coordinator_fee" type="measure"/>
+                <field name="x_nontaxable_subtotal" type="measure"/>
+                <field name="x_discount_amount" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="view_event_coord_services_list" model="ir.ui.view">
+        <field name="name">event.coord.services.list</field>
+        <field name="model">project.task</field>
+        <field name="arch" type="xml">
+            <list string="Coordinator &amp; Services" create="false">
+                <field name="x_event_date" string="Date"/>
+                <field name="name" string="Event"/>
+                <field name="x_event_type" string="Type"/>
+                <field name="x_coordinator_employee_id" string="Coordinator"/>
+                <field name="x_coordinator_fee" string="Coordinator Fee"
+                       sum="Coordinator Fee"/>
+                <field name="x_coordinator_fee_paid" string="Paid Out"
+                       widget="boolean_toggle" readonly="1"/>
+                <field name="x_nontaxable_subtotal" string="Services Billed"
+                       sum="Services Billed"/>
+                <field name="x_cat_event" string="Services Cost"
+                       sum="Services Cost"/>
+                <field name="x_discount_amount" string="Discount Given"
+                       sum="Discount Given"/>
+                <field name="x_currency_id" column_invisible="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_event_coord_services_search" model="ir.ui.view">
+        <field name="name">event.coord.services.search</field>
+        <field name="model">project.task</field>
+        <field name="arch" type="xml">
+            <search string="Coordinator &amp; Services">
+                <field name="name"/>
+                <field name="x_coordinator_employee_id"/>
+                <field name="x_event_type"/>
+                <filter name="this_year" string="This Year"
+                        domain="[('x_event_date','&gt;=', (context_today().replace(month=1, day=1)).strftime('%Y-%m-%d'))]"/>
+                <filter name="this_month" string="This Month"
+                        domain="[('x_event_date','&gt;=', (context_today().replace(day=1)).strftime('%Y-%m-%d'))]"/>
+                <separator/>
+                <filter name="coord_paid" string="Coordinator Paid Out"
+                        domain="[('x_coordinator_fee_paid','=',True)]"/>
+                <filter name="coord_unpaid" string="Coordinator Not Paid"
+                        domain="[('x_coordinator_fee_paid','=',False),('x_coordinator_fee','&gt;',0)]"/>
+                <filter name="has_discount" string="Discounted Events"
+                        domain="[('x_discount_amount','&gt;',0)]"/>
+                <separator/>
+                <filter name="grp_coord" string="Coordinator"
+                        context="{'group_by': 'x_coordinator_employee_id'}"/>
+                <filter name="grp_type" string="Event Type"
+                        context="{'group_by': 'x_event_type'}"/>
+                <filter name="grp_month" string="Event Month"
+                        context="{'group_by': 'x_event_date:month'}"/>
+                <filter name="grp_year" string="Event Year"
+                        context="{'group_by': 'x_event_date:year'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_event_coord_services" model="ir.actions.act_window">
+        <field name="name">Coordinator &amp; Services</field>
+        <field name="res_model">project.task</field>
+        <field name="view_mode">pivot,graph,list</field>
+        <field name="domain">[('x_is_event', '=', True)]</field>
+        <field name="search_view_id" ref="view_event_coord_services_search"/>
+        <field name="context">{'search_default_grp_coord': 1}</field>
+    </record>
+
+    <record id="action_event_coord_services_pivot_view" model="ir.actions.act_window.view">
+        <field name="sequence" eval="10"/>
+        <field name="view_mode">pivot</field>
+        <field name="view_id" ref="view_event_coord_services_pivot"/>
+        <field name="act_window_id" ref="action_event_coord_services"/>
+    </record>
+    <record id="action_event_coord_services_graph_view" model="ir.actions.act_window.view">
+        <field name="sequence" eval="20"/>
+        <field name="view_mode">graph</field>
+        <field name="view_id" ref="view_event_coord_services_graph"/>
+        <field name="act_window_id" ref="action_event_coord_services"/>
+    </record>
+    <record id="action_event_coord_services_list_view" model="ir.actions.act_window.view">
+        <field name="sequence" eval="30"/>
+        <field name="view_mode">list</field>
+        <field name="view_id" ref="view_event_coord_services_list"/>
+        <field name="act_window_id" ref="action_event_coord_services"/>
+    </record>
+
+    <menuitem id="menu_event_coord_services"
+              name="Coordinator &amp; Services"
+              parent="menu_event_reports"
+              action="action_event_coord_services"
+              sequence="6"/>
 </odoo>
