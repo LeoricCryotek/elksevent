@@ -17,7 +17,7 @@ AI
   `is_labor`), replacing the old hard-coded labor tuple.
 - Summed by project.task._compute_financials into x_total_costs.
 """
-from odoo import api, fields, models
+from odoo import _, api, fields, models
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -105,6 +105,96 @@ class EventCostLine(models.Model):
     def _compute_total(self):
         for rec in self:
             rec.total = (rec.quantity or 0.0) * (rec.unit_cost or 0.0)
+
+    # ──────────────────────────────────────────────────────────────────
+    # SECTION: Self-documenting chatter (WHY the price changed)
+    # HUMAN: The event's Grand Total is tracked, but the totals moving on
+    #        their own don't say WHICH charge changed. So a hand edit to a
+    #        cost line (add / change amount / remove) posts a plain note on
+    #        the event naming the line and its dollar impact — e.g.
+    #        "Event charge changed: Dance Floor  $387.00 -> $0.00".
+    # AI: Only MANUAL lines are logged. Auto-built lines (x_auto_source set:
+    #     labor rosters, kitchen menu, insurance, add-on fees) and the
+    #     automated rebuild pass (context _labor_sync) are skipped, so the
+    #     chatter isn't flooded by every recompute.
+    # ──────────────────────────────────────────────────────────────────
+    _LOG_FIELDS = ('unit_cost', 'quantity', 'name', 'x_taxable',
+                   'cost_type_id')
+
+    def _cost_money(self, amount):
+        sym = (self.currency_id.symbol or '$')
+        return '%s%s' % (sym, '{:,.2f}'.format(amount or 0.0))
+
+    def _cost_label(self):
+        return (self.name or self.cost_type_id.display_name
+                or _("cost line"))
+
+    def _log_cost_change(self, event, body):
+        if event and event.exists():
+            event.message_post(body=body, subtype_xmlid='mail.mt_note')
+
+    def _cost_logging_on(self):
+        """Log manual changes only — not the automated cost-line rebuild."""
+        return not self.env.context.get('_labor_sync')
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        recs = super().create(vals_list)
+        if self._cost_logging_on():
+            for rec in recs:
+                if rec.x_auto_source:
+                    continue
+                rec._log_cost_change(rec.event_id, _(
+                    "Event charge added: <b>%(name)s</b> - %(amt)s%(tax)s",
+                    name=rec._cost_label(),
+                    amt=rec._cost_money(rec.total),
+                    tax=(_(" (taxable)") if rec.x_taxable else "")))
+        return recs
+
+    def write(self, vals):
+        logging = (self._cost_logging_on()
+                   and any(f in vals for f in self._LOG_FIELDS))
+        before = {}
+        if logging:
+            for rec in self:
+                before[rec.id] = {
+                    'label': rec._cost_label(),
+                    'total': rec.total,
+                    'taxable': rec.x_taxable,
+                }
+        res = super().write(vals)
+        if logging:
+            for rec in self:
+                if rec.x_auto_source:
+                    continue
+                old = before.get(rec.id, {})
+                bits = []
+                if abs((old.get('total') or 0.0) - (rec.total or 0.0)) > 0.005:
+                    bits.append(_("%(old)s &#8594; %(new)s",
+                                  old=rec._cost_money(old.get('total')),
+                                  new=rec._cost_money(rec.total)))
+                if old.get('taxable') != rec.x_taxable:
+                    bits.append(_("now %(state)s",
+                                  state=(_("taxable") if rec.x_taxable
+                                         else _("non-taxable"))))
+                old_label = old.get('label')
+                if old_label and old_label != rec._cost_label():
+                    bits.append(_("renamed from \"%(old)s\"", old=old_label))
+                if bits:
+                    rec._log_cost_change(rec.event_id, _(
+                        "Event charge changed: <b>%(name)s</b> - %(chg)s",
+                        name=rec._cost_label(), chg=", ".join(bits)))
+        return res
+
+    def unlink(self):
+        if self._cost_logging_on():
+            for rec in self:
+                if rec.x_auto_source:
+                    continue
+                rec._log_cost_change(rec.event_id, _(
+                    "Event charge removed: <b>%(name)s</b> (-%(amt)s)",
+                    name=rec._cost_label(), amt=rec._cost_money(rec.total)))
+        return super().unlink()
 
     # ──────────────────────────────────────────────────────────────────
     # SECTION: Labor true-up (billed vs actual)

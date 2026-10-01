@@ -40,6 +40,7 @@
                 <form action="/elks/apply/submit" method="post"
                       enctype="multipart/form-data" class="mt-3" id="applyform">
                     <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                    <input type="hidden" name="job_id" t-att-value="vals.get('job_id')"/>
 
                     <h5 class="mt-3">Applicant Information</h5>
                     <div class="row g-2">

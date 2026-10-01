@@ -10,6 +10,27 @@ from datetime import datetime
 
 from odoo import http
 from odoo.http import request
+from odoo.addons.website_hr_recruitment.controllers.main import (
+    WebsiteHrRecruitment,
+)
+
+
+class ElksJobApplyRouting(WebsiteHrRecruitment):
+    """Route the stock "Apply Now" button to the lodge's own forms.
+
+    Every W-2 position uses the full Employment Application packet (/elks/apply)
+    instead of the stock name/email/resume form; the 1099 posting uses its
+    mobile onboarding form. The actual job is carried through so the position
+    prefills and the applicant is linked to the right posting.
+    """
+
+    @http.route()
+    def jobs_apply(self, job, **kwargs):
+        onboard = request.env.ref(
+            'elksevent.job_1099_contractor', raise_if_not_found=False)
+        if onboard and job.id == onboard.id:
+            return request.redirect('/elks/onboard/1099')
+        return request.redirect('/elks/apply?job_id=%s' % job.id)
 
 
 class EmploymentApplication(http.Controller):
@@ -17,14 +38,30 @@ class EmploymentApplication(http.Controller):
     @http.route('/elks/apply', type='http', auth='public', website=True,
                 sitemap=True)
     def employment_form(self, **kw):
+        vals = {}
+        jid = (kw.get('job_id') or '').strip()
+        if jid.isdigit():
+            job = request.env['hr.job'].sudo().browse(int(jid)).exists()
+            if job:
+                # Prefill the position from the job they clicked, and carry the
+                # job id so the applicant lands on the right posting.
+                vals['position'] = job.name
+                vals['job_id'] = job.id
         return request.render('elksevent.employment_application_form', {
-            'vals': {}, 'errors': []})
+            'vals': vals, 'errors': []})
 
     @http.route('/elks/apply/submit', type='http', auth='public',
                 website=True, csrf=True, methods=['POST'])
     def employment_submit(self, **post):
-        job = request.env.ref('elksevent.job_employment',
-                              raise_if_not_found=False)
+        # Link to the specific job they applied from (carried as job_id);
+        # fall back to the generic "Apply for Employment" posting.
+        job = False
+        jid = (post.get('job_id') or '').strip()
+        if jid.isdigit():
+            job = request.env['hr.job'].sudo().browse(int(jid)).exists()
+        if not job:
+            job = request.env.ref('elksevent.job_employment',
+                                  raise_if_not_found=False)
 
         def _date(v):
             try:

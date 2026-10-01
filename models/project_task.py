@@ -5002,7 +5002,19 @@ class ProjectTask(models.Model):
         nontax_net = ec_nontax + coord                # exempt
 
         if kind == 'deposit':
-            portion, line_prod = deposit_pct / 100.0, dep_product
+            # The deposit invoice bills the RECORDED deposit amount (what the
+            # customer actually agreed / paid), NOT a live 50%-of-total that
+            # drifts every time the event costs change. We scale every line by
+            # deposit / grand-total so the itemized reservation fee sums (with
+            # tax) to exactly the recorded deposit. Fall back to the deposit %
+            # only when no deposit amount has been recorded yet.
+            grand = self.x_event_grand_total or 0.0
+            dep_amt = self.x_deposit_amount or 0.0
+            if dep_amt > 0.005 and grand > 0.005:
+                portion = min(dep_amt / grand, 1.0)
+            else:
+                portion = deposit_pct / 100.0
+            line_prod = dep_product
         else:  # final = the whole total
             portion, line_prod = 1.0, facility
 
@@ -5208,9 +5220,20 @@ class ProjectTask(models.Model):
                 _logger.warning(
                     "Quote refresh failed for %s: %s", self.id, e)
         settings = self._event_settings()
+        # Once the deposit is paid, its invoice is a receipt for money already
+        # collected — it must NEVER be re-laid, or a later cost change would
+        # silently move the amount the customer already paid against. Only the
+        # FINAL invoice absorbs changes (it credits the paid deposit and bills
+        # the remaining balance).
+        deposit_locked = bool(
+            self.x_deposit_received or self._amount_paid() > 0.005)
         drafts = self.x_invoice_ids.filtered(lambda m: m.state == 'draft')
+        skipped_deposit = False
         for mv in drafts:
             kind = mv.x_event_invoice_kind or 'final'
+            if kind == 'deposit' and deposit_locked:
+                skipped_deposit = True
+                continue
             mv.write({
                 'invoice_line_ids': [(5, 0, 0)] + self._event_invoice_lines(kind),
                 'narration': self._event_invoice_narration(),
@@ -5222,10 +5245,13 @@ class ProjectTask(models.Model):
             if not settings or settings.x_invoice_attach_agreement:
                 self._attach_event_agreement(mv)
         posted = self.x_invoice_ids.filtered(lambda m: m.state == 'posted')
+        relaid = len(drafts) - (1 if skipped_deposit else 0)
         msg = _("Financials refreshed (P&L and bookkeeper breakdown updated).")
-        if drafts:
-            msg += _(" %s draft invoice(s) re-laid to the new totals.",
-                     len(drafts))
+        if relaid > 0:
+            msg += _(" %s draft invoice(s) re-laid to the new totals.", relaid)
+        if skipped_deposit:
+            msg += _(" The paid deposit invoice was left unchanged (a deposit "
+                     "invoice is never reset once paid).")
         if posted:
             msg += _(" %s confirmed invoice(s) left unchanged.", len(posted))
         self.message_post(body=msg, subtype_xmlid='mail.mt_note')
