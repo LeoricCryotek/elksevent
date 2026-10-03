@@ -103,7 +103,20 @@ class HrApplicant(models.Model):
     x_w4_other_income = fields.Char("W-4 Other Income (Step 4a)")
     x_w4_deductions = fields.Char("W-4 Deductions (Step 4b)")
     x_w4_extra_withholding = fields.Char("W-4 Extra Withholding (Step 4c)")
+    # Idaho W-4 (state withholding)
+    x_id_w4_status = fields.Selection([
+        ('A', 'A — Single'),
+        ('B', 'B — Married'),
+        ('C', 'C — Married, but withhold at Single rate'),
+    ], string="Idaho W-4 Withholding Status")
+    x_id_w4_allowances = fields.Char("Idaho W-4 Allowances (line 1)")
+    x_id_w4_additional = fields.Char("Idaho W-4 Additional Withholding (line 2)")
     # Direct deposit
+    x_dd_request_type = fields.Selection([
+        ('new', 'New enrollment'),
+        ('change', 'Change existing account(s)'),
+        ('cancel', 'Cancel direct deposit'),
+    ], string="Direct Deposit Request", default='new')
     x_dd_bank_name = fields.Char("Bank / Credit Union")
     x_dd_bank_address = fields.Char("Bank Address")
     x_dd_account_type = fields.Selection([
@@ -112,6 +125,11 @@ class HrApplicant(models.Model):
     x_dd_routing = fields.Char("Routing Number")
     x_dd_account = fields.Char("Account Number")
     x_dd_authorized = fields.Boolean("Direct Deposit Authorized")
+    # Employee Acknowledgement (Harassment Policy + Confidentiality Agreement)
+    x_ack_signed = fields.Boolean(
+        "Employee Acknowledgement Signed",
+        help="Acknowledged and agreed to the Harassment Policy and "
+             "Confidentiality Agreement (packet page 8).")
 
     # Identity — split for the I-9 (which has separate name boxes). The W-9
     # uses the full assembled name on line 1.
@@ -195,6 +213,11 @@ class HrApplicant(models.Model):
     x_i9_signed = fields.Boolean("I-9 / W-9 Attestation Signed")
     x_signature_name = fields.Char("Signature (typed legal name)")
     x_signature_date = fields.Date("Signed On")
+    x_signature_datetime = fields.Datetime(
+        "Electronically Signed At",
+        help="Timestamp of the applicant's electronic signature (when they "
+             "submitted the online application). Printed under each signature "
+             "as the DocuSign-style e-signature certification.")
 
     # Uploaded documents
     x_id_doc = fields.Binary("Photo ID (front)", attachment=True)
@@ -389,8 +412,12 @@ class HrApplicant(models.Model):
                 text[P + 'f1_13[0]'] = digits[5:9]
         return text, checks
 
-    def _i9_field_values(self):
-        """Map applicant data onto the official Form I-9 (Section 1)."""
+    def _i9_field_values(self, include_sign=True):
+        """Map applicant data onto the official Form I-9 (Section 1).
+
+        include_sign=False leaves the signature / date blank so the caller can
+        overlay a cursive electronic signature in those fields instead.
+        """
         self.ensure_one()
         state = (self.x_addr_state or '').strip().upper()
         # The I-9 State box is a dropdown of 2-letter codes; only send a valid
@@ -421,10 +448,11 @@ class HrApplicant(models.Model):
                 ssn_digits[:9] if self.x_tin_type != 'ein' else '',
             'Employees E-mail Address': self.email_from or 'N/A',
             'Telephone Number': self.partner_phone or 'N/A',
-            'Signature of Employee': self.x_signature_name or '',
-            "Today's Date mmddyyy": self._mmddyyyy(
-                self.x_signature_date or fields.Date.context_today(self)),
         }
+        if include_sign:
+            text['Signature of Employee'] = self.x_signature_name or ''
+            text["Today's Date mmddyyy"] = self._mmddyyyy(
+                self.x_signature_date or fields.Date.context_today(self))
         if state in valid_states:
             text['State'] = state
         checks = {}
@@ -446,12 +474,12 @@ class HrApplicant(models.Model):
                     self.x_foreign_passport
         return text, checks
 
-    def _official_pdf_bytes(self, kind):
+    def _official_pdf_bytes(self, kind, i9_include_sign=True):
         self.ensure_one()
         if kind == 'w9':
             text, checks = self._w9_field_values()
             return self._fill_pdf('w9_blank.pdf', text, checks)
-        text, checks = self._i9_field_values()
+        text, checks = self._i9_field_values(include_sign=i9_include_sign)
         return self._fill_pdf('i9_blank.pdf', text, checks)
 
     def action_print_w9_official(self):
@@ -467,6 +495,387 @@ class HrApplicant(models.Model):
         return {
             'type': 'ir.actions.act_url',
             'url': '/elks/applicant/%s/i9.pdf' % self.id,
+            'target': 'new',
+        }
+
+    # ==================================================================
+    # SECTION: Lodge Application Packet — stamp the EXACT lodge forms
+    # HUMAN: "Print Lodge Packet" lays the applicant's answers onto the real
+    #        9-page lodge packet (Employment Application, I-9, federal W-4,
+    #        Idaho W-4, Direct Deposit, Employee Acknowledgement / Harassment
+    #        & Confidentiality signature page) and the uploaded ID / SSN card.
+    # AI: The template (static/src/pdf/lodge_packet.pdf) is a FLATTENED copy of
+    #     the lodge packet, so a reportlab overlay merged with pypdf lands on
+    #     top. Page 3 (I-9 Section 1) is replaced with the tested official-I-9
+    #     fill. Coordinates are PDF points, origin TOP-LEFT (converted to
+    #     reportlab's bottom-left at draw time). Tweak a number here if a field
+    #     needs nudging; nothing else depends on these positions.
+    # ==================================================================
+    _CURSIVE_FONT = 'Times-Italic'  # fallback if the Chancery font is missing
+
+    def _register_cursive_font(self):
+        """Register the bundled URW Chancery (Zapf Chancery) Type1 font for the
+        cursive electronic signature; fall back to Times-Italic on any error.
+        Returns the usable font name."""
+        from reportlab.pdfbase import pdfmetrics
+        name = 'ElksSignature'
+        if name in pdfmetrics.getRegisteredFontNames():
+            return name
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        fdir = os.path.join(base, 'static', 'src', 'fonts')
+        afm = os.path.join(fdir, 'URWChanceryL-MediItal.afm')
+        pfb = os.path.join(fdir, 'URWChanceryL-MediItal.pfb')
+        try:
+            face = pdfmetrics.EmbeddedType1Face(afm, pfb)
+            pdfmetrics.registerTypeFace(face)
+            pdfmetrics.registerFont(
+                pdfmetrics.Font(name, face.name, 'WinAnsiEncoding'))
+            return name
+        except Exception:  # noqa: BLE001 - fall back to a built-in italic
+            return self._CURSIVE_FONT
+
+    def _esign_stamp(self):
+        """DocuSign-style certification line: when the applicant e-signed."""
+        self.ensure_one()
+        dt = self.x_signature_datetime
+        if dt:
+            local = fields.Datetime.context_timestamp(self, dt)
+            return "Electronically signed %s" % local.strftime(
+                '%m/%d/%Y %I:%M %p')
+        d = self.x_signature_date or fields.Date.context_today(self)
+        return "Electronically signed %s" % d.strftime('%m/%d/%Y')
+
+    def _lodge_packet_overlays(self):
+        """Build {page_index: {'text':[...], 'check':[...], 'sig':[...]}}
+        with y measured from the TOP of the page (converted at draw time).
+        'sig' entries draw the cursive electronic signature + timestamp."""
+        self.ensure_one()
+        f = self.x_first_name or ''
+        mi = (self.x_middle_initial or '')[:1]
+        last = self.x_last_name or ''
+        full = self.x_legal_name or (f + ' ' + last).strip()
+        date = self._mmddyyyy(
+            self.x_signature_date or fields.Date.context_today(self))
+        dob = self._mmddyyyy(self.x_dob)
+        ssn = self.x_ssn or ''
+        ssn_digits = ''.join(c for c in ssn if c.isdigit())[:9]
+        phone = self.partner_phone or ''
+        email = self.email_from or ''
+        csz = ', '.join(p for p in [
+            self.x_addr_city or '',
+            ' '.join(x for x in [self.x_addr_state or '',
+                                 self.x_addr_zip or ''] if x)] if p)
+        sig_name = self.x_signature_name or full
+        ov = {i: {'text': [], 'check': [], 'sig': []} for i in range(9)}
+
+        def T(pg, x, y, val, size=9):
+            if val not in (None, '', False):
+                ov[pg]['text'].append((x, y, str(val), size))
+
+        def X(pg, x, y, size=11):
+            ov[pg]['check'].append((x, y, size))
+
+        def S(pg, x, y, size=15):
+            # Cursive signature name with the e-sign certification beneath it.
+            if sig_name:
+                ov[pg]['sig'].append((x, y, sig_name, size))
+
+        # -------- PAGE 1: Employment Application --------
+        T(0, 100, 116, last); T(0, 290, 116, f); T(0, 410, 116, mi)
+        T(0, 480, 117, date)
+        T(0, 90, 139, self.x_addr_street); T(0, 340, 139, self.x_addr_apt)
+        T(0, 90, 161, self.x_addr_city); T(0, 285, 161, self.x_addr_state)
+        T(0, 395, 161, self.x_addr_zip)
+        T(0, 95, 186, phone); T(0, 300, 186, email)
+        T(0, 95, 209, self._mmddyyyy(self.x_date_available))
+        T(0, 270, 209, ssn); T(0, 440, 209, self.x_desired_salary)
+        T(0, 115, 232, self.x_position_applied)
+        X(0, 239, 252) if self.x_is_citizen else X(0, 260, 252)
+        if not self.x_is_citizen and self.x_work_auth:
+            X(0, 536, 252)
+        X(0, 260, 271) if not self.x_worked_here_before else X(0, 239, 271)
+        X(0, 260, 290) if not self.x_felony else X(0, 239, 290)
+        T(0, 330, 273, self.x_worked_here_when)
+        T(0, 95, 312, self.x_felony_explain)
+        edu = {e.level: e for e in self.x_education_ids}
+        rows = [('hs', 354, 374), ('college', 393, 413), ('other', 432, 451)]
+        for lvl, ny, fy in rows:
+            e = edu.get(lvl)
+            if not e:
+                continue
+            T(0, 90, ny, e.school); T(0, 292, ny, e.address)
+            T(0, 58, fy, e.date_from); T(0, 138, fy, e.date_to)
+            T(0, 350, fy, e.degree)
+            if e.graduated:
+                X(0, 279, fy - 1, 10)
+        refs = list(self.x_reference_ids)[:3]
+        ry = [(508, 527, 546), (565, 584, 603), (623, 644, 661)]
+        for i, r in enumerate(refs):
+            fy, cy, ay = ry[i]
+            T(0, 95, fy, r.name); T(0, 312, fy, r.relationship)
+            T(0, 95, cy, r.company); T(0, 385, cy, r.phone)
+            T(0, 95, ay, r.address)
+
+        # -------- PAGE 2: Previous Employment / Military / Signature --------
+        pe = list(self.x_prior_employer_ids)[:3]
+        # Each prior-employer block: (company, address, jobtitle, responsib.,
+        # from/to, may-contact) y-rows. Three blocks down the page.
+        pey = [(112, 135, 157, 180, 203, 158),
+               (236, 259, 281, 304, 327, 282),
+               (360, 383, 405, 428, 451, 406)]
+        for i, p in enumerate(pe):
+            cy, ay, jy, ry2, fy2, qy = pey[i]
+            T(1, 95, cy, p.company); T(1, 390, cy, p.phone)
+            T(1, 95, ay, p.address); T(1, 390, ay, p.supervisor)
+            T(1, 95, jy, p.title); T(1, 320, jy, p.salary_start)
+            T(1, 470, jy, p.salary_end)
+            T(1, 130, ry2, p.responsibilities)
+            T(1, 60, fy2, p.date_from); T(1, 150, fy2, p.date_to)
+            T(1, 320, fy2, p.reason_leaving)
+            if p.may_contact:
+                X(1, 312, qy)
+            else:
+                X(1, 333, qy)
+        T(1, 90, 592, self.x_mil_branch); T(1, 350, 592, self.x_mil_from)
+        T(1, 430, 592, self.x_mil_to)
+        T(1, 130, 615, self.x_mil_rank); T(1, 360, 615, self.x_mil_discharge)
+        T(1, 95, 638, self.x_mil_explain)
+        S(1, 95, 561)
+        T(1, 350, 567, date)
+
+        # -------- PAGE 3: replaced by the filled official I-9 (see builder) --
+
+        # -------- PAGE 4: Federal W-4 --------
+        T(3, 112, 100, (f + ' ' + mi).strip()); T(3, 278, 100, last)
+        T(3, 98, 124, self.x_addr_street); T(3, 98, 148, csz)
+        T(3, 497, 100, ssn)
+        fsy = {'single': 166, 'married': 178, 'hoh': 190}
+        if self.x_w4_filing in fsy:
+            X(3, 117, fsy[self.x_w4_filing])
+        if self.x_w4_multiple_jobs:
+            X(3, 523, 392)
+        T(3, 560, 516, self.x_w4_dependents_amt)
+        T(3, 560, 560, self.x_w4_other_income)
+        T(3, 230, 435, self.x_w4_deductions)
+        T(3, 560, 614, self.x_w4_extra_withholding)
+        S(3, 115, 698); T(3, 430, 700, date)
+
+        # -------- PAGE 5: Idaho W-4 --------
+        idx = {'A': 76, 'B': 158, 'C': 236}
+        if self.x_id_w4_status in idx:
+            X(4, idx[self.x_id_w4_status], 518)
+        T(4, 545, 535, self.x_id_w4_allowances or '0')
+        T(4, 545, 556, self.x_id_w4_additional)
+        T(4, 42, 594, (f + ' ' + mi).strip()); T(4, 266, 594, last)
+        T(4, 408, 593, ssn)
+        T(4, 42, 621, self.x_addr_street)
+        T(4, 60, 677, self.x_addr_city); T(4, 320, 677, self.x_addr_state)
+        T(4, 455, 677, self.x_addr_zip)
+        S(4, 100, 723); T(4, 440, 723, date)
+
+        # -------- PAGE 7: Direct Deposit --------
+        ddx = {'new': 55, 'change': 175, 'cancel': 335}
+        if self.x_dd_request_type in ddx:
+            X(6, ddx[self.x_dd_request_type], 116)
+        T(6, 113, 164, full); T(6, 456, 164, ssn)
+        T(6, 136, 188, self.x_addr_street)
+        T(6, 146, 212, csz); T(6, 386, 212, phone)
+        T(6, 98, 236, email)
+        T(6, 188, 286, self.x_dd_bank_name)
+        T(6, 188, 308, self.x_dd_bank_address)
+        T(6, 188, 330, self.x_dd_routing); T(6, 146, 354, self.x_dd_account)
+        if self.x_dd_account_type == 'checking':
+            X(6, 402, 331)
+        elif self.x_dd_account_type == 'savings':
+            X(6, 482, 331)
+        S(6, 205, 578)
+        T(6, 428, 583, date)
+
+        # -------- PAGE 8: Employee Acknowledgement --------
+        T(7, 300, 503, full)
+        S(7, 305, 543)
+        T(7, 140, 596, date)
+        return ov
+
+    def _lodge_packet_pdf_bytes(self):
+        """Stamp the applicant's data onto the lodge packet and return bytes."""
+        self.ensure_one()
+        import io as _io
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.utils import ImageReader
+        try:
+            from pypdf import PdfReader, PdfWriter
+        except ImportError:  # pragma: no cover
+            from PyPDF2 import PdfReader, PdfWriter  # type: ignore
+
+        template = self._pdf_template_path('lodge_packet.pdf')
+        reader = PdfReader(template)
+        ov = self._lodge_packet_overlays()
+        cursive = self._register_cursive_font()
+        esign = self._esign_stamp()
+        sig_name = self.x_signature_name or self.x_legal_name or ''
+        date = self._mmddyyyy(
+            self.x_signature_date or fields.Date.context_today(self))
+        writer = PdfWriter()
+
+        def _draw_sig(c, x, y_base, name, size):
+            """Cursive signature sitting on the line, with the e-sign
+            certification inline to the right (so it never drops into the
+            caption printed just below a tight government signature box).
+            y_base is the baseline in reportlab bottom-left coords."""
+            c.setFont(cursive, size)
+            c.drawString(x, y_base, name)
+            try:
+                w = c.stringWidth(name, cursive, size)
+            except Exception:  # noqa: BLE001
+                w = len(name) * size * 0.5
+            c.setFont('Helvetica', 6.5)
+            c.setFillGray(0.4)
+            c.drawString(x + w + 10, y_base + 1, esign)
+            c.setFillGray(0)
+
+        # Page 3 (index 2) = the filled official I-9 Section 1, with the
+        # signature left blank so we overlay a cursive e-signature on it.
+        try:
+            i9_page = PdfReader(_io.BytesIO(
+                self._official_pdf_bytes('i9', i9_include_sign=False))).pages[0]
+            if sig_name:
+                iw = float(i9_page.mediabox.width)
+                ih = float(i9_page.mediabox.height)
+                ibuf = _io.BytesIO()
+                ic = canvas.Canvas(ibuf, pagesize=(iw, ih))
+                # Official I-9 fields (bottom-left coords): signature + date.
+                _draw_sig(ic, 48, 423, sig_name, 14)
+                ic.setFont('Helvetica', 9)
+                ic.drawString(378, 423, date)
+                ic.save(); ibuf.seek(0)
+                i9_page.merge_page(PdfReader(ibuf).pages[0])
+        except Exception:  # noqa: BLE001 - fall back to the template page
+            i9_page = None
+
+        # Images for the ID page (page 9, index 8): front + SSN card on the
+        # page; the ID back is appended after.
+        def _img_reader(bin_field):
+            stored = self[bin_field]
+            if not stored:
+                return None
+            try:
+                raw = base64.b64decode(stored)
+                if raw[:5] == b'%PDF-':
+                    return None  # a PDF upload is appended, not drawn
+                from PIL import Image
+                im = Image.open(_io.BytesIO(raw))
+                if im.mode in ('RGBA', 'P', 'LA'):
+                    im = im.convert('RGB')
+                return ImageReader(im)
+            except Exception:  # noqa: BLE001
+                return None
+
+        id_front = _img_reader('x_id_doc')
+        ssn_img = _img_reader('x_ssn_doc')
+
+        for i, page in enumerate(reader.pages):
+            if i == 2 and i9_page is not None:
+                writer.add_page(i9_page)
+                continue
+            W = float(page.mediabox.width)
+            H = float(page.mediabox.height)
+            spec = ov.get(i, {'text': [], 'check': [], 'sig': []})
+            draw_img = (i == 8 and (id_front or ssn_img))
+            if spec['text'] or spec['check'] or spec.get('sig') or draw_img:
+                buf = _io.BytesIO()
+                c = canvas.Canvas(buf, pagesize=(W, H))
+                if draw_img:
+                    # Driver's License (top half), SSN card (bottom half).
+                    if id_front:
+                        c.drawImage(id_front, 90, H / 2 + 20, width=W - 180,
+                                    height=H / 2 - 150,
+                                    preserveAspectRatio=True, anchor='n',
+                                    mask='auto')
+                    if ssn_img:
+                        c.drawImage(ssn_img, 90, 80, width=W - 180,
+                                    height=H / 2 - 160,
+                                    preserveAspectRatio=True, anchor='n',
+                                    mask='auto')
+                for (x, y, val, size) in spec['text']:
+                    c.setFont('Helvetica', size)
+                    c.drawString(x, H - y, val)
+                for (x, y, size) in spec['check']:
+                    c.setFont('Helvetica-Bold', size)
+                    c.drawString(x, H - y, 'X')
+                for (x, y, nm, size) in spec.get('sig', []):
+                    _draw_sig(c, x, H - y, nm, size)
+                c.save()
+                buf.seek(0)
+                try:
+                    page.merge_page(PdfReader(buf).pages[0])
+                except Exception:  # noqa: BLE001
+                    pass
+            writer.add_page(page)
+
+        # Append EVERY uploaded document the applicant provided (ID front/back,
+        # SSN card, voided check, etc.) so the downloaded packet always carries
+        # their attachments. De-dup by content hash against what is already
+        # embedded on the ID page (front + SSN card) so nothing doubles up.
+        import hashlib
+
+        def _sha(raw):
+            return hashlib.sha1(raw).hexdigest()
+
+        seen = set()
+        for bf in ('x_id_doc', 'x_ssn_doc'):  # already shown on page 9
+            val = self[bf]
+            if val:
+                try:
+                    seen.add(_sha(base64.b64decode(val)))
+                except Exception:  # noqa: BLE001
+                    pass
+
+        def _append_doc(raw):
+            h = _sha(raw)
+            if h in seen:
+                return
+            seen.add(h)
+            try:
+                writer.append(PdfReader(_io.BytesIO(
+                    self._doc_bytes_as_pdf(raw))))
+            except Exception:  # noqa: BLE001
+                pass
+
+        # ID back from its binary field first (keeps a predictable order).
+        if self.x_id_doc_back:
+            try:
+                _append_doc(base64.b64decode(self.x_id_doc_back))
+            except Exception:  # noqa: BLE001
+                pass
+        # Then any other document attachments on the applicant (covers the
+        # voided check and applications whose uploads only landed in the
+        # sidebar, not the binary fields).
+        atts = self.env['ir.attachment'].sudo().search([
+            ('res_model', '=', 'hr.applicant'),
+            ('res_id', '=', self.id),
+            ('res_field', '=', False),
+        ])
+        for att in atts:
+            mt = att.mimetype or ''
+            if not (mt.startswith('image/') or mt == 'application/pdf'):
+                continue
+            try:
+                raw = att.raw if att.raw else base64.b64decode(att.datas)
+            except Exception:  # noqa: BLE001
+                continue
+            if raw:
+                _append_doc(raw)
+
+        out = _io.BytesIO()
+        writer.write(out)
+        return out.getvalue()
+
+    def action_print_lodge_packet(self):
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_url',
+            'url': '/elks/applicant/%s/lodge_packet.pdf' % self.id,
             'target': 'new',
         }
 

@@ -84,6 +84,9 @@ class EmploymentApplication(http.Controller):
                 errors.append(label)
         if not post.get('attest'):
             errors.append('Signature attestation')
+        if not post.get('ack_signed'):
+            errors.append('Employee Acknowledgement (Harassment & '
+                          'Confidentiality)')
         if errors:
             return request.render('elksevent.employment_application_form', {
                 'vals': post, 'errors': errors})
@@ -133,10 +136,20 @@ class EmploymentApplication(http.Controller):
                                       'checking', 'savings') else False),
             'x_dd_routing': g('dd_routing'), 'x_dd_account': g('dd_account'),
             'x_dd_authorized': bool(post.get('dd_authorized')),
+            'x_dd_request_type': (post.get('dd_request_type')
+                                  if post.get('dd_request_type') in (
+                                      'new', 'change', 'cancel') else 'new'),
+            'x_id_w4_status': (post.get('idw4_status')
+                               if post.get('idw4_status') in ('A', 'B', 'C')
+                               else False),
+            'x_id_w4_allowances': g('idw4_allowances'),
+            'x_id_w4_additional': g('idw4_additional'),
+            'x_ack_signed': bool(post.get('ack_signed')),
             'x_i9_signed': bool(post.get('attest')),
             'x_signature_name': g('signature_name'),
             'x_signature_date': _date(post.get('signature_date'))
             or datetime.today().date(),
+            'x_signature_datetime': datetime.utcnow(),
         }
 
         applicant = request.env['hr.applicant'].sudo().create(vals)
@@ -192,21 +205,43 @@ class EmploymentApplication(http.Controller):
                     'may_contact': bool(post.get('emp_contact_%d' % i))})
             i += 1
 
-        # ID / document uploads (optional) -> sidebar attachments.
+        # Identity documents -> store on the binary fields the Lodge Packet
+        # engine reads (ID front/back + SSN card), and keep a viewable sidebar
+        # attachment copy. The voided check is attachment-only.
+        import base64
         files = request.httprequest.files
         Att = request.env['ir.attachment'].sudo()
-        for field, label in [('id_doc', 'Photo ID'),
-                             ('void_check', 'Voided Check / Bank Letter')]:
+        bin_map = {
+            'id_doc': ('x_id_doc', 'x_id_doc_name', "Driver's License (front)"),
+            'id_doc_back': ('x_id_doc_back', 'x_id_doc_back_name',
+                            "Driver's License (back)"),
+            'ssn_doc': ('x_ssn_doc', 'x_ssn_doc_name', 'Social Security Card'),
+        }
+        doc_vals = {}
+        for field, (bin_f, name_f, label) in bin_map.items():
             f = files.get(field)
             if f and f.filename:
                 data = f.read()
                 if data:
-                    import base64
+                    b64 = base64.b64encode(data)
+                    doc_vals[bin_f] = b64
+                    doc_vals[name_f] = f.filename
                     Att.create({
                         'name': '%s - %s' % (label, f.filename),
-                        'datas': base64.b64encode(data),
+                        'datas': b64,
                         'res_model': 'hr.applicant',
                         'res_id': applicant.id, 'res_field': False})
+        if doc_vals:
+            applicant.write(doc_vals)
+        vc = files.get('void_check')
+        if vc and vc.filename:
+            data = vc.read()
+            if data:
+                Att.create({
+                    'name': 'Voided Check / Bank Letter - %s' % vc.filename,
+                    'datas': base64.b64encode(data),
+                    'res_model': 'hr.applicant',
+                    'res_id': applicant.id, 'res_field': False})
 
         applicant.message_post(body=(
             "<b>Employment application submitted from the website.</b><br/>"

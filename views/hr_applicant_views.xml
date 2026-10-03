@@ -26,10 +26,14 @@
                 <button name="action_create_employment_employee" type="object"
                         string="Create Employee" class="btn-primary"
                         invisible="not x_is_employment_app"/>
-                <button name="action_print_employment_packet" type="object"
-                        string="Print Application Packet" class="btn-secondary"
+                <button name="action_print_lodge_packet" type="object"
+                        string="Print Lodge Packet" class="btn-primary"
                         invisible="not x_is_employment_app"
-                        help="Print the full packet: Employment Application, I-9 Section 1, W-4, and Direct Deposit."/>
+                        help="Print the EXACT lodge forms filled with this applicant's data: Employment Application, I-9, federal W-4, Idaho W-4, Direct Deposit, Employee Acknowledgement (Harassment + Confidentiality signature), and the uploaded ID / SSN card."/>
+                <button name="action_print_employment_packet" type="object"
+                        string="Print Summary Packet" class="btn-secondary"
+                        invisible="not x_is_employment_app"
+                        help="Alternate: the system-generated summary packet (not the official form layout)."/>
             </xpath>
             <xpath expr="//notebook" position="inside">
                 <page string="1099 Onboarding" name="onboarding_1099"

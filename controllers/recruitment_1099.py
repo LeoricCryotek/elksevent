@@ -211,3 +211,12 @@ class Recruitment1099(http.Controller):
         fname = 'Employment File - %s.pdf' % (
             applicant.x_legal_name or applicant.partner_name or 'applicant')
         return self._stream_pdf(data, fname)
+
+    @http.route('/elks/applicant/<int:app_id>/lodge_packet.pdf',
+                type='http', auth='user', website=False)
+    def applicant_lodge_packet_pdf(self, app_id, **kw):
+        applicant = self._get_applicant_for_staff(app_id)
+        data = applicant._lodge_packet_pdf_bytes()
+        fname = 'Lodge Application Packet - %s.pdf' % (
+            applicant.x_legal_name or applicant.partner_name or 'applicant')
+        return self._stream_pdf(data, fname)
