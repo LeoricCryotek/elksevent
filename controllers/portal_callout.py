@@ -339,3 +339,19 @@ class CalloutPortal(CustomerPortal):
                        who=request.env.user.name),
                 subtype_xmlid='mail.mt_note')
         return request.redirect('/my/callout/%s' % co.id)
+
+    @http.route(['/my/callout/<int:callout_id>/pull_clockin'],
+                type='http', auth='user', methods=['POST'], website=True)
+    def portal_callout_pull_clockin(self, callout_id, **post):
+        """Manager pulls staff who clocked in for the event into the roster
+        (captures a substitute). They then set each person's rate and tips and
+        re-certify."""
+        co = self._callout_owned(callout_id)
+        if not co:
+            return request.redirect('/my')
+        try:
+            co.sudo().action_pull_clockin_hours()
+            flag = 'pulled=1'
+        except Exception:  # noqa: BLE001 - keep the portal friendly
+            flag = 'pulled=0'
+        return request.redirect('/my/callout/%s?%s' % (co.id, flag))

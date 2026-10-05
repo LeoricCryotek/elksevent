@@ -163,7 +163,10 @@
                             <span>
                                 Certified<t t-if="callout.certified_on"> on
                                 <span t-field="callout.certified_on"/></t>. Need to
-                                change something? Reopen it to edit and re-certify.
+                                change something after the event (a no-show, or
+                                someone who filled in)? Reopen it, update the roster
+                                to who actually worked and their hours, then
+                                re-certify — the event costs update automatically.
                             </span>
                             <form t-attf-action="/my/callout/{{callout.id}}/reopen" method="post" class="m-0">
                                 <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
@@ -344,6 +347,26 @@
                             </t>
                         </div>
                     </div>
+
+                    <t t-if="request.params.get('pulled') == '1'">
+                        <div class="alert alert-success">Pulled the staff who clocked in for this event into the roster below. Set each person's <b>rate</b> and <b>tips</b>, then Save or Certify.</div>
+                    </t>
+                    <t t-if="request.params.get('pulled') == '0'">
+                        <div class="alert alert-warning">No clock-in hours found for this event yet. Make sure people clocked in and their shifts are linked to the event.</div>
+                    </t>
+
+                    <!-- Post-event: pull staff who actually clocked in (e.g. a
+                         substitute). Separate form so it isn't nested in the
+                         roster submit form. Shown while the call-out is editable. -->
+                    <t t-if="callout.state not in ('certified', 'cancelled')">
+                        <form t-attf-action="/my/callout/{{callout.id}}/pull_clockin" method="post" class="mb-2">
+                            <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                            <button type="submit" class="btn btn-outline-primary btn-sm">
+                                <i class="fa fa-clock-o"/> Pull staff who clocked in
+                            </button>
+                            <span class="text-muted small ms-2">Adds anyone who clocked in for this event (including a substitute) so you can set their rate and tips.</span>
+                        </form>
+                    </t>
 
                     <form t-attf-action="/my/callout/{{callout.id}}/submit" method="post">
                         <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>

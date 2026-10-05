@@ -28,7 +28,7 @@
                         <hr style="border-top:2px solid #46166a; margin:2px 0 8px 0;"/>
                         <table style="width:100%; font-size:12px; margin-bottom:10px;">
                             <tr>
-                                <td style="width:50%;"><strong>Event:</strong> <t t-esc="o.name or ''"/></td>
+                                <td style="width:50%;"><strong>Event:</strong> <t t-esc="o._pdf_text(o.name) or ''"/></td>
                                 <td style="width:25%;"><strong>Date:</strong> <span t-field="o.x_event_date"/></td>
                                 <td style="width:25%;"><strong>Host:</strong> <t t-esc="o.x_customer_name or ''"/></td>
                             </tr>

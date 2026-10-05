@@ -76,7 +76,7 @@
                          Wedding Reception"). Sits above the tabular
                          host/date/phone details. -->
                     <div style="text-align:center; font-size:15px; font-weight:bold; margin-bottom:8px;">
-                        <t t-esc="o.name or ''"/>
+                        <t t-esc="o._pdf_text(o.name) or ''"/>
                     </div>
                     <table style="width:100%; font-size:12px; margin-bottom:12px;">
                         <tr>

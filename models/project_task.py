@@ -2195,11 +2195,23 @@ class ProjectTask(models.Model):
     # ── Paid labor helpers (volunteers cost nothing) ───────────────────
     @staticmethod
     def _elks_is_volunteer_att(att):
-        """Volunteer = employee in the 'Volunteers' department (the lodge-wide
-        payroll exclusion). Their event hours are not a labor cost."""
+        """Volunteer = anyone who clocked in WITHOUT a pay arrangement.
+
+        Paid employees have a pay rate: a W-2 wage (hr.employee.hourly_cost) or
+        a 1099 / contract pay category. Everyone else — officers, members, and
+        other helpers set up without a wage, or placed in the 'Volunteers'
+        department — is a volunteer, so their hours are donated and carry no
+        labor cost. (A 1099 who clocked in should be added to the roster with a
+        rate; until then they'd read as a volunteer.)"""
         emp = att.employee_id
-        return bool(emp and emp.department_id
-                    and emp.department_id.name == 'Volunteers')
+        if not emp:
+            return True
+        if emp.department_id and emp.department_id.name == 'Volunteers':
+            return True
+        wage = getattr(emp, 'hourly_cost', 0.0) or 0.0
+        cat = getattr(emp, 'x_pay_category', 'w2')
+        is_paid = wage > 0.0 or cat in ('1099', 'contract')
+        return not is_paid
 
     def _event_role_rates(self, settings):
         """Per-hour cost rate by attendance role, from Lodge Settings."""
@@ -2952,6 +2964,32 @@ class ProjectTask(models.Model):
     def _event_settings(self):
         return self.env['elks.lodge.settings'].sudo().search([], limit=1)
 
+    @api.model
+    def _pdf_text(self, value):
+        """ASCII-safe text for the wkhtmltopdf reports.
+
+        The PDF engine garbles stray Unicode pasted into fields — a
+        non-breaking space (U+00A0) prints as "A " and a real minus/en-dash
+        prints as "a^'". Normalize such characters to plain ASCII so the
+        printed reports stay clean regardless of what was pasted into a name
+        or note.
+        """
+        if not value:
+            return value or ''
+        import unicodedata
+        s = str(value)
+        repl = {
+            '\xa0': ' ', ' ': ' ', ' ': ' ', '​': '',
+            '−': '-', '–': '-', '—': '-', '―': '-',
+            '‘': "'", '’': "'", '‚': "'", '′': "'",
+            '“': '"', '”': '"', '″': '"',
+            '…': '...', '·': '-', '•': '-', '­': '',
+        }
+        for k, v in repl.items():
+            s = s.replace(k, v)
+        s = unicodedata.normalize('NFKD', s).encode('ascii', 'ignore').decode()
+        return s
+
     @api.depends('x_sale_order_id.amount_untaxed')
     def _compute_quote_total(self):
         for rec in self:
@@ -3277,6 +3315,47 @@ class ProjectTask(models.Model):
                 # NOTE: gratuity is handled once, below, from x_bar_gratuity /
                 # x_kitchen_gratuity (which certify populates) — do NOT add a
                 # gratuity line here too or it double-counts.
+
+            # Paid employees who CLOCKED IN but are not on any certified roster
+            # still cost the event — add their labor as COGS (billed $0, not
+            # charged to the customer) so the P&L reflects the real labor.
+            rostered = set()
+            for co in rec.x_callout_ids.filtered(
+                    lambda c: c.state == 'certified'):
+                rostered |= set(co.line_ids.mapped('employee_id').ids)
+            role_ct = {'event': 'event_service', 'bartender': 'bar_service',
+                       'kitchen': 'catering_service',
+                       'custodial': 'cleaning_service'}
+            att_rates = rec._event_role_rates(settings)
+            unrostered = {}
+            for att in rec.x_attendance_ids:
+                emp = att.employee_id
+                if (not emp or emp.id in rostered
+                        or rec._elks_is_volunteer_att(att)
+                        or (att.worked_hours or 0.0) <= 0.0):
+                    continue
+                role = att.x_event_role or 'event'
+                d = unrostered.setdefault(role, {'cost': 0.0, 'names': set()})
+                d['cost'] += (att.worked_hours or 0.0) * rec._att_labor_rate(
+                    att, att_rates)
+                d['names'].add(emp.name)
+            for role, d in unrostered.items():
+                if d['cost'] <= 0.005:
+                    continue
+                ctype = tid(role_ct.get(role, 'event_service'))
+                if not ctype:
+                    continue
+                Line.create({
+                    'event_id': rec.id,
+                    'cost_type_id': ctype,
+                    'name': _("Unrostered labor - clocked in (%s)",
+                              ", ".join(sorted(d['names']))),
+                    'quantity': 1,
+                    'unit_cost': 0.0,          # not billed to the customer
+                    'x_line_cogs': round(d['cost'], 2),
+                    'x_taxable': False,
+                    'x_auto_source': 'unrostered_%s' % role,
+                })
 
             # Add-on fees toggled by checkbox (fee from Lodge Settings).
             for flag, code, fee, name, src in (
@@ -4430,6 +4509,60 @@ class ProjectTask(models.Model):
                 'paid': paid, 'billed': billed,
                 'coverage': d['hours'] * markup})
         rows.sort(key=lambda r: (r['dept'], r['name']))
+        return rows
+
+    def _aar_volunteer_tally(self):
+        """Volunteers who clocked in for this event (employees in the
+        'Volunteers' department) — per-person hours + a total, for the AAR.
+        Volunteer hours are donated and carry no labor cost."""
+        self.ensure_one()
+        role_sel = dict(
+            self.env['hr.attendance']._fields['x_event_role'].selection) \
+            if 'x_event_role' in self.env['hr.attendance']._fields else {}
+        rows = {}
+        for a in self.x_attendance_ids:
+            if not self._elks_is_volunteer_att(a):
+                continue
+            emp = a.employee_id
+            r = rows.setdefault(
+                emp.id, {'name': emp.name or '', 'hours': 0.0, 'role': ''})
+            r['hours'] += a.worked_hours or 0.0
+            if not r['role'] and a.x_event_role:
+                r['role'] = role_sel.get(a.x_event_role, '')
+        out = sorted(rows.values(), key=lambda d: d['name'])
+        for r in out:
+            r['hours'] = round(r['hours'], 2)
+        return out
+
+    def _aar_hours_by_department(self):
+        """All clocked-in hours grouped by department/role: paid hours + labor
+        cost, and donated volunteer hours. Covers everyone who clocked in,
+        rostered or not."""
+        self.ensure_one()
+        label = {'event': 'Event', 'bartender': 'Bar',
+                 'kitchen': 'Kitchen', 'custodial': 'Custodial'}
+        rates = self._event_role_rates(self._event_settings())
+        agg = {}
+        for att in self.x_attendance_ids:
+            if (att.worked_hours or 0.0) <= 0.0:
+                continue
+            role = att.x_event_role or 'event'
+            d = agg.setdefault(role, {
+                'dept': label.get(role, (role or 'Event').title()),
+                'paid_hours': 0.0, 'paid_cost': 0.0, 'vol_hours': 0.0})
+            if self._elks_is_volunteer_att(att):
+                d['vol_hours'] += att.worked_hours or 0.0
+            else:
+                d['paid_hours'] += att.worked_hours or 0.0
+                d['paid_cost'] += (att.worked_hours or 0.0) * \
+                    self._att_labor_rate(att, rates)
+        order = ['event', 'bartender', 'kitchen', 'custodial']
+        rows = [agg[k] for k in order if k in agg]
+        rows += [v for k, v in agg.items() if k not in order]
+        for r in rows:
+            r['paid_hours'] = round(r['paid_hours'], 2)
+            r['paid_cost'] = round(r['paid_cost'], 2)
+            r['vol_hours'] = round(r['vol_hours'], 2)
         return rows
 
     def _aar_survey_qa(self):

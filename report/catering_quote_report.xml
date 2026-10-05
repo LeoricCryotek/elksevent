@@ -26,7 +26,7 @@
                     <div style="text-align:center; border-bottom:2px solid #4B2E83; padding-bottom:8px; margin-bottom:14px;">
                         <div style="font-size:20px; font-weight:bold;">Catering Quote</div>
                         <div style="font-size:12px; color:#444;">
-                            <t t-esc="o.name or 'Event'"/>
+                            <t t-esc="o._pdf_text(o.name) or 'Event'"/>
                             <t t-if="o.x_event_date"> - <span t-field="o.x_event_date"/></t>
                         </div>
                     </div>

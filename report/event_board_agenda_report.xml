@@ -81,7 +81,7 @@
                     <tr t-foreach="evts" t-as="o" t-att-style="'background:#f4f0f8;' if o_index % 2 else 'background:#ffffff;'">
                         <td style="padding:4px 6px; border-top:1px solid #e3d9ee;"><t t-esc="o_index + 1"/></td>
                         <td style="padding:4px 6px; border-top:1px solid #e3d9ee;">
-                            <strong><t t-esc="o.name or ''"/></strong>
+                            <strong><t t-esc="o._pdf_text(o.name) or ''"/></strong>
                         </td>
                         <td style="padding:4px 6px; border-top:1px solid #e3d9ee;"><span t-field="o.x_event_type"/></td>
                         <td style="padding:4px 6px; border-top:1px solid #e3d9ee;">

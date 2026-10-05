@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- ==========================================================================
-     After Action Report (AAR): a records sheet for the bar & event manager —
+     After Action Report (AAR): a records sheet for the bar & event manager -
      people/contacts, event workers + hours, resources, top sold items, and the
      customer survey results. ASCII-only, ligatures off (no PDF mojibake).
      ========================================================================== -->
@@ -20,12 +20,30 @@
             <t t-foreach="docs" t-as="o">
                 <t t-set="settings" t-value="o.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
                 <t t-set="types" t-value="dict(o._fields['x_event_type'].selection)"/>
-                <div class="page" style="font-family:Helvetica,Arial,sans-serif; color:#111; font-size:12px; font-variant-ligatures:none;">
+                <div class="page" style="font-family:Helvetica,Arial,sans-serif; color:#222; font-size:11px; line-height:1.35; font-variant-ligatures:none;">
 
-                    <div style="text-align:center; border-bottom:2px solid #46166a; padding-bottom:6px; margin-bottom:12px;">
-                        <div style="font-size:19px; font-weight:bold;">After Action Report</div>
-                        <div style="font-size:13px;"><t t-esc="o.name or 'Event'"/></div>
+                    <!-- ===================== HEADER ===================== -->
+                    <table style="width:100%; border:none; margin-bottom:4px;">
+                        <tr>
+                            <td style="border:none; padding:0;">
+                                <div style="font-size:15px; font-weight:bold;">
+                                    <t t-if="settings"><t t-esc="settings.name"/></t>
+                                    <t t-else="">Elks Lodge</t>
+                                    <t t-if="settings and settings.lodge_number">#<t t-esc="settings.lodge_number"/></t>
+                                </div>
+                                <div style="font-size:13px; font-weight:bold; color:#46166a;">
+                                    After Action Report (AAR)
+                                </div>
+                            </td>
+                            <td style="border:none; padding:0; text-align:right; font-size:9px; color:#666;">
+                                Printed <span t-esc="time.strftime('%m/%d/%Y')"/>
+                            </td>
+                        </tr>
+                    </table>
+                    <div style="font-size:17px; font-weight:bold; margin:2px 0;">
+                        <t t-esc="o._pdf_text(o.name) or 'Event'"/>
                     </div>
+                    <hr style="border-top:2px solid #46166a; margin:2px 0 10px 0;"/>
 
                     <table style="width:100%; font-size:12px; margin-bottom:12px;">
                         <tr>
@@ -41,7 +59,7 @@
                     </table>
 
                     <!-- People / contacts -->
-                    <div style="font-weight:bold; background:#f0ecf5; padding:4px 6px; margin-bottom:4px;">People &amp; Contacts</div>
+                    <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin-bottom:4px;">People &amp; Contacts</div>
                     <table style="width:100%; font-size:11.5px; margin-bottom:12px;">
                         <tr t-if="o.x_coordinator_employee_id"><td style="padding:2px; width:35%;">Event Coordinator</td><td style="padding:2px;"><t t-esc="o.x_coordinator_employee_id.name"/></td></tr>
                         <tr t-if="o.x_bar_manager_id"><td style="padding:2px;">Bar Manager</td><td style="padding:2px;"><t t-esc="o.x_bar_manager_id.name"/></td></tr>
@@ -51,7 +69,7 @@
                     </table>
 
                     <!-- Event workers + hours (certified call-out rosters) -->
-                    <div style="font-weight:bold; background:#f0ecf5; padding:4px 6px; margin-bottom:4px;">Event Workers &amp; Hours</div>
+                    <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin-bottom:4px;">Event Workers &amp; Hours</div>
                     <t t-set="callouts" t-value="o.x_callout_ids.filtered(lambda c: c.state == 'certified')"/>
                     <t t-if="callouts">
                         <t t-set="cover_all" t-value="sum(callouts.mapped('coverage_total'))"/>
@@ -68,17 +86,39 @@
                             </table>
                         </t>
                         <div style="text-align:right; font-weight:bold; margin:4px 0 8px; border-top:1px solid #ccc; padding-top:3px;">
-                            Total Coverage (billed − paid, toward the bartender pay pool): $<t t-esc="'%.2f' % (cover_all or 0.0)"/>
+                            Total Coverage (billed - paid, toward the bartender pay pool): $<t t-esc="'%.2f' % (cover_all or 0.0)"/>
                         </div>
                     </t>
                     <t t-else="">
                         <div style="color:#777; margin-bottom:8px;">No certified call-out rosters recorded.</div>
                     </t>
 
+                    <!-- All clocked-in hours broken out by department -->
+                    <t t-set="hbd" t-value="o._aar_hours_by_department()"/>
+                    <t t-if="hbd">
+                        <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin:10px 0 4px;">Clock-In Hours by Department</div>
+                        <table style="width:100%; font-size:11px; border-collapse:collapse; margin-bottom:4px;">
+                            <tr style="background:#eee;"><td style="padding:3px;">Department</td><td style="padding:3px; text-align:right;">Paid Hours</td><td style="padding:3px; text-align:right;">Paid Labor</td><td style="padding:3px; text-align:right;">Volunteer Hours</td></tr>
+                            <tr t-foreach="hbd" t-as="h">
+                                <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="h['dept']"/></td>
+                                <td style="padding:3px; border-top:1px solid #ddd; text-align:right;"><t t-esc="'%.2f' % h['paid_hours']"/></td>
+                                <td style="padding:3px; border-top:1px solid #ddd; text-align:right;">$<t t-esc="'%.2f' % h['paid_cost']"/></td>
+                                <td style="padding:3px; border-top:1px solid #ddd; text-align:right;"><t t-esc="'%.2f' % h['vol_hours']"/></td>
+                            </tr>
+                            <tr style="border-top:2px solid #000; font-weight:bold;">
+                                <td style="padding:3px;">Totals</td>
+                                <td style="padding:3px; text-align:right;"><t t-esc="'%.2f' % sum(h['paid_hours'] for h in hbd)"/></td>
+                                <td style="padding:3px; text-align:right;">$<t t-esc="'%.2f' % sum(h['paid_cost'] for h in hbd)"/></td>
+                                <td style="padding:3px; text-align:right;"><t t-esc="'%.2f' % sum(h['vol_hours'] for h in hbd)"/></td>
+                            </tr>
+                        </table>
+                        <div style="font-size:9px; color:#666; margin-bottom:8px;">All clock-in hours for the event. Paid labor = non-volunteer hours x pay rate (counts toward the event cost even when not on a call-out sheet). Volunteer hours are donated.</div>
+                    </t>
+
                     <!-- Coverage by ACTUAL worked hours (clock in/out) -->
                     <t t-set="cov" t-value="o._aar_person_coverage()"/>
                     <t t-if="cov">
-                        <div style="font-weight:bold; background:#f0ecf5; padding:4px 6px; margin:10px 0 4px;">Coverage by Worked Hours (actual clock in/out)</div>
+                        <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin:10px 0 4px;">Coverage by Worked Hours (actual clock in/out)</div>
                         <table style="width:100%; font-size:11px; border-collapse:collapse;">
                             <tr style="background:#eee;"><td style="padding:3px;">Name</td><td style="padding:3px;">Dept</td><td style="padding:3px; text-align:right;">Hours</td><td style="padding:3px; text-align:right;">Pay/hr</td><td style="padding:3px; text-align:right;">Markup/hr</td><td style="padding:3px; text-align:right;">Paid</td><td style="padding:3px; text-align:right;">Billed</td><td style="padding:3px; text-align:right;">Coverage</td></tr>
                             <tr t-foreach="cov" t-as="c">
@@ -101,8 +141,31 @@
                         <div style="font-size:9px; color:#666; margin-top:3px;">Based on actual clock in/out hours x the pay rate, versus billed (pay + markup). Coverage funds the daily-staff pay pool.</div>
                     </t>
 
+                    <!-- Volunteers (clocked-in Volunteers-department staff) -->
+                    <t t-set="vols" t-value="o._aar_volunteer_tally()"/>
+                    <t t-set="vol_hours" t-value="sum(v['hours'] for v in vols)"/>
+                    <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin:10px 0 4px;">Volunteers<t t-if="vols"> (<t t-esc="len(vols)"/> people, <t t-esc="'%.2f' % vol_hours"/> hrs donated)</t></div>
+                    <t t-if="vols">
+                        <table style="width:100%; font-size:11px; border-collapse:collapse; margin-bottom:4px;">
+                            <tr style="background:#eee;"><td style="padding:3px;">Name</td><td style="padding:3px;">Role</td><td style="padding:3px; text-align:right;">Hours</td></tr>
+                            <tr t-foreach="vols" t-as="v">
+                                <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="v['name']"/></td>
+                                <td style="padding:3px; border-top:1px solid #ddd;"><t t-esc="v['role'] or 'Volunteer'"/></td>
+                                <td style="padding:3px; border-top:1px solid #ddd; text-align:right;"><t t-esc="'%.2f' % v['hours']"/></td>
+                            </tr>
+                            <tr style="border-top:2px solid #000; font-weight:bold;">
+                                <td style="padding:3px;" colspan="2">Total volunteer hours (donated)</td>
+                                <td style="padding:3px; text-align:right;"><t t-esc="'%.2f' % vol_hours"/></td>
+                            </tr>
+                        </table>
+                        <div style="font-size:9px; color:#666; margin-bottom:8px;">Volunteer hours are donated and carry no labor cost.</div>
+                    </t>
+                    <t t-else="">
+                        <div style="color:#777; margin-bottom:8px;">No volunteer hours recorded for this event.</div>
+                    </t>
+
                     <!-- Resources -->
-                    <div style="font-weight:bold; background:#f0ecf5; padding:4px 6px; margin-bottom:4px;">Resources</div>
+                    <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin-bottom:4px;">Resources</div>
                     <table style="width:100%; font-size:11.5px; margin-bottom:8px;">
                         <tr t-if="o.x_room_booking_ids"><td style="padding:2px; width:35%;">Rooms</td><td style="padding:2px;"><t t-esc="', '.join(o.x_room_booking_ids.mapped('room_id.name'))"/></td></tr>
                         <tr t-if="o.x_catering_details"><td style="padding:2px;">Catering</td><td style="padding:2px;"><t t-esc="o.x_catering_details"/></td></tr>
@@ -120,7 +183,7 @@
                     </t>
 
                     <!-- Top sold items (Clover) -->
-                    <div style="font-weight:bold; background:#f0ecf5; padding:4px 6px; margin-bottom:4px;">Top Sold Items (Point of Sale)</div>
+                    <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin-bottom:4px;">Top Sold Items (Point of Sale)</div>
                     <t t-if="o.x_clover_top_item_ids">
                         <div style="font-size:11px; color:#555; margin-bottom:2px;">
                             Window net: $<t t-esc="'%.2f' % (o.x_clover_sales_net or 0.0)"/> -
@@ -140,7 +203,7 @@
                     </t>
 
                     <!-- Survey results -->
-                    <div style="font-weight:bold; background:#f0ecf5; padding:4px 6px; margin-bottom:4px;">Customer Survey</div>
+                    <div style="background:#46166a; color:#fff; font-weight:bold; padding:3px 6px; margin-bottom:4px;">Customer Survey</div>
                     <t t-set="qa" t-value="o._aar_survey_qa()"/>
                     <t t-if="qa">
                         <table style="width:100%; font-size:11.5px; border-collapse:collapse;">

@@ -90,7 +90,7 @@
                 <t t-set="subtitle">Period:
                     <t t-esc="wizard.date_from" t-options="{'widget': 'date'}"/>
                     through <t t-esc="wizard.date_to" t-options="{'widget': 'date'}"/>
-                    <t t-if="wizard.event_id"> - Event: <t t-esc="wizard.event_id.name"/></t>
+                    <t t-if="wizard.event_id"> - Event: <t t-esc="wizard.event_id._pdf_text(wizard.event_id.name)"/></t>
                 </t>
                 <t t-set="empty_msg">No events found in the selected date range.</t>
                 <t t-call="elksevent.report_event_pl_body"/>
@@ -104,7 +104,7 @@
                 <t t-set="data" t-value="doc._get_pl_report_data()"/>
                 <t t-set="settings"
                    t-value="doc.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
-                <t t-set="subtitle">Event: <t t-esc="doc.name"/>
+                <t t-set="subtitle">Event: <t t-esc="doc._pdf_text(doc.name)"/>
                     <t t-if="doc.x_event_date"> - <t t-esc="doc.x_event_date" t-options="{'widget': 'date'}"/></t>
                 </t>
                 <t t-set="empty_msg">No financial data for this event yet.</t>

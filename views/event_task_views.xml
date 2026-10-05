@@ -168,7 +168,29 @@
                                         type="object" class="btn-primary"
                                         icon="fa-external-link"
                                         string="Open Online Form"/>
+                                <button name="action_pull_clockin_hours"
+                                        type="object" class="btn-secondary"
+                                        icon="fa-clock-o"
+                                        string="Pull Clock-In Hours"
+                                        invisible="state != 'certified'"
+                                        help="Post-event: pull actual clocked hours from the event's attendance into this roster (adds a substitute who clocked in and trues up everyone's hours). Then Re-post Labor."/>
+                                <button name="action_repost_labor"
+                                        type="object" class="btn-secondary"
+                                        icon="fa-refresh"
+                                        string="Re-post Labor"
+                                        invisible="state != 'certified'"
+                                        confirm="Re-post this department's roster labor to the event costs, P&amp;L and AAR?"
+                                        help="Push the (edited) certified roster to the event's cost line / P&amp;L / AAR after a post-event adjustment — no need to reopen or re-certify."/>
                             </header>
+                            <div class="alert alert-info" role="alert"
+                                 invisible="state != 'certified'"
+                                 style="margin:4px 0;">
+                                Post-event change (no-show / substitute)? Edit the
+                                roster below — remove or zero the no-show, add who
+                                actually worked (or use <b>Pull Clock-In Hours</b>)
+                                — then click <b>Re-post Labor</b> to update the
+                                costs and AAR.
+                            </div>
                             <group>
                                 <group>
                                     <field name="department_label" string="Department"/>

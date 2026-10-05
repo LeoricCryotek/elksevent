@@ -110,7 +110,7 @@
     <template id="callout_summary">
         <table style="width:100%; font-size:10px; margin-bottom:8px;">
             <tr>
-                <td style="padding:2px 4px; width:50%;"><strong>Event:</strong> <t t-esc="o.name or ''"/></td>
+                <td style="padding:2px 4px; width:50%;"><strong>Event:</strong> <t t-esc="o._pdf_text(o.name) or ''"/></td>
                 <td style="padding:2px 4px;"><strong>Date:</strong>
                     <t t-if="o.x_event_date"><span t-field="o.x_event_date" t-options='{"format":"EEE, MMM d, yyyy"}'/></t>
                 </td>
