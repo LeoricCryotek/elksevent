@@ -874,6 +874,12 @@ class ProjectTask(models.Model):
         "Balance Remaining", compute="_compute_payments",
         currency_field="x_currency_id",
         help="Grand total minus payments and any write-off.")
+    x_billed_snapshot = fields.Monetary(
+        "Billed (as invoiced)", currency_field="x_currency_id", copy=False,
+        help="The customer billed total captured when the final invoice was "
+             "last laid. The P&L uses this as income so a post-payment cost "
+             "change (e.g. a substitution) never inflates what we 'brought "
+             "in' — only the cost / profit side moves.")
 
     @api.depends("x_payment_ids.amount", "x_payment_ids.method",
                  "x_event_grand_total", "x_deposit_amount",
@@ -1311,6 +1317,50 @@ class ProjectTask(models.Model):
         help="Coordinator's notes/thoughts after the event — what went well, "
              "issues, follow-ups.",
     )
+    # --- Event Closeout checklist (drives the 'Needs Closeout' filter) ---
+    x_closeout_hours = fields.Boolean(
+        "Rosters trued-up / hours pulled", copy=False,
+        help="The call-out rosters reflect who actually worked and their "
+             "hours (Pull Clock-In Hours + Re-post on each call-out).")
+    x_closeout_clover = fields.Boolean(
+        "Clover sales pulled", copy=False,
+        help="On-site POS sales pulled from Clover (so income is complete).")
+    x_closeout_payment = fields.Boolean(
+        "Final payment recorded / settled", copy=False,
+        help="The balance is collected, written off, or billed supplementally.")
+    x_closeout_reports = fields.Boolean(
+        "AAR + P&L printed / filed", copy=False,
+        help="The After Action Report and the event P&L have been printed and "
+             "filed for the records.")
+    x_closeout_done = fields.Boolean(
+        "Closeout complete", compute='_compute_closeout', store=True)
+    x_closeout_progress = fields.Char(
+        "Closeout Progress", compute='_compute_closeout')
+
+    @api.depends('x_closeout_hours', 'x_closeout_clover',
+                 'x_closeout_payment', 'x_closeout_reports')
+    def _compute_closeout(self):
+        for rec in self:
+            steps = [rec.x_closeout_hours, rec.x_closeout_clover,
+                     rec.x_closeout_payment, rec.x_closeout_reports]
+            done = sum(1 for s in steps if s)
+            rec.x_closeout_done = done == len(steps)
+            rec.x_closeout_progress = "%s / %s steps" % (done, len(steps))
+
+    def action_complete_closeout(self):
+        """Finish the event: move it to the Completed (closed) stage so it
+        drops off the 'Needs Closeout' list. Warns, but does not block, if a
+        closeout step is still unchecked."""
+        self.ensure_one()
+        stage = self.env.ref('elksevent.stage_completed',
+                             raise_if_not_found=False)
+        if stage:
+            self.stage_id = stage.id
+        self.message_post(
+            body=_("<b>Event closed out</b> (%(prog)s). Moved to Completed.",
+                   prog=self.x_closeout_progress or ''),
+            subtype_xmlid='mail.mt_note')
+        return True
     x_after_action_started = fields.Boolean(
         "After-Action Triggered", copy=False, default=False,
         help="Guard: set once the survey + notes prompt have fired so they "
@@ -2342,7 +2392,16 @@ class ProjectTask(models.Model):
             # its own Billing Summary line so it's visible, not just baked in.
             rec.x_room_auto_discount = max(
                 (rec.x_room_income or 0.0) - rooms_net - room_disc, 0.0)
-            if rec.x_is_member:
+            # Label the automatic room reduction by its actual REASON, in
+            # precedence order: Celebration of Life (facility waived) first,
+            # then the Member / Non-Profit half-rate.
+            is_col = (rec.x_event_type == 'memorial' and rec.x_member_number
+                      and rec.x_member_number != '000000000')
+            if is_col:
+                rec.x_room_auto_discount_label = (
+                    _("Celebration of Life (facility waived)") if rooms_net
+                    <= 0.005 else _("Celebration of Life (room courtesy)"))
+            elif rec.x_is_member:
                 rec.x_room_auto_discount_label = _("Member Discount (50%)")
             elif rec.x_is_nonprofit:
                 rec.x_room_auto_discount_label = _("Non-Profit Discount (50%)")
@@ -2389,24 +2448,16 @@ class ProjectTask(models.Model):
                 goods_cogs += cogs
                 if cat in cats:
                     cats[cat] += cogs
-            # Which categories have anyone clocked in (paid OR volunteer)?
-            role_cat = {'event': 'event', 'bartender': 'bar',
-                        'kitchen': 'catering', 'custodial': 'cleaning'}
-            worked = set()
-            for att in rec.x_attendance_ids:
-                wc = role_cat.get(att.x_event_role or 'event')
-                if wc:
-                    worked.add(wc)
-            # Actual PAID labor (non-volunteer attendance) by category.
-            paid = rec._paid_labor_by_category()
-            labor_total = est_labor['other']
+            # Labor COGS already lives on the cost lines: the certified-roster
+            # line (x_line_cogs = what the lodge pays its called-out staff,
+            # including any post-event substitutions) and the unrostered-labor
+            # line (clocked-in staff not on a sheet). Those were summed into
+            # goods_cogs above, so we must NOT also add the attendance
+            # paid-labor total here — that double-counts the same hours. Only a
+            # legacy estimated-labor line (none are created anymore) adds on.
             for cat in ('catering', 'bar', 'event', 'cleaning'):
-                lab = (paid.get(cat, 0.0) if cat in worked
-                       else est_labor.get(cat, 0.0))
-                cats[cat] += lab
-                labor_total += lab
-
-            rec.x_cogs = goods_cogs + labor_total
+                cats[cat] += est_labor.get(cat, 0.0)
+            rec.x_cogs = goods_cogs + sum(est_labor.values())
             rec.x_cat_catering = cats['catering']
             rec.x_cat_bar = cats['bar']
             rec.x_cat_event = cats['event']
@@ -3915,27 +3966,19 @@ class ProjectTask(models.Model):
             ]
             cogs_cats = [(lbl, amt) for lbl, amt in cogs_cats if amt]
 
-            # Itemized COGS = each non-labor cost line's COGS (goods: linens,
-            # supplies, gratuity pass-through) + actual PAID labor per role.
-            # This mirrors the income lines so "Linens" appears on both sides.
+            # Itemized COGS = each cost line's COGS. Labor COGS lives on the
+            # certified-roster and unrostered-labor lines (x_line_cogs = what
+            # the lodge actually pays), so we do NOT also add the attendance
+            # paid-labor total — that would double-count the same hours.
             cost_items = []
             for cl in evt.x_cost_line_ids:
                 if (cl.x_auto_source or '').startswith('labor'):
-                    continue  # estimated labor is the billing basis, not a cost
+                    continue  # legacy estimated-labor line, not a real cost
                 if cl.x_line_cogs:
                     cost_items.append({
                         'name': cl.name or (cl.cost_type_id.name or 'Cost'),
                         'cogs': cl.x_line_cogs,
                     })
-            _labor_labels = {
-                'event': 'Event Service - paid labor',
-                'bar': 'Bar Service - paid labor',
-                'catering': 'Catering - paid labor',
-                'cleaning': 'Cleaning Service - paid labor',
-            }
-            for cat, amt in evt._paid_labor_by_category().items():
-                if amt:
-                    cost_items.append({'name': _labor_labels[cat], 'cogs': amt})
 
             po_lines = [{
                 'name': po.name,
@@ -3954,29 +3997,27 @@ class ProjectTask(models.Model):
 
             room_income = evt.x_room_income or 0.0
             coordinator = evt.x_coordinator_fee or 0.0
-            billed_income = evt.x_total_billed or (
+            # "What we brought in" = the amount actually invoiced once the final
+            # invoice exists (frozen), else the live quote total. So a
+            # post-payment cost change (substitution) moves cost/profit only,
+            # never income.
+            billed_income = evt.x_billed_snapshot or evt.x_total_billed or (
                 room_income + eventcosts_total + coordinator)
-            # Gross of any member / Celebration-of-Life discount; the discount
-            # line is the difference so income always ties to the billed total.
-            gross_income = room_income + eventcosts_total + coordinator
-            discount = round(gross_income - billed_income, 2)
-            _reason_labels = {
-                'member': 'Member', 'nonprofit': 'Non-Profit',
-                'officer_board': 'Officer / Board Approved', 'other': 'Other',
-            }
-            if evt.x_discount_reason:
-                # Show "(50%)" for a percent discount; the dollar amount is
-                # already on the line, so an amount-type discount needs no
-                # extra qualifier.
-                qualifier = (
-                    ' (%.0f%%)' % (evt.x_discount_pct or 0.0)
-                    if evt.x_discount_type == 'percent' else '')
-                discount_label = 'Less: %s discount%s' % (
-                    _reason_labels.get(evt.x_discount_reason, 'Discount'),
-                    qualifier,
-                )
-            elif discount:
-                discount_label = 'Less: Celebration of Life (room waived)'
+            # Discount = the actual room reduction (auto member/non-profit/COL +
+            # any manual courtesy). Gross = billed + discount, so the income
+            # section always ties to the billed figure shown.
+            discount = round(
+                (evt.x_room_auto_discount or 0.0)
+                + (evt.x_discount_amount or 0.0), 2)
+            gross_income = round(billed_income + discount, 2)
+            # Label the discount by its REASON — a manual reason (member,
+            # non-profit, officer/board, other) wins, otherwise the automatic
+            # room reduction (member / non-profit half-rate, or Celebration of
+            # Life). The manager's written note is appended when present.
+            if discount:
+                discount_label = 'Less: %s' % evt._event_discount_label()
+                if evt.x_discount_reason and (evt.x_discount_note or '').strip():
+                    discount_label += ' - %s' % evt.x_discount_note.strip()
             else:
                 discount_label = 'Less: Discount'
 
@@ -5265,6 +5306,10 @@ class ProjectTask(models.Model):
             'narration': self._event_invoice_narration(),
             'invoice_line_ids': self._event_invoice_lines(kind),
         })
+        # Snapshot what the customer was billed so the P&L "income" reflects
+        # the invoiced amount, not a later live recompute.
+        if kind == 'final':
+            self.x_billed_snapshot = self.x_total_billed or 0.0
         # Attach the signable Facility Usage Agreement (T&C + signatures).
         if not settings or settings.x_invoice_attach_agreement:
             self._attach_event_agreement(move)
@@ -5330,6 +5375,47 @@ class ProjectTask(models.Model):
             return self._open_event_invoice(existing)
         return self._build_event_invoice('final')
 
+    def action_create_supplemental_invoice(self):
+        """Bill the customer for something AFTER the event is paid — the only
+        way they owe more (e.g. they used more space than booked). Creates a
+        separate draft invoice with one editable line for you to fill in; it
+        does not touch the locked deposit / final invoices or the P&L bill."""
+        self.ensure_one()
+        if self.x_is_elks_event:
+            raise UserError(_("This is an Elks Event — it is not billed."))
+        settings = self._event_settings()
+        facility = settings.x_facility_product_id if settings else False
+        partner = self._get_event_partner()
+        acc = self._event_income_account(facility)
+        line = {
+            'name': self._event_invoice_line_name(
+                _("Supplemental charge - additional space / usage")),
+            'quantity': 1,
+            'price_unit': 0.0,
+            'tax_ids': self._event_invoice_tax_cmd(),
+        }
+        if facility:
+            line['product_id'] = facility.id
+        if acc:
+            line['account_id'] = acc.id
+        move = self.env['account.move'].create({
+            'move_type': 'out_invoice',
+            'partner_id': partner.id,
+            'x_event_id': self.id,
+            'x_event_invoice_kind': 'supplemental',
+            'invoice_origin': (self.x_sale_order_id.name
+                               if self.x_sale_order_id else self.name),
+            'narration': _("Supplemental invoice for additional space or "
+                           "usage beyond the original booking."),
+            'invoice_line_ids': [(0, 0, line)],
+        })
+        self.message_post(
+            body=_("<b>Supplemental invoice created</b>: %s. Enter the amount "
+                   "for the extra space / usage and confirm it.",
+                   move._get_html_link()),
+            subtype_xmlid='mail.mt_note')
+        return self._open_event_invoice(move)
+
     def action_refresh_invoice_from_quote(self):
         """Refresh the numbers.
 
@@ -5360,17 +5446,40 @@ class ProjectTask(models.Model):
         # the remaining balance).
         deposit_locked = bool(
             self.x_deposit_received or self._amount_paid() > 0.005)
+        # Once the event is paid in full, the whole bill is locked — the
+        # customer owes nothing more. Later cost changes (substitutions, extra
+        # labor) come out of the lodge's profit, NOT the customer's bill; only
+        # a manual Supplemental Invoice adds to what they owe. So we stop
+        # re-laying the FINAL invoice too once the balance is cleared.
+        paid_in_full = bool(
+            (self.x_total_paid or 0.0) > 0.005
+            and (self.x_balance_remaining or 0.0) <= 0.005)
         drafts = self.x_invoice_ids.filtered(lambda m: m.state == 'draft')
         skipped_deposit = False
+        skipped_final = False
         for mv in drafts:
             kind = mv.x_event_invoice_kind or 'final'
+            if kind == 'supplemental':
+                continue  # manual extra charge — never auto-relaid
             if kind == 'deposit' and deposit_locked:
                 skipped_deposit = True
+                continue
+            if kind == 'final' and paid_in_full:
+                skipped_final = True
+                # Backfill the income snapshot once for events that were
+                # invoiced before this freeze existed (best-available figure).
+                if not self.x_billed_snapshot:
+                    self.x_billed_snapshot = self.x_total_billed or 0.0
                 continue
             mv.write({
                 'invoice_line_ids': [(5, 0, 0)] + self._event_invoice_lines(kind),
                 'narration': self._event_invoice_narration(),
             })
+            if kind == 'final':
+                # Keep the invoiced-income snapshot current while the final is
+                # still being re-laid; it freezes once the bill is locked
+                # (this loop then skips the final entirely).
+                self.x_billed_snapshot = self.x_total_billed or 0.0
             # Re-render the attached Facility Usage Agreement so the signable
             # contract PDF reflects the SAME updated totals as the invoice
             # lines (otherwise it stays frozen at the figures from when the
@@ -5378,13 +5487,19 @@ class ProjectTask(models.Model):
             if not settings or settings.x_invoice_attach_agreement:
                 self._attach_event_agreement(mv)
         posted = self.x_invoice_ids.filtered(lambda m: m.state == 'posted')
-        relaid = len(drafts) - (1 if skipped_deposit else 0)
+        relaid = len(drafts) - (1 if skipped_deposit else 0) - (
+            1 if skipped_final else 0)
         msg = _("Financials refreshed (P&L and bookkeeper breakdown updated).")
         if relaid > 0:
             msg += _(" %s draft invoice(s) re-laid to the new totals.", relaid)
         if skipped_deposit:
             msg += _(" The paid deposit invoice was left unchanged (a deposit "
                      "invoice is never reset once paid).")
+        if skipped_final:
+            msg += _(" The bill is paid in full, so the final invoice was left "
+                     "locked — any added costs come out of profit. Use "
+                     "'Supplemental Invoice' to bill the customer for extra "
+                     "space used.")
         if posted:
             msg += _(" %s confirmed invoice(s) left unchanged.", len(posted))
         self.message_post(body=msg, subtype_xmlid='mail.mt_note')

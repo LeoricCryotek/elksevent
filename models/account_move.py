@@ -36,6 +36,7 @@ class AccountMove(models.Model):
     x_event_invoice_kind = fields.Selection([
         ('deposit', 'Event Deposit'),
         ('final', 'Event Final'),
+        ('supplemental', 'Event Supplemental'),
     ], string="Event Invoice Kind", copy=False,
         help="Which event charge this invoice represents (matches the Clover "
              "product).",

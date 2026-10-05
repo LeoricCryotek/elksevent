@@ -441,8 +441,15 @@
                         type="object"
                         class="oe_stat_button"
                         icon="fa-refresh"
-                        help="Refresh the numbers: updates the P&amp;L and bookkeeper breakdown, re-lays any DRAFT invoice to the new totals, and leaves confirmed invoices unchanged."
+                        help="Refresh the numbers: updates the P&amp;L and bookkeeper breakdown, re-lays any DRAFT invoice to the new totals, and leaves confirmed invoices unchanged. Once the bill is paid in full it is locked — added costs come out of profit."
                         invisible="not x_is_event or x_is_elks_event or x_quote_total &lt;= 0"/>
+                <button name="action_create_supplemental_invoice"
+                        string="Supplemental Invoice"
+                        type="object"
+                        class="oe_stat_button"
+                        icon="fa-plus-square"
+                        help="Bill the customer for something beyond the original booking (e.g. they used more space than requested). Creates a separate invoice you fill in — the only way they owe more after the bill is set."
+                        invisible="not x_is_event or x_is_elks_event"/>
                 <button name="action_view_invoices"
                         type="object"
                         class="oe_stat_button"
@@ -1193,6 +1200,31 @@
                                 class="btn-secondary me-2 mb-2" icon="fa-print"
                                 string="Print After Action Report (AAR)"/>
                     </div>
+
+                    <separator string="Event Closeout"/>
+                    <div class="text-muted mb-2">
+                        Work through these after the event so the numbers are
+                        accurate, then close it out.
+                    </div>
+                    <group>
+                        <group>
+                            <field name="x_closeout_hours"/>
+                            <field name="x_closeout_clover"/>
+                            <field name="x_closeout_payment"/>
+                            <field name="x_closeout_reports"/>
+                        </group>
+                        <group>
+                            <field name="x_closeout_progress" readonly="1"/>
+                            <field name="x_closeout_done" invisible="1"/>
+                            <button name="action_complete_closeout" type="object"
+                                    class="btn-primary" icon="fa-check-circle"
+                                    string="Complete Closeout (move to Completed)"
+                                    confirm="Move this event to the Completed stage and remove it from the 'Needs Closeout' list?"/>
+                            <div class="text-success" invisible="not x_closeout_done">
+                                <i class="fa fa-check"/> All closeout steps done.
+                            </div>
+                        </group>
+                    </group>
 
                     <separator string="After-Action Notes / Thoughts"/>
                     <field name="x_after_action_notes"
