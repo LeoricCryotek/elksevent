@@ -76,7 +76,7 @@ class EventCallout(models.Model):
         ('sent', 'Sent to Manager'),
         ('certified', 'Certified'),
         ('cancelled', 'Cancelled'),
-    ], default='draft', required=True, index=True, tracking=False)
+    ], default='draft', required=True, index=True)
     cancel_reason = fields.Char(
         "Cancellation Reason", copy=False,
         help="Why this call-out was cancelled (e.g. a different caterer was "

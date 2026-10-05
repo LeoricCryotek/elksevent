@@ -1333,19 +1333,26 @@ class ProjectTask(models.Model):
         help="The After Action Report and the event P&L have been printed and "
              "filed for the records.")
     x_closeout_done = fields.Boolean(
-        "Closeout complete", compute='_compute_closeout', store=True)
+        "Closeout complete", compute='_compute_closeout_done', store=True)
     x_closeout_progress = fields.Char(
-        "Closeout Progress", compute='_compute_closeout')
+        "Closeout Progress", compute='_compute_closeout_progress')
 
     @api.depends('x_closeout_hours', 'x_closeout_clover',
                  'x_closeout_payment', 'x_closeout_reports')
-    def _compute_closeout(self):
+    def _compute_closeout_done(self):
         for rec in self:
-            steps = [rec.x_closeout_hours, rec.x_closeout_clover,
-                     rec.x_closeout_payment, rec.x_closeout_reports]
-            done = sum(1 for s in steps if s)
-            rec.x_closeout_done = done == len(steps)
-            rec.x_closeout_progress = "%s / %s steps" % (done, len(steps))
+            rec.x_closeout_done = all([
+                rec.x_closeout_hours, rec.x_closeout_clover,
+                rec.x_closeout_payment, rec.x_closeout_reports])
+
+    @api.depends('x_closeout_hours', 'x_closeout_clover',
+                 'x_closeout_payment', 'x_closeout_reports')
+    def _compute_closeout_progress(self):
+        for rec in self:
+            done = sum(1 for s in (
+                rec.x_closeout_hours, rec.x_closeout_clover,
+                rec.x_closeout_payment, rec.x_closeout_reports) if s)
+            rec.x_closeout_progress = "%s / 4 steps" % done
 
     def action_complete_closeout(self):
         """Finish the event: move it to the Completed (closed) stage so it
