@@ -1305,6 +1305,10 @@
                 <filter name="filter_upcoming"
                         string="Upcoming Events"
                         domain="[('x_event_date', '>=', context_today().strftime('%Y-%m-%d'))]"/>
+                <filter name="filter_needs_closeout"
+                        string="Needs Closeout (completed, not closed)"
+                        help="Events whose date has passed but are not yet in a closed stage (Completed / Cancelled) — the after-action / closeout to-do list."
+                        domain="[('x_event_date', '!=', False), ('x_event_date', '&lt;', context_today().strftime('%Y-%m-%d')), ('stage_id.fold', '=', False)]"/>
                 <filter name="filter_has_invoice"
                         string="Invoiced"
                         domain="[('x_invoice_ids', '!=', False)]"/>
