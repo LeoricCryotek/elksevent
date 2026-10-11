@@ -54,6 +54,12 @@ access_event_payment_coord,elks.event.payment.coord,model_elks_event_payment,elk
 access_event_payment_user,elks.event.payment.user,model_elks_event_payment,project.group_project_user,1,0,0,0
 access_event_payment_wizard_coord,elks.event.payment.wizard.coord,model_elks_event_payment_wizard,elksevent.group_event_coordinator,1,1,1,1
 access_event_payment_wizard_user,elks.event.payment.wizard.user,model_elks_event_payment_wizard,project.group_project_user,1,1,1,1
+access_event_supp_wizard_coord,elks.event.supplemental.wizard.coord,model_elks_event_supplemental_wizard,elksevent.group_event_coordinator,1,1,1,1
+access_event_supp_wizard_user,elks.event.supplemental.wizard.user,model_elks_event_supplemental_wizard,project.group_project_user,1,1,1,1
+access_event_supp_wizard_line_coord,elks.event.supplemental.wizard.line.coord,model_elks_event_supplemental_wizard_line,elksevent.group_event_coordinator,1,1,1,1
+access_event_supp_wizard_line_user,elks.event.supplemental.wizard.line.user,model_elks_event_supplemental_wizard_line,project.group_project_user,1,1,1,1
+access_event_pricelock_wizard_coord,elks.event.price.lock.wizard.coord,model_elks_event_price_lock_wizard,elksevent.group_event_coordinator,1,1,1,1
+access_event_pricelock_wizard_user,elks.event.price.lock.wizard.user,model_elks_event_price_lock_wizard,project.group_project_user,1,1,1,1
 access_event_clover_item_coord,elks.event.clover.item.coord,model_elks_event_clover_item,elksevent.group_event_coordinator,1,1,1,1
 access_event_clover_item_user,elks.event.clover.item.user,model_elks_event_clover_item,project.group_project_user,1,0,0,0
 access_job_education_recruit,elks.job.education.recruit,model_elks_job_education,hr_recruitment.group_hr_recruitment_user,1,1,1,1

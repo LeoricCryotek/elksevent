@@ -881,6 +881,134 @@ class ProjectTask(models.Model):
              "change (e.g. a substitution) never inflates what we 'brought "
              "in' — only the cost / profit side moves.")
 
+    # ------------------------------------------------------------------
+    # Contract price lock — the agreed price the customer signed up for.
+    # ------------------------------------------------------------------
+    x_price_locked = fields.Boolean(
+        "Contract Price Locked", copy=False, tracking=True,
+        help="Once the customer approves the pricing OR makes a down payment, "
+             "the agreed price is locked. Back-end cost or labor changes after "
+             "this NEVER change what the customer owes — they become Potential "
+             "Revenue Charges absorbed by the Lodge. Only a Supplemental "
+             "Invoice can add to the customer's bill.")
+    x_customer_approved = fields.Boolean(
+        "Customer Approved Pricing", copy=False, tracking=True,
+        help="Set when the customer has approved the price and terms. Locks "
+             "the contract price.")
+    x_price_locked_on = fields.Datetime("Price Locked On", copy=False)
+    x_price_locked_reason = fields.Selection([
+        ('approved', 'Customer approved the pricing'),
+        ('deposit', 'Down payment / deposit received'),
+        ('manual', 'Locked at an entered agreed total'),
+    ], string="Price Lock Reason", copy=False)
+    # Snapshot of the agreed numbers at lock time (what the customer owes).
+    x_agreed_grand = fields.Monetary(
+        "Agreed Price (incl. tax)", currency_field="x_currency_id", copy=False,
+        help="The grand total the customer agreed to, frozen at lock.")
+    x_agreed_billed = fields.Monetary(
+        "Agreed Price (pre-tax)", currency_field="x_currency_id", copy=False)
+    x_agreed_taxable = fields.Monetary(
+        "Agreed Taxable Subtotal", currency_field="x_currency_id", copy=False)
+    x_agreed_nontaxable = fields.Monetary(
+        "Agreed Non-Taxable Subtotal", currency_field="x_currency_id",
+        copy=False)
+    x_potential_revenue_charges = fields.Monetary(
+        "Potential Revenue Charges", currency_field="x_currency_id",
+        compute="_compute_potential_revenue_charges",
+        help="Cost / labor increases the Lodge is ABSORBING since the price "
+             "locked = current chargeable total minus the agreed price. This "
+             "is NOT billed to the customer — it's revenue we could have "
+             "charged but are eating. Bill it with a Supplemental Invoice only "
+             "if the customer agreed to the extra.")
+
+    @api.depends('x_price_locked', 'x_agreed_grand', 'x_event_grand_total')
+    def _compute_potential_revenue_charges(self):
+        for rec in self:
+            if rec.x_price_locked:
+                rec.x_potential_revenue_charges = max(
+                    (rec.x_event_grand_total or 0.0)
+                    - (rec.x_agreed_grand or 0.0), 0.0)
+            else:
+                rec.x_potential_revenue_charges = 0.0
+
+    def _lock_contract_price(self, reason, grand_override=None):
+        """Freeze the agreed price snapshot (idempotent — first lock wins).
+
+        Normally the snapshot is the live grand total. Pass grand_override to
+        lock at a SPECIFIC agreed total instead (e.g. an older event where
+        back-end changes already inflated the live total above what the
+        customer agreed to) — the taxable / non-taxable / pre-tax figures are
+        scaled proportionally to that agreed grand total so the tax stays
+        consistent."""
+        for rec in self:
+            if rec.x_price_locked:
+                continue
+            live_grand = rec.x_event_grand_total or 0.0
+            if grand_override is not None and grand_override > 0:
+                agreed_grand = grand_override
+                # Scale the live split to the agreed grand total.
+                f = (agreed_grand / live_grand) if live_grand else 0.0
+                agreed_billed = round((rec.x_total_billed or 0.0) * f, 2)
+                agreed_taxable = round((rec.x_taxable_subtotal or 0.0) * f, 2)
+                agreed_nontax = round((rec.x_nontaxable_subtotal or 0.0) * f, 2)
+            else:
+                agreed_grand = live_grand
+                agreed_billed = rec.x_total_billed or 0.0
+                agreed_taxable = rec.x_taxable_subtotal or 0.0
+                agreed_nontax = rec.x_nontaxable_subtotal or 0.0
+            rec.write({
+                'x_price_locked': True,
+                'x_price_locked_on': fields.Datetime.now(),
+                'x_price_locked_reason': reason,
+                'x_agreed_grand': agreed_grand,
+                'x_agreed_billed': agreed_billed,
+                'x_agreed_taxable': agreed_taxable,
+                'x_agreed_nontaxable': agreed_nontax,
+            })
+            rec.message_post(
+                body=_("<b>Contract price locked</b> at %(amt)s (%(why)s). "
+                       "Later cost changes now become Potential Revenue "
+                       "Charges, not customer billing.",
+                       amt=("$%.2f" % (rec.x_agreed_grand or 0.0)),
+                       why=dict(rec._fields['x_price_locked_reason'].selection
+                                ).get(reason, reason)),
+                subtype_xmlid='mail.mt_note')
+
+    def action_open_lock_price_wizard(self):
+        """Open the wizard to lock an agreed total (lets you type the figure
+        for an already-booked event instead of snapshotting the live total)."""
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _("Lock Agreed Price"),
+            'res_model': 'elks.event.price.lock.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {'default_event_id': self.id},
+        }
+
+    def action_customer_approve_pricing(self):
+        """Mark the customer's pricing approved and lock the contract price."""
+        for rec in self:
+            rec.x_customer_approved = True
+            rec._lock_contract_price('approved')
+        return True
+
+    def action_unlock_contract_price(self):
+        """Re-open the price (manager correction) — re-syncs to the live total.
+        Use only to fix a mistaken lock; normal changes stay absorbed."""
+        self.ensure_one()
+        self.write({
+            'x_price_locked': False, 'x_price_locked_reason': False,
+            'x_agreed_grand': 0.0, 'x_agreed_billed': 0.0,
+            'x_agreed_taxable': 0.0, 'x_agreed_nontaxable': 0.0,
+        })
+        self.message_post(
+            body=_("Contract price <b>unlocked</b> by %s — billing follows the "
+                   "live total again.", self.env.user.name),
+            subtype_xmlid='mail.mt_note')
+        return True
+
     @api.depends("x_payment_ids.amount", "x_payment_ids.method",
                  "x_event_grand_total", "x_deposit_amount",
                  "x_deposit_received")
@@ -1197,6 +1325,41 @@ class ProjectTask(models.Model):
         compute='_compute_coordinator_auto',
         help="Difference between the entered fee and the suggested amount.",
     )
+    x_coordinator_paid_from_event = fields.Boolean(
+        "Pay Coordinator From This Event", default=True, tracking=True,
+        help="When ON, the coordinator fee is paid out to the event "
+             "coordinator (via 'Pay Coordinator'). When OFF, the customer is "
+             "still charged the same fee in the workflow, but the money is NOT "
+             "paid to a coordinator — it is pooled into the Event Supplies "
+             "Fund to buy new event supplies.")
+    x_coordinator_to_supplies = fields.Monetary(
+        "To Event Supplies Fund", currency_field='x_currency_id',
+        compute='_compute_coordinator_to_supplies', store=True,
+        help="The coordinator fee charged on this event that is being pooled "
+             "for event supplies instead of paid to a coordinator (0 when the "
+             "coordinator is paid from the event).")
+
+    @api.depends('x_coordinator_fee', 'x_coordinator_paid_from_event')
+    def _compute_coordinator_to_supplies(self):
+        for rec in self:
+            rec.x_coordinator_to_supplies = (
+                0.0 if rec.x_coordinator_paid_from_event
+                else (rec.x_coordinator_fee or 0.0))
+
+    x_event_supplies_fund_total = fields.Monetary(
+        "Event Supplies Fund (running)", currency_field='x_currency_id',
+        compute='_compute_event_supplies_fund',
+        help="Lodge-wide running total of all coordinator fees pooled for "
+             "event supplies (every event where 'Pay Coordinator From This "
+             "Event' is OFF). This is the kitty available to buy new event "
+             "supplies.")
+
+    def _compute_event_supplies_fund(self):
+        total = sum(self.sudo().search([
+            ('x_coordinator_paid_from_event', '=', False),
+        ]).mapped('x_coordinator_to_supplies'))
+        for rec in self:
+            rec.x_event_supplies_fund_total = total
     # Event-cost (customer charges) roll-up + tax/total mirrors of the quote.
     x_eventcosts_total = fields.Monetary(
         "Event Costs Total", currency_field='x_currency_id',
@@ -2328,11 +2491,49 @@ class ProjectTask(models.Model):
                     att, rates)
         return out
 
+    _LABOR_DEPT_LABEL = {'bar': 'Bar / Lounge', 'kitchen': 'Kitchen',
+                         'custodial': 'Custodial', 'event': 'Event Worker'}
+
+    def _pl_labor_paid_by_dept(self):
+        """Actual labor PAID OUT per department for the P&L expense side:
+        wages (each clocked-in, non-volunteer worker's hours x their pay rate —
+        a 1099 at the call-out rate, a W-2 at their wage) PLUS the tips paid out
+        to that department. One row per department (Bar / Lounge, Kitchen,
+        Custodial, Event Worker). Volunteers cost nothing."""
+        self.ensure_one()
+        rates = self._event_role_rates(self._event_settings())
+        role_dept = {'bartender': 'bar', 'kitchen': 'kitchen',
+                     'custodial': 'custodial', 'event': 'event'}
+        wages = {'bar': 0.0, 'kitchen': 0.0, 'custodial': 0.0, 'event': 0.0}
+        for att in self.x_attendance_ids:
+            if self._elks_is_volunteer_att(att):
+                continue
+            dept = role_dept.get(att.x_event_role or 'event', 'event')
+            wages[dept] += self._att_actual_pay(att, rates)
+        # Tips actually paid out, by department, from the certified call-outs.
+        tips = {'bar': 0.0, 'kitchen': 0.0, 'custodial': 0.0, 'event': 0.0}
+        for co in self.x_callout_ids.filtered(lambda c: c.state == 'certified'):
+            tips[co.department] = tips.get(co.department, 0.0) + (
+                co.gratuity or 0.0)
+        rows = []
+        for d in ('bar', 'kitchen', 'custodial', 'event'):
+            total = wages[d] + tips.get(d, 0.0)
+            if total > 0.005:
+                rows.append({
+                    'dept': self._LABOR_DEPT_LABEL[d], 'code': d,
+                    'wages': round(wages[d], 2),
+                    'tips': round(tips.get(d, 0.0), 2),
+                    'total': round(total, 2)})
+        return rows
+
     @api.depends(
         'x_room_booking_ids.subtotal',
         'x_cost_line_ids.total',
         'x_cost_line_ids.x_taxable',
         'x_coordinator_fee',
+        'x_callout_ids.state', 'x_callout_ids.gratuity',
+        'x_callout_ids.line_ids.rate', 'x_callout_ids.line_ids.hours',
+        'x_callout_ids.line_ids.employee_id',
         'x_room_rental_rate',
         'x_cost_line_ids.x_line_cogs',
         'x_cost_line_ids.cost_type_id',
@@ -2441,30 +2642,38 @@ class ProjectTask(models.Model):
                     lambda p: p.state != 'cancel'
                 ).mapped('amount_total')
             )
+            # COST OF GOODS: supplies / food / linens / insurance / fees only.
+            # LABOR is NOT taken from the cost lines here — the certified-roster,
+            # unrostered and gratuity cost lines (x_auto_source roster_* /
+            # unrostered_* / grat_*) exist to BILL the customer, not to cost the
+            # lodge. Real labor cost is what we actually PAID OUT by department
+            # (clocked hours x each worker's rate, plus tips paid), computed
+            # live below so the P&L shows the true spend and the "Potential
+            # Revenue Charges" the lodge absorbs when costs rise after lock.
             cats = {'catering': 0.0, 'bar': 0.0, 'event': 0.0, 'cleaning': 0.0}
             goods_cogs = 0.0
-            est_labor = {'catering': 0.0, 'bar': 0.0, 'event': 0.0,
-                         'cleaning': 0.0, 'other': 0.0}
             for c in rec.x_cost_line_ids:
+                src = c.x_auto_source or ''
+                if (src.startswith('labor') or src.startswith('roster_')
+                        or src.startswith('unrostered_')
+                        or src.startswith('grat_')):
+                    continue  # labor / tips -> handled as actual paid-out below
                 cat = c.cost_type_id.category
                 cogs = c.x_line_cogs or 0.0
-                if (c.x_auto_source or '').startswith('labor'):
-                    # Estimated labor cost, held by category as the projection.
-                    est_labor[cat if cat in est_labor else 'other'] += cogs
-                    continue
                 goods_cogs += cogs
                 if cat in cats:
                     cats[cat] += cogs
-            # Labor COGS already lives on the cost lines: the certified-roster
-            # line (x_line_cogs = what the lodge pays its called-out staff,
-            # including any post-event substitutions) and the unrostered-labor
-            # line (clocked-in staff not on a sheet). Those were summed into
-            # goods_cogs above, so we must NOT also add the attendance
-            # paid-labor total here — that double-counts the same hours. Only a
-            # legacy estimated-labor line (none are created anymore) adds on.
-            for cat in ('catering', 'bar', 'event', 'cleaning'):
-                cats[cat] += est_labor.get(cat, 0.0)
-            rec.x_cogs = goods_cogs + sum(est_labor.values())
+            # Actual labor PAID OUT by department (wages + tips), per the user's
+            # P&L: "at the rates paid and tips paid we paid out X in Labor".
+            labor_dept_cat = {'bar': 'bar', 'kitchen': 'catering',
+                              'custodial': 'cleaning', 'event': 'event'}
+            labor_total = 0.0
+            for row in rec._pl_labor_paid_by_dept():
+                labor_total += row['total']
+                cat = labor_dept_cat.get(row['code'], 'event')
+                if cat in cats:
+                    cats[cat] += row['total']
+            rec.x_cogs = goods_cogs + labor_total
             rec.x_cat_catering = cats['catering']
             rec.x_cat_bar = cats['bar']
             rec.x_cat_event = cats['event']
@@ -3569,6 +3778,12 @@ class ProjectTask(models.Model):
         does not stack.
         """
         self.ensure_one()
+        if not self.x_coordinator_paid_from_event:
+            raise UserError(_(
+                "This event is set to POOL the coordinator fee into the Event "
+                "Supplies Fund, not pay a coordinator. Turn on 'Pay "
+                "Coordinator From This Event' in Financials first if you do "
+                "want to pay the coordinator."))
         emp = self.x_coordinator_employee_id
         fee = self.x_coordinator_fee or 0.0
         if not emp:
@@ -3973,14 +4188,33 @@ class ProjectTask(models.Model):
             ]
             cogs_cats = [(lbl, amt) for lbl, amt in cogs_cats if amt]
 
-            # Itemized COGS = each cost line's COGS. Labor COGS lives on the
-            # certified-roster and unrostered-labor lines (x_line_cogs = what
-            # the lodge actually pays), so we do NOT also add the attendance
-            # paid-labor total — that would double-count the same hours.
+            # Itemized expenses = (1) actual LABOR PAID OUT by department
+            # (hours x rate + tips), then (2) the non-labor cost of goods
+            # (linens, supplies, food, insurance, marketing, etc.) from the
+            # cost lines. The roster / unrostered / gratuity cost lines only
+            # BILL the customer — they are skipped here so labor is counted once
+            # at what we really paid.
             cost_items = []
+            labor_items = []
+            for row in evt._pl_labor_paid_by_dept():
+                bits = []
+                if row['wages']:
+                    bits.append('$%.2f wages' % row['wages'])
+                if row['tips']:
+                    bits.append('$%.2f tips' % row['tips'])
+                labor_items.append({
+                    'name': '%s Labor%s' % (
+                        row['dept'],
+                        (' (%s)' % ' + '.join(bits)) if bits else ''),
+                    'cogs': row['total'],
+                })
+            cost_items.extend(labor_items)
             for cl in evt.x_cost_line_ids:
-                if (cl.x_auto_source or '').startswith('labor'):
-                    continue  # legacy estimated-labor line, not a real cost
+                src = cl.x_auto_source or ''
+                if (src.startswith('labor') or src.startswith('roster_')
+                        or src.startswith('unrostered_')
+                        or src.startswith('grat_')):
+                    continue  # labor / tips counted above as actual paid-out
                 if cl.x_line_cogs:
                     cost_items.append({
                         'name': cl.name or (cl.cost_type_id.name or 'Cost'),
@@ -4008,8 +4242,10 @@ class ProjectTask(models.Model):
             # invoice exists (frozen), else the live quote total. So a
             # post-payment cost change (substitution) moves cost/profit only,
             # never income.
-            billed_income = evt.x_billed_snapshot or evt.x_total_billed or (
-                room_income + eventcosts_total + coordinator)
+            billed_income = (
+                (evt.x_agreed_billed if evt.x_price_locked else 0.0)
+                or evt.x_billed_snapshot or evt.x_total_billed
+                or (room_income + eventcosts_total + coordinator))
             # Discount = the actual room reduction (auto member/non-profit/COL +
             # any manual courtesy). Gross = billed + discount, so the income
             # section always ties to the billed figure shown.
@@ -4069,6 +4305,14 @@ class ProjectTask(models.Model):
                 'po_total': po_total,
                 'total_expense': total_expense,
                 'profit': profit,
+                'price_locked': evt.x_price_locked,
+                'agreed_price': evt.x_agreed_grand or 0.0,
+                'potential_revenue_charges':
+                    evt.x_potential_revenue_charges or 0.0,
+                'coordinator_paid_from_event':
+                    evt.x_coordinator_paid_from_event,
+                'coordinator_to_supplies':
+                    evt.x_coordinator_to_supplies or 0.0,
                 'is_member': evt.x_is_member,
                 'ubi_room_income': evt.x_ubi_room_income or 0.0,
                 'ubi_tax_reserve': evt.x_ubi_tax_reserve or 0.0,
@@ -5182,6 +5426,13 @@ class ProjectTask(models.Model):
         taxable_net = rooms_net + ec_taxable          # taxed
         nontax_net = ec_nontax + coord                # exempt
 
+        # Once the contract price is LOCKED, bill the AGREED amounts captured
+        # at lock — later cost / labor changes never move the customer's bill.
+        locked = bool(self.x_price_locked)
+        if locked:
+            taxable_net = self.x_agreed_taxable or 0.0
+            nontax_net = self.x_agreed_nontaxable or 0.0
+
         if kind == 'deposit':
             # The deposit invoice bills the RECORDED deposit amount (what the
             # customer actually agreed / paid), NOT a live 50%-of-total that
@@ -5189,7 +5440,8 @@ class ProjectTask(models.Model):
             # deposit / grand-total so the itemized reservation fee sums (with
             # tax) to exactly the recorded deposit. Fall back to the deposit %
             # only when no deposit amount has been recorded yet.
-            grand = self.x_event_grand_total or 0.0
+            grand = ((self.x_agreed_grand if locked else None)
+                     or self.x_event_grand_total or 0.0)
             dep_amt = self.x_deposit_amount or 0.0
             if dep_amt > 0.005 and grand > 0.005:
                 portion = min(dep_amt / grand, 1.0)
@@ -5202,7 +5454,9 @@ class ProjectTask(models.Model):
         # Show the discount breakout for BOTH the automatic member/non-profit
         # reduction and any additional courtesy discount (respecting the
         # Lodge-Settings toggle).
-        show_disc = ((room_disc + auto_disc) > 0.005
+        # A locked bill is billed at the agreed net (discounts already in it),
+        # so it isn't re-itemized with the discount breakout.
+        show_disc = ((not locked) and (room_disc + auto_disc) > 0.005
                      and (not settings or settings.x_invoice_show_discount))
 
         lines = []
@@ -5227,13 +5481,21 @@ class ProjectTask(models.Model):
                       lbl=self._event_discount_label(), why=why),
                     -room_disc * portion, line_prod, True))
         elif taxable_net:
-            tlabel = (_("Reservation Fee") if kind == 'deposit'
-                      else _("Facility Usage and Rental"))
+            if kind == 'deposit':
+                tlabel = _("Reservation Fee")
+            elif locked:
+                tlabel = _("Facility Usage and Rental (per agreement)")
+            else:
+                tlabel = _("Facility Usage and Rental")
             lines.append(_line(tlabel, taxable_net * portion, line_prod, True))
         # ---- NON-TAXABLE side (services + coordinator) ----
         if nontax_net:
-            slabel = (_("Reservation Fee - services") if kind == 'deposit'
-                      else _("Event Services (non-taxable)"))
+            if kind == 'deposit':
+                slabel = _("Reservation Fee - services")
+            elif locked:
+                slabel = _("Event Services (per agreement)")
+            else:
+                slabel = _("Event Services (non-taxable)")
             lines.append(_line(slabel, nontax_net * portion, line_prod, False))
 
         # Payment handling. Prefer the payment log (multiple payments with
@@ -5314,9 +5576,12 @@ class ProjectTask(models.Model):
             'invoice_line_ids': self._event_invoice_lines(kind),
         })
         # Snapshot what the customer was billed so the P&L "income" reflects
-        # the invoiced amount, not a later live recompute.
+        # the invoiced amount, not a later live recompute. A locked contract
+        # bills the agreed figure.
         if kind == 'final':
-            self.x_billed_snapshot = self.x_total_billed or 0.0
+            self.x_billed_snapshot = (
+                (self.x_agreed_billed if self.x_price_locked else 0.0)
+                or self.x_total_billed or 0.0)
         # Attach the signable Facility Usage Agreement (T&C + signatures).
         if not settings or settings.x_invoice_attach_agreement:
             self._attach_event_agreement(move)
@@ -5383,45 +5648,24 @@ class ProjectTask(models.Model):
         return self._build_event_invoice('final')
 
     def action_create_supplemental_invoice(self):
-        """Bill the customer for something AFTER the event is paid — the only
-        way they owe more (e.g. they used more space than booked). Creates a
-        separate draft invoice with one editable line for you to fill in; it
-        does not touch the locked deposit / final invoices or the P&L bill."""
+        """OPTIONALLY bill the customer for additional, agreed-upon charges
+        AFTER the event is already billed/paid — the only way they owe more
+        (e.g. they used more space than booked). Opens a wizard where the
+        coordinator ticks exactly which charges to include, with a required
+        note (defaulting to the standard wording) and Due Immediately. It does
+        NOT touch the locked deposit / final invoices or the agreed contract
+        price."""
         self.ensure_one()
         if self.x_is_elks_event:
             raise UserError(_("This is an Elks Event — it is not billed."))
-        settings = self._event_settings()
-        facility = settings.x_facility_product_id if settings else False
-        partner = self._get_event_partner()
-        acc = self._event_income_account(facility)
-        line = {
-            'name': self._event_invoice_line_name(
-                _("Supplemental charge - additional space / usage")),
-            'quantity': 1,
-            'price_unit': 0.0,
-            'tax_ids': self._event_invoice_tax_cmd(),
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _("Supplemental Invoice"),
+            'res_model': 'elks.event.supplemental.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {'default_event_id': self.id},
         }
-        if facility:
-            line['product_id'] = facility.id
-        if acc:
-            line['account_id'] = acc.id
-        move = self.env['account.move'].create({
-            'move_type': 'out_invoice',
-            'partner_id': partner.id,
-            'x_event_id': self.id,
-            'x_event_invoice_kind': 'supplemental',
-            'invoice_origin': (self.x_sale_order_id.name
-                               if self.x_sale_order_id else self.name),
-            'narration': _("Supplemental invoice for additional space or "
-                           "usage beyond the original booking."),
-            'invoice_line_ids': [(0, 0, line)],
-        })
-        self.message_post(
-            body=_("<b>Supplemental invoice created</b>: %s. Enter the amount "
-                   "for the extra space / usage and confirm it.",
-                   move._get_html_link()),
-            subtype_xmlid='mail.mt_note')
-        return self._open_event_invoice(move)
 
     def action_refresh_invoice_from_quote(self):
         """Refresh the numbers.

@@ -960,6 +960,20 @@
                                 </span>
                             </div>
                             <field name="x_coordinator_employee_id"/>
+                            <label for="x_coordinator_paid_from_event"
+                                   string="Coordinator Pay"/>
+                            <div class="o_row">
+                                <field name="x_coordinator_paid_from_event"/>
+                                <span>Pay the coordinator from this event</span>
+                                <span class="text-info"
+                                      invisible="x_coordinator_paid_from_event">
+                                    — fee of <field name="x_coordinator_to_supplies"
+                                                    readonly="1" nolabel="1"/>
+                                    pooled to Event Supplies Fund (running total
+                                    <field name="x_event_supplies_fund_total"
+                                           readonly="1" nolabel="1"/>)
+                                </span>
+                            </div>
                             <label for="x_discount_reason" string="Additional Discount"/>
                             <div class="o_row">
                                 <field name="x_discount_reason"
@@ -999,6 +1013,31 @@
                             <field name="x_event_grand_total" readonly="1"
                                    string="Grand Total"
                                    class="oe_subtotal_footer_separator"/>
+                            <field name="x_price_locked" invisible="1"/>
+                            <field name="x_agreed_grand" readonly="1"
+                                   string="Agreed Price (locked)"
+                                   invisible="not x_price_locked"/>
+                            <field name="x_potential_revenue_charges" readonly="1"
+                                   string="Potential Revenue Charges"
+                                   invisible="not x_price_locked"
+                                   decoration-danger="x_potential_revenue_charges &gt; 0"
+                                   help="Cost/labor increases the Lodge is ABSORBING since the price locked (current chargeable total minus the agreed price). This is NOT billed to the customer — it's revenue we could have charged but are eating. Use a Supplemental Invoice only if the customer agreed to the extra."/>
+                            <button name="action_customer_approve_pricing"
+                                    type="object" class="btn-secondary"
+                                    icon="fa-lock" string="Approve &amp; Lock Price"
+                                    invisible="x_price_locked"
+                                    help="Mark the customer's pricing approved and lock the contract price. After this, cost changes become Potential Revenue Charges, not customer billing. (A recorded deposit also locks it automatically.)"/>
+                            <button name="action_open_lock_price_wizard"
+                                    type="object" class="btn-link"
+                                    icon="fa-pencil"
+                                    string="Lock at an agreed total…"
+                                    invisible="x_price_locked"
+                                    help="For an already-booked event (e.g. a deposit was paid and later changes inflated the total): type the total the customer actually agreed to and lock at that figure. Suggests twice the deposit."/>
+                            <button name="action_unlock_contract_price"
+                                    type="object" class="btn-link text-muted"
+                                    string="Unlock price (correction)"
+                                    invisible="not x_price_locked"
+                                    confirm="Unlock the agreed price so billing follows the live total again? Use only to fix a mistaken lock."/>
                         </group>
                         <group string="Deposit">
                             <field name="x_deposit_amount"/>
@@ -1038,6 +1077,17 @@
                             <field name="method"/>
                             <field name="reference"/>
                             <field name="note" optional="hide"/>
+                            <field name="x_clover_sale_id" column_invisible="1"/>
+                            <field name="x_clover_matched" column_invisible="1"/>
+                            <field name="x_clover_info" string="Clover"
+                                   widget="badge" decoration-success="x_clover_matched"
+                                   readonly="1"
+                                   help="A matching Clover point-of-sale payment was found around this date."/>
+                            <button name="action_view_clover_sale" type="object"
+                                    string="View in Clover" icon="fa-check-circle"
+                                    class="text-success"
+                                    invisible="not x_clover_matched"
+                                    help="Open the matching Clover order."/>
                             <field name="currency_id" column_invisible="1"/>
                         </list>
                     </field>

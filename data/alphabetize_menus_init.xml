@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ═══════════════════════════════════════════════════════════
+         Auto-alphabetize app menus on every install AND upgrade
+         of elksevent.  Mirrors the elkssecretary / elkscontacts
+         wiring so sort order is kept consistent whichever Elks
+         module is being installed or updated.  Idempotent.
+         ═══════════════════════════════════════════════════════════ -->
+    <record id="ir_actions_server_alphabetize_menus_elksevent"
+            model="ir.actions.server">
+        <field name="name">Alphabetize App Menus (elksevent auto-run)</field>
+        <field name="model_id" ref="base.model_ir_ui_menu"/>
+        <field name="state">code</field>
+        <field name="code"><![CDATA[
+Menu = env['ir.ui.menu'].sudo()
+top_menus = Menu.search([('parent_id', '=', False)])
+sorted_menus = top_menus.sorted(key=lambda m: (m.name or '').lower())
+for idx, m in enumerate(sorted_menus, start=1):
+    new_seq = idx * 10
+    if m.sequence != new_seq:
+        m.write({'sequence': new_seq})
+        ]]></field>
+    </record>
+
+    <function model="ir.actions.server" name="run"
+              eval="[ref('ir_actions_server_alphabetize_menus_elksevent')]"/>
+</odoo>

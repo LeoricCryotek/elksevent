@@ -353,7 +353,7 @@
                                 <thead>
                                     <tr style="background: #dc3545; color: white;">
                                         <th style="padding: 5px 8px; text-align: left;" colspan="2">
-                                            EXPENSES - Cost of Goods Sold (supplies + certified-roster labor) &amp; Purchase Orders
+                                            EXPENSES - Labor Paid Out (by department) + Cost of Goods (supplies, food, linens, insurance, etc.) &amp; Purchase Orders
                                         </th>
                                     </tr>
                                     <tr style="background: #fce4ec;">
@@ -406,6 +406,16 @@
 
                         <!-- Event profit line -->
                         <table style="width: 100%; margin-bottom: 15px; font-size: 11px;">
+                            <tr t-if="ed['potential_revenue_charges'] > 0.005">
+                                <td style="text-align: right; padding: 2px 8px; font-size: 10px; color:#b45309;">
+                                    Potential Revenue Charges (absorbed by the Lodge, NOT billed): $<t t-esc="'{:,.2f}'.format(ed['potential_revenue_charges'])"/>
+                                </td>
+                            </tr>
+                            <tr t-if="ed['coordinator_to_supplies'] > 0.005">
+                                <td style="text-align: right; padding: 2px 8px; font-size: 10px; color:#0369a1;">
+                                    Coordinator fee pooled to Event Supplies Fund (not paid to a coordinator): $<t t-esc="'{:,.2f}'.format(ed['coordinator_to_supplies'])"/>
+                                </td>
+                            </tr>
                             <tr>
                                 <td style="text-align: right; padding: 6px 8px; font-weight: bold; font-size: 13px;"
                                     t-att-class="'text-success' if ed['profit'] >= 0 else 'text-danger'">

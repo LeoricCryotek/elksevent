@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Elks Event Bookings',
-    'version': '19.0.9.127.0',
+    'version': '19.0.9.131.0',
     'category': 'Services/Project',
     'summary': 'Facility event booking, board approval, room billing, and P&L reporting',
     'description': """
@@ -84,6 +84,8 @@ Key features
         'wizard/event_approval_wizard_views.xml',
         'wizard/event_add_hours_wizard_views.xml',
         'wizard/event_payment_wizard_views.xml',
+        'wizard/event_supplemental_wizard_views.xml',
+        'wizard/event_price_lock_wizard_views.xml',
         'report/event_paperformat.xml',
         'report/event_pl_report.xml',
         'report/event_assessor_report.xml',
@@ -100,6 +102,7 @@ Key features
         'report/employment_packet_report.xml',
         'report/catering_quote_report.xml',
         'report/event_aar_report.xml',
+        'report/event_drawing_slips_report.xml',
         'views/event_checklist_views.xml',
         'views/event_product_views.xml',
         'views/event_task_views.xml',
@@ -118,9 +121,14 @@ Key features
         'views/event_terms_page.xml',
         'views/event_form_snippet.xml',
         'views/portal_callout_templates.xml',
+        'data/alphabetize_menus_init.xml',
     ],
     'assets': {},
     'installable': True,
     'application': True,
     'auto_install': False,
+    # Alphabetizes the app launcher on every install + upgrade so
+    # new Elks modules land in alphabetical order without a trip to
+    # Tools > Alphabetize App Menus.
+    'post_init_hook': '_post_init_hook',
 }

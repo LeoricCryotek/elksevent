@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- =========================================================================
+     HUMAN: Drawing Slips. One cut-out strip per ticket sold, with the
+     purchaser's name in large type, for a door-prize / raffle drawing.
+     Someone who bought 5 tickets gets 5 slips (Odoo creates one
+     event.registration per ticket, so the count is automatic).
+     Print from:
+       * an Event  → Print → Drawing Slips   (every Registered/Attended ticket)
+       * Attendees list → select rows → Print → Drawing Slips (just those)
+     Slips are sorted by purchaser name so each person's slips sit together,
+     and numbered 1..N so the stack can be checked against tickets sold.
+     AI: qweb-pdf on event.event and event.registration; both call the shared
+     elksevent.drawing_slips_body with `regs`. Name = Booked by (partner_id)
+     falling back to Attendee Name. Cancelled / unconfirmed / archived
+     registrations are excluded on the event report only — an explicit
+     selection prints what was selected.
+     ========================================================================= -->
+<odoo>
+
+    <!-- Shared slip strip renderer. Expects `regs` (event.registration). -->
+    <template id="drawing_slips_body">
+        <t t-set="regs" t-value="regs.sorted(lambda r: ((r.partner_id.name or r.name or '').lower(), r.id))"/>
+        <div class="page" style="font-family: Arial, Helvetica, sans-serif; color:#111;">
+            <t t-if="not regs">
+                <p style="font-size:14px; margin-top:20px;">
+                    <em>No registered tickets to print.</em>
+                </p>
+            </t>
+            <t t-foreach="regs" t-as="r">
+                <div style="height:0.72in; border-bottom:1.5px dashed #888; page-break-inside:avoid; overflow:hidden;">
+                    <table style="width:100%; height:0.72in; border-collapse:collapse; border:none;">
+                        <tr>
+                            <td style="border:none; vertical-align:middle; padding:0 12px;">
+                                <div style="font-size:22px; font-weight:bold; line-height:1.1;">
+                                    <t t-esc="r.partner_id.name or r.name or 'Unnamed'"/>
+                                </div>
+                                <div t-if="r.partner_id and r.name and r.name != r.partner_id.name"
+                                     style="font-size:10px; color:#555;">
+                                    Attendee: <t t-esc="r.name"/>
+                                </div>
+                            </td>
+                            <td style="width:2.2in; border:none; vertical-align:middle; text-align:right; padding-right:6px; font-size:9px; color:#555; line-height:1.3;">
+                                <div><t t-esc="r.event_id.name"/></div>
+                                <div t-if="r.event_ticket_id"><t t-esc="r.event_ticket_id.name"/></div>
+                                <div style="font-size:11px; font-weight:bold; color:#46166a;">
+                                    #<t t-esc="r_index + 1"/>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </t>
+        </div>
+    </template>
+
+    <!-- From an Event: all live tickets -->
+    <record id="action_report_event_drawing_slips" model="ir.actions.report">
+        <field name="name">Drawing Slips</field>
+        <field name="model">event.event</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_event_drawing_slips</field>
+        <field name="report_file">elksevent.report_event_drawing_slips</field>
+        <field name="paperformat_id" ref="paperformat_event_sheet"/>
+        <field name="binding_model_id" ref="event.model_event_event"/>
+        <field name="binding_type">report</field>
+        <field name="print_report_name">'Drawing Slips - %s' % (object.name or 'Event')</field>
+    </record>
+
+    <template id="report_event_drawing_slips">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="regs" t-value="o.registration_ids.filtered(lambda r: r.active and r.state in ('open', 'done'))"/>
+                <t t-call="elksevent.drawing_slips_body"/>
+            </t>
+        </t>
+    </template>
+
+    <!-- From the Attendees list: only the selected registrations -->
+    <record id="action_report_registration_drawing_slips" model="ir.actions.report">
+        <field name="name">Drawing Slips</field>
+        <field name="model">event.registration</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_registration_drawing_slips</field>
+        <field name="report_file">elksevent.report_registration_drawing_slips</field>
+        <field name="paperformat_id" ref="paperformat_event_sheet"/>
+        <field name="binding_model_id" ref="event.model_event_registration"/>
+        <field name="binding_type">report</field>
+        <field name="print_report_name">'Drawing Slips'</field>
+    </record>
+
+    <template id="report_registration_drawing_slips">
+        <t t-call="web.html_container">
+            <t t-set="regs" t-value="docs"/>
+            <t t-call="elksevent.drawing_slips_body"/>
+        </t>
+    </template>
+
+</odoo>

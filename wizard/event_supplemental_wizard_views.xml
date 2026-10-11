@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_event_supplemental_wizard_form" model="ir.ui.view">
+        <field name="name">elks.event.supplemental.wizard.form</field>
+        <field name="model">elks.event.supplemental.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Supplemental Invoice">
+                <div class="alert alert-info" role="status">
+                    Bill the customer for additional, agreed-upon charges only.
+                    Tick the charges to include and add any custom lines. This
+                    invoice is <b>due immediately</b> and does not change the
+                    locked contract price or the original invoices.
+                </div>
+                <group>
+                    <field name="event_id" invisible="1"/>
+                    <field name="currency_id" invisible="1"/>
+                    <field name="note" required="1"
+                           placeholder="As discussed for the additional service fees"/>
+                </group>
+                <field name="line_ids">
+                    <list editable="bottom">
+                        <field name="include" string="Bill It?"/>
+                        <field name="name"/>
+                        <field name="amount"/>
+                        <field name="taxable"/>
+                        <field name="currency_id" column_invisible="1"/>
+                    </list>
+                </field>
+                <group class="oe_subtotal_footer">
+                    <field name="total_selected"/>
+                </group>
+                <footer>
+                    <button name="action_create" type="object"
+                            string="Create Supplemental Invoice"
+                            class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary"
+                            special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_event_supplemental_wizard" model="ir.actions.act_window">
+        <field name="name">Supplemental Invoice</field>
+        <field name="res_model">elks.event.supplemental.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

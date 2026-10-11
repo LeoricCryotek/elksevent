@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_event_price_lock_wizard_form" model="ir.ui.view">
+        <field name="name">elks.event.price.lock.wizard.form</field>
+        <field name="model">elks.event.price.lock.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Lock Agreed Price">
+                <div class="alert alert-info" role="status">
+                    Freeze the price at the total the customer actually agreed
+                    to. For a half-now/half-later deposit, that's
+                    <b>twice the deposit</b> (suggested below). Anything above
+                    this figure becomes Potential Revenue Charges the Lodge
+                    absorbs — it is never billed to the customer.
+                </div>
+                <group>
+                    <field name="event_id" invisible="1"/>
+                    <field name="currency_id" invisible="1"/>
+                    <field name="deposit_paid"/>
+                    <field name="live_grand"/>
+                    <field name="agreed_grand"/>
+                </group>
+                <footer>
+                    <button name="action_lock" type="object"
+                            string="Lock at This Total" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary"
+                            special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_event_price_lock_wizard" model="ir.actions.act_window">
+        <field name="name">Lock Agreed Price</field>
+        <field name="res_model">elks.event.price.lock.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>
