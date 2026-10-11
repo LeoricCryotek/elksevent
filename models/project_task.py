@@ -1011,7 +1011,7 @@ class ProjectTask(models.Model):
 
     @api.depends("x_payment_ids.amount", "x_payment_ids.method",
                  "x_event_grand_total", "x_deposit_amount",
-                 "x_deposit_received")
+                 "x_deposit_received", "x_price_locked", "x_agreed_grand")
     def _compute_payments(self):
         for rec in self:
             cash = sum(rec.x_payment_ids.filtered(
@@ -1024,8 +1024,11 @@ class ProjectTask(models.Model):
                         if rec.x_deposit_received else 0.0)
             rec.x_total_paid = cash
             rec.x_writeoff_total = wo
-            rec.x_balance_remaining = max(
-                (rec.x_event_grand_total or 0.0) - cash - wo, 0.0)
+            # Once the price is locked, the customer owes the AGREED total —
+            # later cost increases are absorbed by the Lodge, not billed.
+            owed = ((rec.x_agreed_grand or 0.0) if rec.x_price_locked
+                    else (rec.x_event_grand_total or 0.0))
+            rec.x_balance_remaining = max(owed - cash - wo, 0.0)
 
     def action_write_off_balance(self):
         """Open the payment dialog pre-set to write off the outstanding
@@ -2697,8 +2700,11 @@ class ProjectTask(models.Model):
             rec.x_ubi_tax_reserve = rec.x_ubi_room_income * ubi_pct
 
             # Balance due = billed minus everything paid (payment log if any,
-            # else the legacy single deposit).
-            rec.x_balance_due = rec.x_total_billed - rec._amount_paid()
+            # else the legacy single deposit). Locked -> bill the agreed pre-tax.
+            billed_for_balance = (
+                (rec.x_agreed_billed or 0.0) if rec.x_price_locked
+                else rec.x_total_billed)
+            rec.x_balance_due = billed_for_balance - rec._amount_paid()
 
             # Budget remaining (billed minus real costs)
             rec.x_budget_remaining = rec.x_total_billed - rec.x_total_costs
@@ -5729,8 +5735,11 @@ class ProjectTask(models.Model):
             if kind == 'final':
                 # Keep the invoiced-income snapshot current while the final is
                 # still being re-laid; it freezes once the bill is locked
-                # (this loop then skips the final entirely).
-                self.x_billed_snapshot = self.x_total_billed or 0.0
+                # (this loop then skips the final entirely). A locked contract
+                # snapshots the AGREED pre-tax, not the live total.
+                self.x_billed_snapshot = (
+                    (self.x_agreed_billed if self.x_price_locked else 0.0)
+                    or self.x_total_billed or 0.0)
             # Re-render the attached Facility Usage Agreement so the signable
             # contract PDF reflects the SAME updated totals as the invoice
             # lines (otherwise it stays frozen at the figures from when the
