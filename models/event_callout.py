@@ -558,7 +558,7 @@ class EventCallout(models.Model):
     _DEPT_ATT_ROLE = {'bar': 'bartender', 'kitchen': 'kitchen',
                       'custodial': 'custodial'}
 
-    def _clocked_hours_by_employee(self):
+    def _clocked_hours_by_employee(self, cleaning_date=False):
         """Read actual shifts for named staff only; never recruit staff by overlap."""
         self.ensure_one()
         employee_ids = self.line_ids.mapped('employee_id').ids
@@ -576,7 +576,19 @@ class EventCallout(models.Model):
                 continue
             overlap = (att._elks_hours_for_event(self.event_id) > 0
                        if hasattr(att, '_elks_hours_for_event') else linked)
-            if (self.department == 'custodial' and linked) or overlap:
+            if cleaning_date and 'elksattendance.timecard.cron' in self.env:
+                if self.env['elksattendance.timecard.cron']._lodge_date(att.check_in) != cleaning_date:
+                    continue
+            cleaning_match = False
+            if self.department == 'custodial' and 'elksattendance.timecard.cron' in self.env:
+                work_date = self.env['elksattendance.timecard.cron']._lodge_date(att.check_in)
+                cleaning_match = any(line.employee_id == att.employee_id and line.cleaning_date == work_date
+                                     for line in self.line_ids)
+                # When a cleaning date is specified, only that day's punches count.
+                dated = self.line_ids.filtered(lambda line: line.employee_id == att.employee_id and line.cleaning_date)
+                if dated and not cleaning_match:
+                    continue
+            if (self.department == 'custodial' and (linked or cleaning_match)) or overlap:
                 hours[att.employee_id.id] = hours.get(att.employee_id.id, 0.0) + (att.worked_hours or 0.0)
         return hours
 
@@ -585,9 +597,9 @@ class EventCallout(models.Model):
         self.ensure_one()
         if self.state == 'cancelled':
             raise UserError(_("A cancelled call-out cannot be updated."))
-        hours = self._clocked_hours_by_employee()
         for line in self.line_ids:
             if line.employee_id:
+                hours = self._clocked_hours_by_employee(line.cleaning_date if self.department == 'custodial' else False)
                 line.with_context(elks_skip_actual_hours=True).write({
                     'hours': round(hours.get(line.employee_id.id, 0.0), 2)})
         return True
@@ -744,6 +756,9 @@ class EventCalloutLine(models.Model):
         'hr.employee', string="Employee",
         help="Pick a lodge employee (links to payroll / attendance), or leave "
              "blank and type a name for outside help.")
+    cleaning_date = fields.Date(
+        "Cleaning Date", help="Date this employee will clean. Defaults from the event cleaning deadline; adjust for before/after cleaning.")
+
     person_name = fields.Char(
         "Name", help="Free-text name when the person isn't a lodge employee.")
     role = fields.Char("Role / Shift")
@@ -789,19 +804,29 @@ class EventCalloutLine(models.Model):
             if (line.employee_id and event.x_event_date
                     and event.x_event_date < fields.Date.context_today(line)
                     and event.x_approval_state == 'approved'):
-                hours = line.callout_id._clocked_hours_by_employee()
+                hours = line.callout_id._clocked_hours_by_employee(line.cleaning_date if line.callout_id.department == 'custodial' else False)
                 line.with_context(elks_skip_actual_hours=True).write({
                     'hours': round(hours.get(line.employee_id.id, 0.0), 2)})
 
     @api.model_create_multi
     def create(self, vals_list):
+        for vals in vals_list:
+            if not vals.get('cleaning_date') and vals.get('callout_id'):
+                callout = self.env['elks.event.callout'].browse(vals['callout_id'])
+                if callout.department == 'custodial':
+                    deadline = callout.event_id.x_cleanup_datetime or callout.event_id.x_cleanup_before_datetime
+                    if deadline:
+                        if 'elksattendance.timecard.cron' in self.env:
+                            vals['cleaning_date'] = self.env['elksattendance.timecard.cron']._lodge_date(deadline)
+                        else:
+                            vals['cleaning_date'] = fields.Datetime.context_timestamp(self, deadline).date()
         lines = super().create(vals_list)
         lines._populate_past_actual_hours()
         return lines
 
     def write(self, vals):
         result = super().write(vals)
-        if set(vals) & {'employee_id', 'callout_id'}:
+        if set(vals) & {'employee_id', 'callout_id', 'cleaning_date'}:
             self._populate_past_actual_hours()
         return result
 

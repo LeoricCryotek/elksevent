@@ -276,6 +276,7 @@ class CalloutPortal(CustomerPortal):
                 line_cmds.append((0, 0, {
                     'employee_id': emp_id or False,
                     'person_name': pname,
+                    'cleaning_date': (post.get('clean_date_%d' % i) or False) if co.department == 'custodial' else False,
                     'role': role,
                     'start_time': start,
                     'end_time': end,

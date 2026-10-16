@@ -385,6 +385,7 @@
                                         <th style="min-width:150px">Employee</th>
                                         <th style="min-width:120px">or Name</th>
                                         <th style="min-width:120px">Role / Shift</th>
+                                        <th t-if="callout.department == 'custodial'" style="min-width:140px">Cleaning Date</th>
                                         <th style="min-width:90px">Start</th>
                                         <th style="min-width:90px">End</th>
                                         <th style="min-width:70px">Hours</th>
@@ -410,6 +411,8 @@
                                                    t-att-value="line.person_name if line else ''" t-att-readonly="ro"/></td>
                                         <td><input type="text" t-attf-name="role_{{i}}" class="form-control form-control-sm"
                                                    t-att-value="line.role if line else ''" t-att-readonly="ro"/></td>
+                                        <td t-if="callout.department == 'custodial'"><input type="date" t-attf-name="clean_date_{{i}}" class="form-control form-control-sm"
+                                            t-att-value="line.cleaning_date.isoformat() if line and line.cleaning_date else ''" t-att-readonly="ro"/></td>
                                         <td><input type="time" t-attf-name="start_{{i}}" class="form-control form-control-sm roster-start"
                                                    t-att-value="line.start_str if line else ''" t-att-readonly="ro"/></td>
                                         <td><input type="time" t-attf-name="end_{{i}}" class="form-control form-control-sm roster-end"
