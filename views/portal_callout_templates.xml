@@ -352,7 +352,7 @@
                         <div class="alert alert-success">Pulled the staff who clocked in for this event into the roster below. Set each person's <b>rate</b> and <b>tips</b>, then Save or Certify.</div>
                     </t>
                     <t t-if="request.params.get('pulled') == '0'">
-                        <div class="alert alert-warning">No clock-in hours found for this event yet. Make sure people clocked in and their shifts are linked to the event.</div>
+                        <div class="alert alert-warning">Add the employees to this call-out first, save, then refresh their clocked hours.</div>
                     </t>
 
                     <!-- Post-event: pull staff who actually clocked in (e.g. a
@@ -362,9 +362,9 @@
                         <form t-attf-action="/my/callout/{{callout.id}}/pull_clockin" method="post" class="mb-2">
                             <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
                             <button type="submit" class="btn btn-outline-primary btn-sm">
-                                <i class="fa fa-clock-o"/> Pull staff who clocked in
+                                <i class="fa fa-clock-o"/> Refresh clocked hours
                             </button>
-                            <span class="text-muted small ms-2">Adds anyone who clocked in for this event (including a substitute) so you can set their rate and tips.</span>
+                            <span class="text-muted small ms-2">Add staff by name below and save first. This updates actual clocked hours for listed staff only; it never adds people.</span>
                         </form>
                     </t>
 

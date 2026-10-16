@@ -123,29 +123,5 @@ class HrAttendance(models.Model):
     #     the punch date falling in the event's setup..cleanup window (or the
     #     event date). Role maps via ROLE_TO_ATTENDANCE.
     # ──────────────────────────────────────────────────────────────────
-    @api.model_create_multi
-    def create(self, vals_list):
-        records = super().create(vals_list)
-        for att in records:
-            if not att.x_event_id and att.employee_id and att.check_in:
-                att._elks_autolink_event_assignment()
-        return records
-
-    def _elks_autolink_event_assignment(self):
-        self.ensure_one()
-        punch_date = self.check_in.date()
-        assigns = self.env['elks.event.staff.assignment'].sudo().search(
-            [('employee_id', '=', self.employee_id.id)])
-        for a in assigns:
-            evt = a.event_id
-            start = (evt.x_requested_setup.date() if evt.x_requested_setup
-                     else evt.x_event_date)
-            end = (evt.x_cleanup_datetime.date() if evt.x_cleanup_datetime
-                   else evt.x_event_date)
-            d0 = start or evt.x_event_date
-            d1 = end or evt.x_event_date
-            in_window = d0 and d1 and d0 <= punch_date <= d1
-            if in_window or evt.x_event_date == punch_date:
-                self.x_event_id = evt.id
-                self.x_event_role = ROLE_TO_ATTENDANCE.get(a.role, 'event')
-                break
+    # Event links and call-out membership are now explicit manager decisions.
+    # Do not assign an event when a worker clocks in.

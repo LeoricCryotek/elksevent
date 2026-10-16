@@ -171,9 +171,9 @@
                                 <button name="action_pull_clockin_hours"
                                         type="object" class="btn-secondary"
                                         icon="fa-clock-o"
-                                        string="Pull Clock-In Hours"
+                                        string="Refresh Clocked Hours"
                                         invisible="state != 'certified'"
-                                        help="Post-event: pull actual clocked hours from the event's attendance into this roster (adds a substitute who clocked in and trues up everyone's hours). Then Re-post Labor."/>
+                                        help="Update actual clocked hours for staff you have already added to this roster. This never adds staff. Then Re-post Labor."/>
                                 <button name="action_repost_labor"
                                         type="object" class="btn-secondary"
                                         icon="fa-refresh"
@@ -187,7 +187,7 @@
                                  style="margin:4px 0;">
                                 Post-event change (no-show / substitute)? Edit the
                                 roster below — remove or zero the no-show, add who
-                                actually worked (or use <b>Pull Clock-In Hours</b>)
+                                actually worked, then use <b>Refresh Clocked Hours</b>
                                 — then click <b>Re-post Labor</b> to update the
                                 costs and AAR.
                             </div>

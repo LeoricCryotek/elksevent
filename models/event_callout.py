@@ -558,66 +558,38 @@ class EventCallout(models.Model):
     _DEPT_ATT_ROLE = {'bar': 'bartender', 'kitchen': 'kitchen',
                       'custodial': 'custodial'}
 
-    def action_pull_clockin_hours(self):
-        """Post-event adjustment: pull ACTUAL clocked hours from the event's
-        attendance into this department's roster. Pulls ANY employee who
-        clocked in for the event (so a substitute who punched in under any
-        role is captured), trues up anyone already on this roster, and skips
-        volunteers (they are tallied separately on the AAR, not paid) and
-        anyone already placed on another department's roster. After this, use
-        'Re-post Labor' so the costs / P&L / AAR reflect who actually worked."""
+    def _clocked_hours_by_employee(self):
+        """Read actual shifts for named staff only; never recruit staff by overlap."""
         self.ensure_one()
-        evt = self.event_id
-        if not evt:
-            return False
-        atts = evt.x_attendance_ids.filtered(
-            lambda a: a.employee_id and (a.worked_hours or 0.0) > 0.0
-            and not evt._elks_is_volunteer_att(a))
-        hours_by_emp = {}
-        for a in atts:
-            hours_by_emp[a.employee_id] = (
-                hours_by_emp.get(a.employee_id, 0.0) + (a.worked_hours or 0.0))
-        if not hours_by_emp:
-            raise UserError(_(
-                "No employee clock-in hours found for this event yet. Make "
-                "sure the people who worked clocked in and their shifts are "
-                "linked to this event."))
-        default_rate = next(
-            (l.rate for l in self.line_ids if l.rate), 0.0)
-        Line = self.env['elks.event.callout.line'].sudo()
-        existing = {l.employee_id.id: l
-                    for l in self.line_ids if l.employee_id}
-        # Employees already placed on ANOTHER department's roster this event.
-        placed_elsewhere = set()
-        for co in evt.x_callout_ids:
-            if co.id != self.id:
-                placed_elsewhere |= set(co.line_ids.mapped('employee_id').ids)
-        added, updated = [], []
-        for emp, hrs in hours_by_emp.items():
-            hrs = round(hrs, 2)
-            if emp.id in existing:
-                existing[emp.id].hours = hrs
-                updated.append(emp.name)
-            elif emp.id in placed_elsewhere:
+        employee_ids = self.line_ids.mapped('employee_id').ids
+        if not employee_ids or self.event_id.x_approval_state != 'approved':
+            return {}
+        atts = self.env['hr.attendance'].sudo().search([
+            ('employee_id', 'in', employee_ids), ('check_out', '!=', False),
+        ])
+        hours = {}
+        for att in atts:
+            if self.event_id._elks_is_volunteer_att(att):
                 continue
-            else:
-                Line.create({
-                    'callout_id': self.id, 'employee_id': emp.id,
-                    'role': self.department_label, 'hours': hrs,
-                    'rate': default_rate})
-                added.append(emp.name)
-        msg = _("Pulled clock-in hours for the %s call-out.",
-                self.department_label)
-        if added:
-            msg += " " + _("Added: %s.", ", ".join(added))
-        if updated:
-            msg += " " + _("Trued-up hours: %s.", ", ".join(updated))
-        if added and not default_rate:
-            msg += " " + _("Set a pay rate for the new staff, then Re-post "
-                           "Labor.")
-        else:
-            msg += " " + _("Click Re-post Labor to update the event costs.")
-        evt.message_post(body=msg, subtype_xmlid='mail.mt_note')
+            linked = 'x_event_id' in att._fields and att.x_event_id == self.event_id
+            if 'x_event_id' in att._fields and att.x_event_id and not linked:
+                continue
+            overlap = (att._elks_hours_for_event(self.event_id) > 0
+                       if hasattr(att, '_elks_hours_for_event') else linked)
+            if (self.department == 'custodial' and linked) or overlap:
+                hours[att.employee_id.id] = hours.get(att.employee_id.id, 0.0) + (att.worked_hours or 0.0)
+        return hours
+
+    def action_pull_clockin_hours(self):
+        """Refresh clocked hours for manually added staff; never create roster lines."""
+        self.ensure_one()
+        if self.state == 'cancelled':
+            raise UserError(_("A cancelled call-out cannot be updated."))
+        hours = self._clocked_hours_by_employee()
+        for line in self.line_ids:
+            if line.employee_id:
+                line.with_context(elks_skip_actual_hours=True).write({
+                    'hours': round(hours.get(line.employee_id.id, 0.0), 2)})
         return True
 
     def action_repost_labor(self):
@@ -808,6 +780,30 @@ class EventCalloutLine(models.Model):
         help="This person's share of the department gratuity pool, as the "
              "manager wants it disbursed. Should add up to the pool total.")
     currency_id = fields.Many2one(related='callout_id.currency_id')
+
+    def _populate_past_actual_hours(self):
+        if self.env.context.get('elks_skip_actual_hours'):
+            return
+        for line in self:
+            event = line.callout_id.event_id
+            if (line.employee_id and event.x_event_date
+                    and event.x_event_date < fields.Date.context_today(line)
+                    and event.x_approval_state == 'approved'):
+                hours = line.callout_id._clocked_hours_by_employee()
+                line.with_context(elks_skip_actual_hours=True).write({
+                    'hours': round(hours.get(line.employee_id.id, 0.0), 2)})
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        lines = super().create(vals_list)
+        lines._populate_past_actual_hours()
+        return lines
+
+    def write(self, vals):
+        result = super().write(vals)
+        if set(vals) & {'employee_id', 'callout_id'}:
+            self._populate_past_actual_hours()
+        return result
 
     @staticmethod
     def _round_up_5(value):
