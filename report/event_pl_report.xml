@@ -347,13 +347,13 @@
                         </t>
 
                         <!-- Expense section: itemized validated COGS (goods +
-                             actual PAID labor) + POs -->
+                             actual PAID labor) and coordinator payout; POs excluded -->
                         <t t-if="ed['cost_items'] or ed['po_lines']">
                             <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10px;">
                                 <thead>
                                     <tr style="background: #dc3545; color: white;">
                                         <th style="padding: 5px 8px; text-align: left;" colspan="2">
-                                            EXPENSES - Labor Paid Out (by department) + Cost of Goods (supplies, food, linens, insurance, etc.) &amp; Purchase Orders
+                                            EXPENSES - Labor Paid Out (by department) + Cost of Goods (supplies, food, linens, insurance, etc.)
                                         </th>
                                     </tr>
                                     <tr style="background: #fce4ec;">
@@ -404,6 +404,9 @@
                             </table>
                         </t>
 
+                        <p style="font-size:10px;">Volunteer hours (clocked):
+                            <t t-esc="'{:,.2f}'.format(ed['volunteer_hours'])"/> — donated time, $0 labor cost.
+                        </p>
                         <!-- Event profit line -->
                         <table style="width: 100%; margin-bottom: 15px; font-size: 11px;">
                             <tr t-if="ed['potential_revenue_charges'] > 0.005">

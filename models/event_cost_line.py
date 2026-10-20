@@ -187,6 +187,8 @@ class EventCostLine(models.Model):
         return res
 
     def unlink(self):
+        linen_events = self.filtered(
+            lambda line: line.cost_type_id.code == 'linens').mapped('event_id')
         if self._cost_logging_on():
             for rec in self:
                 if rec.x_auto_source:
@@ -194,7 +196,11 @@ class EventCostLine(models.Model):
                 rec._log_cost_change(rec.event_id, _(
                     "Event charge removed: <b>%(name)s</b> (-%(amt)s)",
                     name=rec._cost_label(), amt=rec._cost_money(rec.total)))
-        return super().unlink()
+        result = super().unlink()
+        if not self.env.context.get('_labor_sync'):
+            linen_events.filtered('x_need_linen').with_context(_labor_sync=True).write(
+                {'x_need_linen': False})
+        return result
 
     # ──────────────────────────────────────────────────────────────────
     # SECTION: Labor true-up (billed vs actual)

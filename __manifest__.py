@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Elks Event Bookings',
-    'version': '19.0.9.134.0',
+    'version': '19.0.9.139.0',
     'category': 'Services/Project',
     'summary': 'Facility event booking, board approval, room billing, and P&L reporting',
     'description': """
@@ -71,6 +71,7 @@ Key features
     ],
     'data': [
         'security/event_security.xml',
+        'security/event_fund_security.xml',
         'security/ir.model.access.csv',
         'data/event_stages.xml',
         'data/event_cron.xml',
@@ -116,6 +117,7 @@ Key features
         'views/employment_application_templates.xml',
         'views/res_partner_views.xml',
         'views/event_menus.xml',
+        'views/event_fund_views.xml',
         'views/event_analytics_views.xml',
         'views/website_event_form.xml',
         'views/event_terms_page.xml',
@@ -123,7 +125,12 @@ Key features
         'views/portal_callout_templates.xml',
         'data/alphabetize_menus_init.xml',
     ],
-    'assets': {},
+    'assets': {
+        'web.assets_backend': [
+            'elksevent/static/src/js/event_validation_navigation.js',
+            'elksevent/static/src/xml/event_validation_navigation.xml',
+        ],
+    },
     'installable': True,
     'application': True,
     'auto_install': False,

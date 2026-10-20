@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="rule_event_fund_company" model="ir.rule">
+        <field name="name">Coordinator fund company</field><field name="model_id" ref="model_elks_event_fund"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_event_fund_entry_company" model="ir.rule">
+        <field name="name">Coordinator fund entry company</field><field name="model_id" ref="model_elks_event_fund_entry"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+</odoo>

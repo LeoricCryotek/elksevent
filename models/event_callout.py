@@ -188,6 +188,9 @@ class EventCallout(models.Model):
         'bar': [
             ('x_num_bars', 'Bars'),
             ('x_need_beer_tub', 'Beer tub'),
+            ('x_bar_drink_tickets', 'Drink Tickets'),
+            ('x_bar_wrist_bands', 'Wrist Bands'),
+            ('x_bar_hosted', 'Hosted Bar'),
             ('x_bar_drink_requests', 'Drink requests'),
             ('x_bar_customer_request', 'Other bar requests'),
         ],
@@ -209,6 +212,8 @@ class EventCallout(models.Model):
     def _fmt_plan_value(self, evt, fname):
         """Render an event field value as a stable display string."""
         val = evt[fname]
+        if fname in ('x_bar_drink_tickets', 'x_bar_wrist_bands', 'x_bar_hosted'):
+            return 'Yes' if val else 'No'
         if val in (False, None, ''):
             return ''
         field = evt._fields.get(fname)
@@ -315,6 +320,10 @@ class EventCallout(models.Model):
         'event_id.x_event_end_time_text',
         'event_id.x_num_bars', 'event_id.x_bartender_count',
         'event_id.x_plan_bar_hours', 'event_id.x_need_beer_tub',
+        'event_id.x_bar_drink_tickets',
+        'event_id.x_bar_wrist_bands',
+        'event_id.x_bar_hosted',
+
         'event_id.x_bar_drink_requests', 'event_id.x_bar_customer_request',
         'event_id.x_cook_count', 'event_id.x_cook_hours',
         'event_id.x_kitchen_support_count', 'event_id.x_kitchen_support_hours',

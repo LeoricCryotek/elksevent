@@ -161,6 +161,10 @@
                 <tr><td style="padding:2px 6px; width:45%;">Number of bars</td><td style="padding:2px 6px;"><t t-esc="o.x_num_bars or 0"/></td></tr>
                 <tr><td style="padding:2px 6px;">Bartenders requested</td><td style="padding:2px 6px;"><t t-esc="o.x_bartender_count or 0"/> x <t t-esc="'%g' % (o.x_plan_bar_hours or 0)"/> hrs each</td></tr>
                 <tr t-if="o.x_need_beer_tub"><td style="padding:2px 6px;">Beer tub</td><td style="padding:2px 6px;">Yes</td></tr>
+                <tr><td style="padding:2px 6px;">Drink Tickets</td><td style="padding:2px 6px;"><t t-esc="'Yes' if o.x_bar_drink_tickets else 'No'"/></td></tr>
+                <tr><td style="padding:2px 6px;">Wrist Bands</td><td style="padding:2px 6px;"><t t-esc="'Yes' if o.x_bar_wrist_bands else 'No'"/></td></tr>
+                <tr><td style="padding:2px 6px;">Hosted Bar</td><td style="padding:2px 6px;"><t t-esc="'Yes' if o.x_bar_hosted else 'No'"/></td></tr>
+
                 <tr t-if="o.x_bar_gratuity"><td style="padding:2px 6px;">Bar gratuity pool</td><td style="padding:2px 6px;">$<t t-esc="'{:,.2f}'.format(o.x_bar_gratuity)"/></td></tr>
             </table>
             <div style="font-size:9px; color:#666; padding:2px 0;">These are the customer's requests. The manager sets the actual staffing below.</div>

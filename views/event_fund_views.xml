@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="view_event_fund_form" model="ir.ui.view">
+        <field name="name">elks.event.fund.form</field><field name="model">elks.event.fund</field>
+        <field name="arch" type="xml">
+            <form string="Coordinator / Event Supplies Fund" create="0" delete="0">
+                <header>
+                    <button name="action_new_entry" type="object" string="New Register Entry" class="btn-primary"/>
+                    <button name="action_open_allocations" type="object" string="Event Contributions"/>
+                </header>
+                <sheet>
+                    <h1><field name="name" readonly="1"/></h1>
+                    <div class="text-muted mb-3">Internal fund allocation register. Post event contributions to fund the pool, record purchases or allocate a coordinator fee to a timecard. Entries do not send money or post to the accounting general ledger.</div>
+                    <field name="currency_id" invisible="1"/>
+                    <group>
+                        <group string="Fund Balance">
+                            <field name="income" help="Sum of posted incoming contributions and opening / other funding entries. Only explicitly posted contributions count."/>
+                            <field name="spending" help="Sum of posted purchase/expense entries and coordinator timecard allocations. Timecard allocations are payroll commitments, not proof that a check has cleared."/>
+                            <field name="balance" help="Posted incoming amounts minus posted expenses and coordinator timecard allocations."/>
+                        </group>
+                        <group string="Available to Spend">
+                            <field name="committed" help="Confirmed POs charged to this fund, minus payments recorded in the register against each PO. Draft and cancelled POs reserve nothing."/>
+                            <field name="available" help="Posted balance minus remaining confirmed PO commitments. Paying a committed PO reduces both balance and commitment, so it is not deducted twice."/>
+                            <field name="company_id" readonly="1" groups="base.group_multi_company"/>
+                        </group>
+                    </group>
+                    <field name="entry_ids" readonly="1">
+                        <list create="0" delete="0" decoration-muted="state == 'draft'">
+                            <field name="date"/><field name="name"/><field name="kind"/>
+                            <field name="event_id" optional="hide"/><field name="employee_id" optional="show"/>
+                            <field name="purchase_id"/><field name="reference"/>
+                            <field name="signed_amount" string="In / (Out)"/>
+                            <field name="state" widget="badge"/><field name="currency_id" column_invisible="1"/>
+                        </list>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="view_event_fund_entry_list" model="ir.ui.view">
+        <field name="name">elks.event.fund.entry.list</field><field name="model">elks.event.fund.entry</field>
+        <field name="arch" type="xml">
+            <list decoration-muted="state == 'draft'">
+                <field name="date"/><field name="name"/><field name="fund_id"/><field name="kind"/>
+                <field name="employee_id"/><field name="purchase_id"/><field name="reference"/>
+                <field name="signed_amount"/><field name="state" widget="badge"/>
+                <field name="currency_id" column_invisible="1"/>
+            </list>
+        </field>
+    </record>
+    <record id="view_event_fund_entry_form" model="ir.ui.view">
+        <field name="name">elks.event.fund.entry.form</field><field name="model">elks.event.fund.entry</field>
+        <field name="arch" type="xml">
+            <form string="Fund Register Entry">
+                <header>
+                    <button name="action_post" type="object" string="Post Entry" class="btn-primary" invisible="state != 'draft' or kind == 'payroll'"/>
+                    <button name="action_post" type="object" string="Post to Timecard" class="btn-primary" invisible="state != 'draft' or kind != 'payroll'"/>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <field name="company_id" invisible="1"/><field name="currency_id" invisible="1"/>
+                    <group>
+                        <group>
+                            <field name="fund_id" readonly="state == 'posted'" options="{'no_create': True}"/>
+                            <field name="name" readonly="state == 'posted'"/>
+                            <field name="kind" readonly="state == 'posted'"/>
+                            <field name="date" readonly="state == 'posted'" help="Transaction date; for a coordinator timecard allocation, this selects the pay period receiving the flat fee."/>
+                            <field name="amount" readonly="state == 'posted'"/>
+                        </group>
+                        <group>
+                            <field name="event_id" readonly="state == 'posted'" required="kind == 'contribution'"/>
+                            <field name="employee_id" invisible="kind != 'payroll'" required="kind == 'payroll'" readonly="state == 'posted'"/>
+                            <field name="partner_id" readonly="state == 'posted'"/>
+                            <field name="purchase_id" invisible="kind != 'expense'" readonly="state == 'posted'" domain="[('x_event_fund_id', '=', fund_id), ('state', 'in', ['purchase', 'done'])]"/>
+                            <field name="reference" readonly="state == 'posted'"/>
+                            <field name="attendance_id" invisible="not attendance_id" readonly="1"/>
+                            <field name="posted_by" invisible="state != 'posted'"/>
+                            <field name="posted_on" invisible="state != 'posted'"/>
+                        </group>
+                    </group>
+                    <div class="alert alert-info" invisible="kind != 'payroll'">Post to Timecard adds this amount as a flat coordinator fee on the selected date. It does not issue payment. Do not also use the event's Pay Coordinator button for this same allocation.</div>
+                    <field name="notes" readonly="state == 'posted'" placeholder="Purpose, approval, receipt details or correction explanation..."/>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+    <record id="view_event_fund_allocations" model="ir.ui.view">
+        <field name="name">event.fund.allocations.list</field><field name="model">project.task</field>
+        <field name="arch" type="xml">
+            <list create="0">
+                <field name="x_event_date"/><field name="name"/><field name="stage_id"/>
+                <field name="x_coordinator_to_supplies" string="Allocated Fee" sum="Allocated"/>
+                <field name="x_total_paid"/><field name="x_balance_remaining"/>
+                <field name="x_coordinator_fund_posted" string="Posted to Fund"/>
+                <button name="action_contribute_coordinator_fund" type="object" string="Post Contribution" invisible="x_coordinator_fund_posted"/>
+                <field name="x_currency_id" column_invisible="1"/>
+            </list>
+        </field>
+    </record>
+    <record id="view_event_fund_purchase" model="ir.ui.view">
+        <field name="name">purchase.order.event.fund</field><field name="model">purchase.order</field>
+        <field name="inherit_id" ref="purchase.purchase_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='partner_id']" position="after">
+                <field name="x_event_fund_id" groups="elksevent.group_event_coordinator" options="{'no_create': True}"/>
+            </xpath>
+        </field>
+    </record>
+    <record id="action_event_fund_register" model="ir.actions.server">
+        <field name="name">Coordinator / Supplies Fund</field>
+        <field name="model_id" ref="model_elks_event_fund"/>
+        <field name="state">code</field>
+        <field name="code">action = env['elks.event.fund'].action_open_register()</field>
+    </record>
+    <menuitem id="menu_event_fund_register" name="Coordinator / Supplies Fund"
+              parent="menu_elksevent_root" action="action_event_fund_register"
+              sequence="35" groups="elksevent.group_event_coordinator"/>
+</odoo>

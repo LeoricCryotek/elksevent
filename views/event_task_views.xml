@@ -657,6 +657,12 @@
                                    invisible="not x_bar_use"/>
                             <field name="x_need_beer_tub"
                                    invisible="not x_bar_use"/>
+                            <field name="x_bar_drink_tickets" widget="boolean_toggle"
+                                   invisible="not x_bar_use"/>
+                            <field name="x_bar_wrist_bands" widget="boolean_toggle"
+                                   invisible="not x_bar_use"/>
+                            <field name="x_bar_hosted" widget="boolean_toggle"
+                                   invisible="not x_bar_use"/>
                             <field name="x_bar_drink_requests"
                                    invisible="not x_bar_use"
                                    placeholder="Signature cocktails, wine, kegs, specific requests..."/>
@@ -917,245 +923,168 @@
                 </page>
 
                 <!-- ===== Financials / Invoice ===== -->
-                <page string="Financials" name="event_financials" groups="elksevent.group_event_coordinator"
-                      invisible="not x_is_event">
-                    <field name="x_currency_id" invisible="1"/>
+<page string="Financials" name="event_financials" groups="elksevent.group_event_coordinator" invisible="not x_is_event">
+                    <field name="x_currency_id" invisible="1" />
                     <div class="mb-2">
-                        <button name="action_print_bookkeeper_report" type="object"
-                                string="Print Bookkeeper Summary" class="btn-secondary"
-                                icon="fa-print"/>
+                        <button name="action_print_bookkeeper_report" type="object" string="Print Bookkeeper Summary" class="btn-secondary" icon="fa-print" />
+                        <button name="action_open_coordinator_fund" type="object" string="Coordinator / Supplies Fund" class="btn-secondary" icon="fa-book"/>
                     </div>
                     <group>
-                        <group string="Billing Summary (what the customer pays)">
-                            <field name="x_room_retail" readonly="1"
-                                   string="Rooms (default/retail)"
-                                   invisible="x_room_retail == x_room_income"/>
-                            <field name="x_room_income" readonly="1"
-                                   string="Rooms Subtotal (charged)"/>
-                            <label for="x_room_auto_discount"
-                                   string="Member / Non-Profit Discount"
-                                   invisible="not x_room_auto_discount"/>
-                            <div class="o_row text-success"
-                                 invisible="not x_room_auto_discount">
-                                &#8722; <field name="x_room_auto_discount" readonly="1"
-                                       nolabel="1" class="oe_inline"/>
-                                <span class="text-muted">(<field name="x_room_auto_discount_label" readonly="1" nolabel="1" class="oe_inline"/>)</span>
-                            </div>
-                            <field name="x_room_net" readonly="1"
-                                   string="Rooms (net after discount)"
-                                   invisible="not x_room_auto_discount"/>
-                            <field name="x_eventcosts_total" readonly="1"
-                                   string="Event Costs Subtotal"/>
-                            <label for="x_coordinator_fee"/>
-                            <div class="o_row">
-                                <field name="x_coordinator_fee"
-                                       readonly="not x_coordinator_fee_manual"/>
-                                <field name="x_coordinator_fee_manual"/>
-                                <span>Custom fee</span>
-                                <span class="text-muted"
-                                      invisible="not x_coordinator_fee_variance">
-                                    (suggested <field name="x_coordinator_fee_auto" readonly="1" nolabel="1"/>,
-                                    adj <field name="x_coordinator_fee_variance" readonly="1" nolabel="1"
-                                               decoration-warning="x_coordinator_fee_variance != 0"/>)
-                                </span>
-                            </div>
-                            <field name="x_coordinator_employee_id"/>
-                            <label for="x_coordinator_paid_from_event"
-                                   string="Coordinator Pay"/>
-                            <div class="o_row">
-                                <field name="x_coordinator_paid_from_event"/>
-                                <span>Pay the coordinator from this event</span>
-                                <span class="text-info"
-                                      invisible="x_coordinator_paid_from_event">
-                                    — fee of <field name="x_coordinator_to_supplies"
-                                                    readonly="1" nolabel="1"/>
-                                    pooled to Event Supplies Fund (running total
-                                    <field name="x_event_supplies_fund_total"
-                                           readonly="1" nolabel="1"/>)
-                                </span>
-                            </div>
-                            <label for="x_discount_reason" string="Additional Discount"/>
-                            <div class="o_row">
-                                <field name="x_discount_reason"
-                                       placeholder="No additional discount"/>
-                                <field name="x_discount_type"
-                                       invisible="not x_discount_reason"
-                                       class="oe_inline"/>
-                                <field name="x_discount_pct"
-                                       invisible="not x_discount_reason or x_discount_type != 'percent'"
-                                       class="oe_inline"/>
-                                <span invisible="not x_discount_reason or x_discount_type != 'percent'">%</span>
-                                <field name="x_discount_value"
-                                       invisible="not x_discount_reason or x_discount_type != 'amount'"
-                                       class="oe_inline"/>
-                            </div>
-                            <field name="x_discount_note"
-                                   invisible="not x_discount_reason"
-                                   required="x_discount_reason"
-                                   placeholder="Explain why this additional discount is being given (required)"/>
-                            <div class="alert alert-success" role="alert"
-                                 invisible="not x_discount_amount"
-                                 style="margin:2px 0; padding:4px 8px;">
-                                <strong>Additional discount applied: <field name="x_discount_amount" readonly="1" nolabel="1" class="oe_inline"/></strong>
-                                <span invisible="not x_discount_reason"> (<field name="x_discount_reason" readonly="1" nolabel="1" class="oe_inline"/>)</span>
-                                <div class="text-muted">
-                                    Applies to the room only (a profit item) — not to any service we pay out.
-                                </div>
-                            </div>
-                            <field name="x_total_billed" readonly="1"
-                                   string="Event Rental (pre-tax)"/>
-                            <field name="x_taxable_subtotal" readonly="1"
-                                   string="↳ Taxable (goods)"/>
-                            <field name="x_nontaxable_subtotal" readonly="1"
-                                   string="↳ Non-Taxable Services"/>
-                            <field name="x_event_tax_amount" readonly="1"
-                                   string="Tax (on taxable only)"/>
-                            <field name="x_event_grand_total" readonly="1"
-                                   string="Grand Total"
-                                   class="oe_subtotal_footer_separator"/>
-                            <field name="x_price_locked" invisible="1"/>
-                            <field name="x_agreed_grand" readonly="1"
-                                   string="Agreed Price (locked)"
-                                   invisible="not x_price_locked"/>
-                            <field name="x_potential_revenue_charges" readonly="1"
-                                   string="Potential Revenue Charges"
-                                   invisible="not x_price_locked"
-                                   decoration-danger="x_potential_revenue_charges &gt; 0"
-                                   help="Cost/labor increases the Lodge is ABSORBING since the price locked (current chargeable total minus the agreed price). This is NOT billed to the customer — it's revenue we could have charged but are eating. Use a Supplemental Invoice only if the customer agreed to the extra."/>
-                            <button name="action_customer_approve_pricing"
-                                    type="object" class="btn-secondary"
-                                    icon="fa-lock" string="Approve &amp; Lock Price"
-                                    invisible="x_price_locked"
-                                    help="Mark the customer's pricing approved and lock the contract price. After this, cost changes become Potential Revenue Charges, not customer billing. (A recorded deposit also locks it automatically.)"/>
-                            <button name="action_open_lock_price_wizard"
-                                    type="object" class="btn-link"
-                                    icon="fa-pencil"
-                                    string="Lock at an agreed total…"
-                                    invisible="x_price_locked"
-                                    help="For an already-booked event (e.g. a deposit was paid and later changes inflated the total): type the total the customer actually agreed to and lock at that figure. Suggests twice the deposit."/>
-                            <button name="action_unlock_contract_price"
-                                    type="object" class="btn-link text-muted"
-                                    string="Unlock price (correction)"
-                                    invisible="not x_price_locked"
-                                    confirm="Unlock the agreed price so billing follows the live total again? Use only to fix a mistaken lock."/>
+                        <group string="Event P&amp;L — same totals as the printed report">
+                            <field name="x_pl_rental_income" readonly="1" help="Formula: locked agreed pre-tax price; otherwise the final-invoice snapshot; otherwise current Event Rental pre-tax. Source: Customer Pricing and Documents → Final Invoice. Venue payments settle this revenue; they do not add revenue again." />
+                            <field name="x_event_sales_income" readonly="1" string="On-site Sales Margin (after goods)" help="Formula: Clover sales total minus Clover goods costs, excluding venue-payment item margins, plus any historical manually entered sales. Source: After Action → Clover and historical sales. Venue payments belong under Payments." />
+                            <field name="x_pl_total_income" readonly="1" help="Formula: Rental Revenue (pre-tax) + On-site Sales Margin (after goods). Source: this summary and After Action → Pull Clover Sales. Clover goods costs are already deducted." />
+                            <field name="x_total_costs" readonly="1" string="Total Event Expenses" help="Formula: Event Costs → COGS for non-labor items + clocked paid wages + certified department gratuities + coordinator payout. Source: Event Costs, Timesheets, department call-out sheets and Coordinator Pay. POs excluded." />
+                            <field name="x_pl_net_total" readonly="1" string="Event Profit / (Loss)" class="oe_subtotal_footer_separator" decoration-danger="x_pl_net_total &lt; 0" decoration-success="x_pl_net_total &gt;= 0" help="Formula: Rental Revenue + On-site Sales Margin − Total Event Expenses. Source: this summary; identical to Print → Event P&amp;L. Sales goods costs are already deducted by Clover. POs excluded." />
                         </group>
-                        <group string="Deposit">
-                            <field name="x_deposit_amount"/>
-                            <field name="x_deposit_received"/>
-                            <field name="x_deposit_date"
-                                   invisible="not x_deposit_received"/>
-                            <field name="x_deposit_method"/>
-                            <field name="x_deposit_reference"/>
-                        </group>
-                        <group string="UBI / Property Tax (non-member rentals)"
-                               invisible="x_is_member">
-                            <field name="x_ubi_room_income" readonly="1"
-                                   string="UBI Room Rental Income"/>
-                            <field name="x_ubi_tax_reserve" readonly="1"
-                                   string="Property Tax Reserve"/>
+                        <group string="Payments &amp; People">
+                            <field name="x_total_paid" readonly="1" help="Formula: sum of recorded payments excluding write-offs, with the legacy deposit used when no payment log exists. Source: Payments → payment list / Deposit." />
+                            <field name="x_balance_remaining" readonly="1" help="Formula: customer grand total (agreed total when locked) − payments received − write-offs. Source: Customer Pricing and Payments. A payment reduces the balance, not event profit." />
+                            <field name="x_pl_coordinator_cost" readonly="1" help="Formula: sum of coordinator fee shares posted to event timecards; before posting, the configured Coordinator Fee if Pay Coordinator From This Event is checked. Source: Customer Pricing → Coordinator Pay and Timesheets. A pooled supplies fee is not a payout." />
+                            <field name="x_event_volunteer_hours" readonly="1" widget="float_time" help="Formula: sum of worked hours on event-tagged volunteer timeclock entries. Source: Timesheets → event clock-ins. Volunteer = Volunteers department or no wage / paid contract category. Sign-ups and planned shifts are not clocked hours. These hours have $0 labor cost." />
                         </group>
                     </group>
-
-                    <separator string="Payments" invisible="x_is_elks_event"/>
-                    <div class="mt-1 mb-2" invisible="x_is_elks_event">
-                        <button name="action_record_payment" type="object"
-                                class="btn-primary me-2 mb-2" icon="fa-money"
-                                string="Record Payment"/>
-                        <button name="action_write_off_balance" type="object"
-                                class="btn-secondary me-2 mb-2" icon="fa-eraser"
-                                string="Write Off Balance"
-                                invisible="x_balance_remaining &lt;= 0"
-                                help="Waive the remaining balance (a lodge-side courtesy, e.g. our mistake) — records a write-off, zeroes the balance, and credits it on the invoice. A reason is required."/>
-                        <span class="text-muted">Log each check / cash / card
-                            payment as it comes in. The balance updates and the
-                            final invoice credits what's been paid.</span>
-                    </div>
-                    <field name="x_payment_ids" invisible="x_is_elks_event">
-                        <list editable="bottom">
-                            <field name="date"/>
-                            <field name="amount"/>
-                            <field name="method"/>
-                            <field name="reference"/>
-                            <field name="note" optional="hide"/>
-                            <field name="x_clover_sale_id" column_invisible="1"/>
-                            <field name="x_clover_matched" column_invisible="1"/>
-                            <field name="x_clover_info" string="Clover"
-                                   widget="badge" decoration-success="x_clover_matched"
-                                   readonly="1"
-                                   help="A matching Clover point-of-sale payment was found around this date."/>
-                            <button name="action_view_clover_sale" type="object"
-                                    string="View in Clover" icon="fa-check-circle"
-                                    class="text-success"
-                                    invisible="not x_clover_matched"
-                                    help="Open the matching Clover order."/>
-                            <field name="currency_id" column_invisible="1"/>
-                        </list>
-                    </field>
-                    <group invisible="x_is_elks_event">
-                        <group>
-                            <field name="x_total_paid" readonly="1"/>
-                            <field name="x_writeoff_total" readonly="1"
-                                   invisible="x_writeoff_total == 0"
-                                   decoration-warning="x_writeoff_total &gt; 0"/>
-                            <field name="x_balance_remaining" readonly="1"
-                                   class="oe_subtotal_footer_separator"
-                                   decoration-danger="x_balance_remaining &gt; 0"
-                                   decoration-success="x_balance_remaining &lt;= 0"/>
-                        </group>
-                        <group/>
-                    </group>
-
-                    <group>
-                        <group string="Cost Summary (P&amp;L)">
-                            <field name="x_cogs" readonly="1"
-                                   string="COGS (goods + paid labor)"/>
-                            <field name="x_po_total" readonly="1"
-                                   string="Total from POs"/>
-                            <field name="x_total_costs" readonly="1"
-                                   class="oe_subtotal_footer_separator"/>
-                            <field name="x_net_income" readonly="1"
-                                   string="Rental Net (Revenue − Costs)"
-                                   decoration-danger="x_net_income &lt; 0"
-                                   decoration-success="x_net_income &gt;= 0"/>
-                            <field name="x_event_sales_income" readonly="1"
-                                   string="+ Event Sales Income"
-                                   invisible="not x_event_sales_income"/>
-                            <field name="x_pl_net_total" readonly="1"
-                                   string="Net incl. Event Sales"
-                                   class="oe_subtotal_footer_separator"
-                                   decoration-danger="x_pl_net_total &lt; 0"
-                                   decoration-success="x_pl_net_total &gt;= 0"/>
-                        </group>
-                        <group string="Event Labor: Billed vs Actual (clocked)"
-                               invisible="not x_labor_billed and not x_labor_actual_clocked">
-                            <field name="x_labor_billed" readonly="1"
-                                   string="Billed (planned hrs x billed rate)"/>
-                            <field name="x_labor_actual_clocked" readonly="1"
-                                   string="Actual (clocked hrs x event rate)"/>
-                            <field name="x_labor_clocked_variance" readonly="1"
-                                   string="Billed − Actual"
-                                   class="oe_subtotal_footer_separator"
-                                   decoration-danger="x_labor_clocked_variance &lt; 0"
-                                   decoration-success="x_labor_clocked_variance &gt;= 0"/>
-                        </group>
-                        <group string="Quote &amp; Invoice">
-                            <field name="x_sale_order_id" readonly="1"/>
-                            <field name="x_quote_total" readonly="1"/>
-                            <field name="x_balance_due" readonly="1"
-                                   class="oe_subtotal_footer_separator"/>
-                        </group>
-                        <group string="COGS by P&amp;L Category">
-                            <field name="x_cat_catering" readonly="1"
-                                   string="Catering"/>
-                            <field name="x_cat_bar" readonly="1" string="Bar"/>
-                            <field name="x_cat_event" readonly="1"
-                                   string="Event Services"/>
-                            <field name="x_cat_cleaning" readonly="1"
-                                   string="Cleaning"/>
-                            <field name="x_cat_other" readonly="1"
-                                   string="Other / Gratuity"/>
-                        </group>
-                    </group>
+                    <notebook>
+                        <page string="Customer Pricing" name="event_billing_detail">
+                            <group>
+                                <group string="Billing Summary (what the customer pays)">
+                                    <field name="x_room_retail" readonly="1" string="Rooms (default/retail)" invisible="x_room_retail == x_room_income" help="Formula: sum of default room rates before reductions. Source: Rooms → selected rooms and room configuration." />
+                                    <field name="x_room_income" readonly="1" string="Rooms Subtotal (charged)" help="Formula: sum of room booking subtotals charged before additional courtesy discount. Source: Rooms → rates, cleaning and service fees." />
+                                    <label for="x_room_auto_discount" string="Member / Non-Profit Discount" invisible="not x_room_auto_discount" />
+                                    <div class="o_row text-success" invisible="not x_room_auto_discount">
+                                                − <field name="x_room_auto_discount" readonly="1" nolabel="1" class="oe_inline" help="Formula: default room retail minus the applicable member / nonprofit / Elks / Celebration of Life room price. Source: Rooms and Event Details → rental flags." />
+                                        <span class="text-muted">(<field name="x_room_auto_discount_label" readonly="1" nolabel="1" class="oe_inline" />)</span>
+                                    </div>
+                                    <field name="x_room_net" readonly="1" string="Rooms (net after discount)" invisible="not x_room_auto_discount" help="Formula: charged room subtotal minus additional courtesy room discount. Source: Rooms and Customer Pricing → Additional Discount." />
+                                    <field name="x_eventcosts_total" readonly="1" string="Event Costs Subtotal" help="Formula: sum of Quantity × Unit Cost (customer charge) on Event Costs. Source: Event Costs → charge lines. COGS is separate." />
+                                    <label for="x_coordinator_fee" />
+                                    <div class="o_row">
+                                        <field name="x_coordinator_fee" readonly="not x_coordinator_fee_manual" help="Formula: room default retail rate plus default cleaning/service fees, multiplied by coordinator percentage; or Lodge Settings fixed fee; or entered custom fee. Source: Rooms → room configuration, Lodge Settings → coordinator rule, Customer Pricing → Custom fee." />
+                                        <field name="x_coordinator_fee_manual" />
+                                        <span>Custom fee</span>
+                                        <span class="text-muted" invisible="not x_coordinator_fee_variance">
+                                                    (suggested <field name="x_coordinator_fee_auto" readonly="1" nolabel="1" help="Formula: default retail room rates plus default cleaning/service fees × coordinator percentage, or Lodge Settings fixed fee. Source: Rooms → room configuration and Lodge Settings → coordinator rule." />,
+                                                    adj <field name="x_coordinator_fee_variance" readonly="1" nolabel="1" decoration-warning="x_coordinator_fee_variance != 0" help="Formula: entered Coordinator Fee − suggested automatic Coordinator Fee. Source: Customer Pricing → Custom fee / suggested fee." />)
+                                                </span>
+                                    </div>
+                                    <field name="x_coordinator_employee_id" />
+                                    <label for="x_coordinator_paid_from_event" string="Coordinator Pay" />
+                                    <div class="o_row">
+                                        <field name="x_coordinator_paid_from_event" />
+                                        <span>Pay the coordinator from this event</span>
+                                        <span class="text-info" invisible="x_coordinator_paid_from_event">
+                                                    — fee of <field name="x_coordinator_to_supplies" readonly="1" nolabel="1" help="Formula: Coordinator Fee when Pay Coordinator From This Event is off; otherwise zero. Source: Customer Pricing → Coordinator Pay. Internal allocation, not an extra expense." />
+                                                    pooled to Event Supplies Fund (available
+                                                    <field name="x_event_supplies_fund_total" readonly="1" nolabel="1" help="Formula: posted fund contributions from fully paid events minus recorded spending, timecard allocations and outstanding confirmed PO commitments. Source: Elks Events → Coordinator / Supplies Fund. Unposted event allocations do not count." />)
+                                                </span>
+                                    </div>
+                                    <button name="action_contribute_coordinator_fund" type="object" string="Post Fee to Fund Register" class="btn-link" invisible="x_coordinator_paid_from_event" help="Prepare this event’s contribution. Posting requires the event to be fully paid and prevents duplicate contributions."/>
+                                    <label for="x_discount_reason" string="Additional Discount" />
+                                    <div class="o_row">
+                                        <field name="x_discount_reason" placeholder="No additional discount" />
+                                        <field name="x_discount_type" invisible="not x_discount_reason" class="oe_inline" />
+                                        <field name="x_discount_pct" invisible="not x_discount_reason or x_discount_type != 'percent'" class="oe_inline" help="Formula: entered percentage × eligible room charge, capped to the available room amount. Source: Customer Pricing → Additional Discount. Does not reduce service charges." />
+                                        <span invisible="not x_discount_reason or x_discount_type != 'percent'">%</span>
+                                        <field name="x_discount_value" invisible="not x_discount_reason or x_discount_type != 'amount'" class="oe_inline" help="Formula: entered fixed courtesy room discount, capped to the available room charge. Source: Customer Pricing → Additional Discount." />
+                                    </div>
+                                    <field name="x_discount_note" invisible="not x_discount_reason" required="x_discount_reason" placeholder="Explain why this additional discount is being given (required)" />
+                                    <div class="alert alert-success" role="alert" invisible="not x_discount_amount" style="margin:2px 0; padding:4px 8px;">
+                                        <strong>Additional discount applied: <field name="x_discount_amount" readonly="1" nolabel="1" class="oe_inline" help="Formula: courtesy room discount from selected fixed amount or percentage, limited to room revenue. Source: Customer Pricing → Additional Discount." />
+                                        </strong>
+                                        <span invisible="not x_discount_reason"> (<field name="x_discount_reason" readonly="1" nolabel="1" class="oe_inline" />)</span>
+                                        <div class="text-muted">
+                                                    Applies to the room only (a profit item) — not to any service we pay out.
+                                                </div>
+                                    </div>
+                                    <field name="x_total_billed" readonly="1" string="Event Rental (pre-tax)" help="Formula: net room charges + Event Costs charges + Coordinator Fee, before tax. Source: Rooms, Event Costs and Customer Pricing. This is the live pricing calculation; the summary uses the agreed / invoiced price when available." />
+                                    <field name="x_taxable_subtotal" readonly="1" string="↳ Taxable (goods)" help="Formula: net taxable room charges + Event Costs lines marked Taxable. Source: Rooms and Event Costs → Taxable." />
+                                    <field name="x_nontaxable_subtotal" readonly="1" string="↳ Non-Taxable Services" help="Formula: non-taxable Event Costs charges + Coordinator Fee. Source: Event Costs → Taxable unchecked and Customer Pricing → Coordinator Fee." />
+                                    <field name="x_event_tax_amount" readonly="1" string="Tax (on taxable only)" help="Formula: taxable subtotal × configured percentage tax rate. Source: Customer Pricing → Taxable and Lodge Settings → Event Tax. Not event revenue." />
+                                    <field name="x_event_grand_total" readonly="1" string="Grand Total" class="oe_subtotal_footer_separator" help="Formula: live Event Rental pre-tax + sales tax. Source: Customer Pricing → Event Rental and Tax. Agreed Price governs billing when locked." />
+                                    <field name="x_price_locked" invisible="1" />
+                                    <field name="x_agreed_grand" readonly="1" string="Agreed Price (locked)" invisible="not x_price_locked" help="Formula: pre-tax agreed amount + locked tax, captured when price is approved / locked. Source: Customer Pricing → Approve &amp; Lock Price or Lock at an agreed total." />
+                                    <field name="x_potential_revenue_charges" readonly="1" string="Potential Revenue Charges" invisible="not x_price_locked" decoration-danger="x_potential_revenue_charges &gt; 0" help="Formula: current chargeable total − agreed locked price, as calculated by price-lock rules. Source: Customer Pricing → Grand Total and Agreed Price. Not extra income unless separately agreed and invoiced." />
+                                    <button name="action_customer_approve_pricing" type="object" class="btn-secondary" icon="fa-lock" string="Approve &amp; Lock Price" invisible="x_price_locked" help="Mark the customer's pricing approved and lock the contract price. After this, cost changes become Potential Revenue Charges, not customer billing. (A recorded deposit also locks it automatically.)" />
+                                    <button name="action_open_lock_price_wizard" type="object" class="btn-link" icon="fa-pencil" string="Lock at an agreed total…" invisible="x_price_locked" help="For an already-booked event (e.g. a deposit was paid and later changes inflated the total): type the total the customer actually agreed to and lock at that figure. Suggests twice the deposit." />
+                                    <button name="action_unlock_contract_price" type="object" class="btn-link text-muted" string="Unlock price (correction)" invisible="not x_price_locked" confirm="Unlock the agreed price so billing follows the live total again? Use only to fix a mistaken lock." />
+                                </group>
+                            </group>
+                            <group string="Quote &amp; Invoice">
+                                <field name="x_sale_order_id" readonly="1" />
+                                <field name="x_quote_total" readonly="1" help="Formula: linked sale order total. Source: Customer Pricing → Quote &amp; Invoice → quote link. May differ from the locked customer price." />
+                                <field name="x_balance_due" readonly="1" class="oe_subtotal_footer_separator" help="Formula: agreed pre-tax amount when locked, otherwise live pre-tax rental charges, minus logged payments (legacy deposit fallback). Source: Payments and Customer Pricing. Use Balance Remaining for the customer balance including tax / write-offs." />
+                            </group>
+                        </page>
+                        <page string="Payments" name="event_payment_detail">
+                            <group>
+                                <group string="Deposit">
+                                    <field name="x_deposit_amount" help="Formula: recorded deposit amount (default based on configured deposit percentage). Source: Payments → Deposit and Lodge Settings → deposit percentage." />
+                                    <field name="x_deposit_received" />
+                                    <field name="x_deposit_date" invisible="not x_deposit_received" />
+                                    <field name="x_deposit_method" />
+                                    <field name="x_deposit_reference" />
+                                </group>
+                            </group>
+                            <separator string="Payments" invisible="x_is_elks_event" />
+                            <div class="mt-1 mb-2" invisible="x_is_elks_event">
+                                <button name="action_record_payment" type="object" class="btn-primary me-2 mb-2" icon="fa-money" string="Record Payment" />
+                                <button name="action_write_off_balance" type="object" class="btn-secondary me-2 mb-2" icon="fa-eraser" string="Write Off Balance" invisible="x_balance_remaining &lt;= 0" help="Waive the remaining balance (a lodge-side courtesy, e.g. our mistake) — records a write-off, zeroes the balance, and credits it on the invoice. A reason is required." />
+                                <span class="text-muted">Log each check / cash / card
+                                            payment as it comes in. The balance updates and the
+                                            final invoice credits what's been paid.</span>
+                            </div>
+                            <field name="x_payment_ids" invisible="x_is_elks_event">
+                                <list editable="bottom" create="0">
+                                    <field name="date" />
+                                    <field name="amount" />
+                                    <field name="method" />
+                                    <field name="reference" />
+                                    <field name="note" optional="hide" />
+                                    <field name="x_clover_sale_id" column_invisible="1" />
+                                    <field name="x_clover_matched" column_invisible="1" />
+                                    <field name="x_clover_info" string="Clover" widget="badge" decoration-success="x_clover_matched" readonly="1" help="A matching Clover point-of-sale payment was found around this date." />
+                                    <button name="action_view_clover_sale" type="object" string="View in Clover" icon="fa-check-circle" class="text-success" invisible="not x_clover_matched" help="Open the matching Clover order." />
+                                    <field name="currency_id" column_invisible="1" />
+                                </list>
+                            </field>
+                            <group invisible="x_is_elks_event">
+                                <group>
+                                    <field name="x_total_paid" readonly="1" help="Formula: sum of recorded payments excluding write-offs, with the legacy deposit used when no payment log exists. Source: Payments → payment list / Deposit." />
+                                    <field name="x_writeoff_total" readonly="1" invisible="x_writeoff_total == 0" decoration-warning="x_writeoff_total &gt; 0" help="Formula: sum of payment rows whose method is Write-Off / Waived. Source: Payments → payment list." />
+                                    <field name="x_balance_remaining" readonly="1" class="oe_subtotal_footer_separator" decoration-danger="x_balance_remaining &gt; 0" decoration-success="x_balance_remaining &lt;= 0" help="Formula: customer grand total (agreed total when locked) − payments received − write-offs. Source: Customer Pricing and Payments. A payment reduces the balance, not event profit." />
+                                </group>
+                                <group />
+                            </group>
+                        </page>
+                        <page string="Costs &amp; Labor" name="event_cost_detail">
+                            <group string="Cost Summary (P&amp;L)">
+                                <field name="x_cogs" readonly="1" string="COGS (goods + paid labor)" help="Formula: non-labor Event Costs COGS + clocked paid wages + certified gratuities + coordinator payout. Source: Event Costs, Timesheets and department call-out sheets. Clover goods costs are already deducted from on-site margin." />
+                                <field name="x_total_costs" readonly="1" class="oe_subtotal_footer_separator" help="Formula: Event Costs → COGS for non-labor items + clocked paid wages + certified department gratuities + coordinator payout. Source: Event Costs, Timesheets, department call-out sheets and Coordinator Pay. POs excluded." />
+                                <field name="x_net_income" readonly="1" string="Rental Net (Revenue − Costs)" decoration-danger="x_net_income &lt; 0" decoration-success="x_net_income &gt;= 0" help="Formula: agreed / invoiced Rental Revenue (pre-tax) − Total Event Expenses. Source: Financials summary. Excludes on-site sales margin; Event Profit includes it." />
+                                <field name="x_event_sales_income" readonly="1" string="+ Event Sales Income" invisible="not x_event_sales_income" help="Formula: Clover sales total minus Clover goods costs, excluding venue-payment item margins, plus any historical manually entered sales. Source: After Action → Clover and historical sales. Venue payments belong under Payments." />
+                                <field name="x_pl_net_total" readonly="1" string="Net incl. Event Sales" class="oe_subtotal_footer_separator" decoration-danger="x_pl_net_total &lt; 0" decoration-success="x_pl_net_total &gt;= 0" help="Formula: Rental Revenue + On-site Sales Margin − Total Event Expenses. Source: this summary; identical to Print → Event P&amp;L. Sales goods costs are already deducted by Clover. POs excluded." />
+                            </group>
+                            <group string="Event Labor: Billed vs Actual (clocked)" invisible="not x_labor_billed and not x_labor_actual_clocked">
+                                <field name="x_labor_billed" readonly="1" string="Billed (planned hrs x billed rate)" help="Formula: sum of certified-roster labor customer charges. Source: Event Costs → certified roster lines and department call-out sheets." />
+                                <field name="x_labor_actual_clocked" readonly="1" string="Actual (clocked hrs x event rate)" help="Formula: clocked event hours × W-2 wage or 1099 event rate; volunteers cost zero. Source: Timesheets → event clock-ins, employee Wage and department call-out rates. Excludes tips and coordinator fee." />
+                                <field name="x_labor_clocked_variance" readonly="1" string="Billed − Actual" class="oe_subtotal_footer_separator" decoration-danger="x_labor_clocked_variance &lt; 0" decoration-success="x_labor_clocked_variance &gt;= 0" help="Formula: billed roster labor − clocked labor pay. Source: Costs &amp; Labor → Billed and Actual. Positive means labor charges exceed wages." />
+                            </group>
+                            <group string="COGS by P&amp;L Category">
+                                <field name="x_cat_catering" readonly="1" string="Catering" help="Formula: non-labor Event Costs COGS in Catering / Kitchen + corresponding clocked wages and certified tips; Other also includes coordinator payout. Source: Event Costs → Type / COGS, Timesheets and department call-out sheets. POs excluded." />
+                                <field name="x_cat_bar" readonly="1" string="Bar" help="Formula: non-labor Event Costs COGS in Bar + corresponding clocked wages and certified tips; Other also includes coordinator payout. Source: Event Costs → Type / COGS, Timesheets and department call-out sheets. POs excluded." />
+                                <field name="x_cat_event" readonly="1" string="Event Services" help="Formula: non-labor Event Costs COGS in Event Services + corresponding clocked wages and certified tips; Other also includes coordinator payout. Source: Event Costs → Type / COGS, Timesheets and department call-out sheets. POs excluded." />
+                                <field name="x_cat_cleaning" readonly="1" string="Cleaning" help="Formula: non-labor Event Costs COGS in Cleaning + corresponding clocked wages and certified tips; Other also includes coordinator payout. Source: Event Costs → Type / COGS, Timesheets and department call-out sheets. POs excluded." />
+                                <field name="x_cat_other" readonly="1" string="Other / Gratuity" help="Formula: non-labor Event Costs COGS in Other + corresponding clocked wages and certified tips; Other also includes coordinator payout. Source: Event Costs → Type / COGS, Timesheets and department call-out sheets. POs excluded." />
+                            </group>
+                        </page>
+                        <page string="Tax &amp; Reserves" name="event_tax_detail"
+                              invisible="x_is_member or x_is_elks_event or (not x_ubi_room_income and not x_ubi_tax_reserve)">
+                            <group string="UBI / Property Tax (non-member rentals)" invisible="x_is_member">
+                                <field name="x_ubi_room_income" readonly="1" string="UBI Room Rental Income" help="Formula: room rental income eligible under current member/event rules. Source: Rooms and Event Details → member / event flags." />
+                                <field name="x_ubi_tax_reserve" readonly="1" string="Property Tax Reserve" help="Formula: eligible room income × Lodge Settings property-tax reserve percentage. Source: Tax &amp; Reserves and Lodge Settings. Reserve shown separately from event operating expenses." />
+                            </group>
+                        </page>
+                    </notebook>
                 </page>
 
                 <!-- ===== Documents / Print (event-only, replaces the global
@@ -1201,15 +1130,15 @@
                         </group>
                         <group string="Event Sales Income (on-site: bar / food / door)">
                             <div colspan="2" class="text-muted">
-                                NET sales taken in AT the event (separate from the
-                                rental invoice) — after the cost of goods, which
-                                Clover already accounts for. Enter each category's
-                                NET so on-site sales fold into the P&amp;L net.
+                                On-site sales come from Clover after goods costs. Venue / Event Services
+                                Payments are excluded from this pull because rental revenue already
+                                includes them. Record venue receipts under Financials → Payments.
+                                Historical manual sales are shown below only when previously entered.
                             </div>
-                            <field name="x_sales_drink"/>
-                            <field name="x_sales_food"/>
-                            <field name="x_sales_entry"/>
-                            <field name="x_sales_other"/>
+                            <field name="x_sales_drink" readonly="1" invisible="not x_sales_drink" help="Historical manual sales retained in P&amp;L. New on-site sales come from Pull Clover Sales; venue payments belong under Financials → Payments."/>
+                            <field name="x_sales_food" readonly="1" invisible="not x_sales_food" help="Historical manual sales retained in P&amp;L. New on-site sales come from Pull Clover Sales; venue payments belong under Financials → Payments."/>
+                            <field name="x_sales_entry" readonly="1" invisible="not x_sales_entry" help="Historical manual sales retained in P&amp;L. New on-site sales come from Pull Clover Sales; venue payments belong under Financials → Payments."/>
+                            <field name="x_sales_other" readonly="1" invisible="not x_sales_other" help="Historical manual sales retained in P&amp;L. New on-site sales come from Pull Clover Sales; venue payments belong under Financials → Payments."/>
                             <field name="x_sales_clover" readonly="1"
                                    string="Clover (auto-pulled)"/>
                             <field name="x_sales_notes"
@@ -1226,7 +1155,7 @@
                                 string="Pull Clover Sales"/>
                         <span class="text-muted">Pulls the top items and net sales
                             for the event window (+/- the buffer in Lodge
-                            Settings) and fills Clover into Event Sales Income.</span>
+                            Settings), excluding venue-payment items, and fills Clover into Event Sales Income.</span>
                         <div class="text-muted mt-1"
                              invisible="not x_clover_synced_on">
                             Last pulled <field name="x_clover_synced_on" readonly="1" class="oe_inline"/> ·
@@ -1253,8 +1182,8 @@
 
                     <separator string="Event Closeout"/>
                     <div class="text-muted mb-2">
-                        Work through these after the event so the numbers are
-                        accurate, then close it out.
+                        Review these after the event. Completing the event automatically
+                        marks all four closeout steps done; recorded financial data stays unchanged.
                     </div>
                     <group>
                         <group>
@@ -1269,7 +1198,7 @@
                             <button name="action_complete_closeout" type="object"
                                     class="btn-primary" icon="fa-check-circle"
                                     string="Complete Closeout (move to Completed)"
-                                    confirm="Move this event to the Completed stage and remove it from the 'Needs Closeout' list?"/>
+                                    confirm="Complete this event and automatically mark all four closeout steps done?"/>
                             <div class="text-success" invisible="not x_closeout_done">
                                 <i class="fa fa-check"/> All closeout steps done.
                             </div>

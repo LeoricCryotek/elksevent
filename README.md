@@ -85,6 +85,54 @@ sudo systemctl restart odona-lewistonelks896.com
 
 ## Recent changes
 
+- 19.0.9.139 — Coordinator / Supplies Fund register under Elks Events and a
+  Financials shortcut. The former gross pool total now shows posted available
+  funds: contributions minus spending/timecard allocations and open confirmed
+  PO commitments. No historical allocation is silently treated as cash.
+  Set an event to pool its coordinator fee, then Post Fee to Fund Register;
+  posting requires full recorded customer payment (write-offs do not qualify),
+  and each event contributes once. New Register Entry supports documented
+  opening/other funding, expenses and Coordinator Timecard Allocation. Choose
+  employee, amount and payroll date, then Post to Timecard. This creates one
+  zero-hour flat coordinator fee without charging the source event again; it
+  does not issue payment. Posted entries are immutable and carry date, reference,
+  author and attachments/chatter. Drafts may be corrected before posting.
+  On a PO select Charge to Coordinator Fund. Confirmation reserves money; a
+  posted Purchase / Expense entry against that PO settles its reservation
+  without counting the spend twice. Cancellation releases unpaid commitments.
+  Fund POs must use the company currency and cannot overcommit available funds.
+  The register is an internal allocation ledger, separate from accounting GL.
+
+- 19.0.9.137 — Drink Tickets, Wrist Bands and Hosted Bar toggles in Checklist →
+  Bar. Each option appears as Yes/No in the lounge manager’s portal call-out,
+  printed Bar call-out and coordinator sheet. Changes participate in the
+  existing call-out resend / changed-request highlights. Independent options;
+  they do not alter customer charges or staffing.
+
+- 19.0.9.136 — The event form’s red validation warning opens the applicable
+  notebook page and focuses the first invalid field, including nested Financials
+  tabs. It validates without saving or reloading unsaved edits. Tax & Reserves
+  is hidden for member/Elks events and when both reserve figures are zero.
+
+- 19.0.9.135 — Unified screen/PDF P&L on agreed or invoiced rental income plus
+  Clover on-site margin after goods; vendor POs excluded from P&L. Coordinator
+  payout now counts as an expense (posted timecard shares, falling back to the
+  configured payable fee before posting). Financials has a compact summary and
+  focused sub-tabs with formula/source tooltips. Clocked volunteer hours appear
+  in Financials, P&L and bookkeeper reports, carrying no labor cost.
+  Completing an event automatically checks all closeout steps, including stage
+  changes from the board/list; this does not create financial transactions.
+  Deleting a linen charge unchecks the linen request; an unchecked request
+  removes the linen line. Refresh preserves existing linen amounts and COGS.
+  Clover still uses the event window plus buffer. Venue receipts are excluded
+  using the configured Facility/Deposit products or exact item descriptions:
+  Event Services Payment(s), Event Deposit, Event Balance, Facility Usage and
+  Rental. Map venue items to those products in Clover configuration if named
+  differently. Mixed orders retain the other item margins. Venue receipts are
+  logged under Financials → Payments, not added to sales again. Historical manual
+  on-site sales remain read-only and included; new on-site totals come from Clover.
+  Upgrade recalculates stored P&L totals without rebuilding charge lines.
+
 - 19.0.9.74 — Printable W-9 and I-9 (Section 1) PDFs filled from the 1099
   application, for the paper folder — "Print W-9" / "Print I-9" buttons on the
   applicant (and in its Print menu). I-9 Section 2 is left for the employer to

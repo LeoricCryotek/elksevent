@@ -68,3 +68,6 @@ access_job_reference_recruit,elks.job.reference.recruit,model_elks_job_reference
 access_job_reference_hr,elks.job.reference.hr,model_elks_job_reference,hr.group_hr_user,1,1,1,1
 access_job_prior_employer_recruit,elks.job.prior.employer.recruit,model_elks_job_prior_employer,hr_recruitment.group_hr_recruitment_user,1,1,1,1
 access_job_prior_employer_hr,elks.job.prior.employer.hr,model_elks_job_prior_employer,hr.group_hr_user,1,1,1,1
+access_event_fund_coord,elks.event.fund.coord,model_elks_event_fund,elksevent.group_event_coordinator,1,0,0,0
+access_event_fund_officer,elks.event.fund.officer,model_elks_event_fund,elksevent.group_event_officer,1,1,1,0
+access_event_fund_entry_coord,elks.event.fund.entry.coord,model_elks_event_fund_entry,elksevent.group_event_coordinator,1,1,1,1

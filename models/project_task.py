@@ -469,6 +469,10 @@ class ProjectTask(models.Model):
         'x_event_start_time_text', 'x_event_end_time_text',
         'x_num_bars', 'x_bartender_count', 'x_plan_bar_hours',
         'x_need_beer_tub', 'x_bar_drink_requests', 'x_bar_customer_request',
+        'x_bar_drink_tickets',
+        'x_bar_wrist_bands',
+        'x_bar_hosted',
+
         'x_cook_count', 'x_cook_hours', 'x_kitchen_support_count',
         'x_kitchen_support_hours', 'x_catering_details', 'x_food_menu',
         'x_kitchen_customer_request', 'x_cleaner_count', 'x_cleaner_hours',
@@ -616,6 +620,15 @@ class ProjectTask(models.Model):
              "Settings, e.g. 75). Editable — change it and it sticks until the "
              "guest count changes.")
     x_need_beer_tub = fields.Boolean("Beer Tub")
+    x_bar_drink_tickets = fields.Boolean(
+        "Drink Tickets", tracking=True,
+        help="The customer requests drink tickets. Shown on the Bar call-out for the lounge manager.")
+    x_bar_wrist_bands = fields.Boolean(
+        "Wrist Bands", tracking=True,
+        help="The customer requests wrist bands. Shown on the Bar call-out for the lounge manager.")
+    x_bar_hosted = fields.Boolean(
+        "Hosted Bar", tracking=True,
+        help="The customer requests a hosted bar (host pays for guest drinks). Shown on the Bar call-out for the lounge manager.")
     x_bar_drink_requests = fields.Text(
         "Drink Requests",
         help="Specific drinks / bar requests for the bartender (signature "
@@ -1267,7 +1280,8 @@ class ProjectTask(models.Model):
 
     @api.depends('x_sales_drink', 'x_sales_food', 'x_sales_entry',
                  'x_sales_other', 'x_sales_clover', 'x_net_income',
-                 'x_total_billed', 'x_guest_count')
+                 'x_total_billed', 'x_guest_count', 'x_price_locked',
+                 'x_agreed_billed', 'x_billed_snapshot', 'x_invoice_ids.state')
     def _compute_event_sales(self):
         for rec in self:
             rec.x_event_sales_income = (
@@ -1280,8 +1294,8 @@ class ProjectTask(models.Model):
                 rec.x_pl_net_total / rec.x_guest_count
                 if rec.x_guest_count else 0.0)
             rec.x_profit_margin_pct = (
-                rec.x_pl_net_total / rec.x_total_billed * 100.0
-                if rec.x_total_billed else 0.0)
+                rec.x_pl_net_total / (rec._pl_rental_income() + rec.x_event_sales_income) * 100.0
+                if (rec._pl_rental_income() + rec.x_event_sales_income) else 0.0)
 
     # ------------------------------------------------------------------
     # Coordinator fee
@@ -1521,9 +1535,7 @@ class ProjectTask(models.Model):
             rec.x_closeout_progress = "%s / 4 steps" % done
 
     def action_complete_closeout(self):
-        """Finish the event: move it to the Completed (closed) stage so it
-        drops off the 'Needs Closeout' list. Warns, but does not block, if a
-        closeout step is still unchecked."""
+        """Complete the event and automatically check its closeout steps."""
         self.ensure_one()
         stage = self.env.ref('elksevent.stage_completed',
                              raise_if_not_found=False)
@@ -1824,6 +1836,11 @@ class ProjectTask(models.Model):
                 and (vals.keys() & self._DEPOSIT_SYNC_KEYS)):
             self.with_context(_deposit_sync=True)._sync_deposit_payment()
         if 'stage_id' in vals:
+            completed = self.env.ref('elksevent.stage_completed', raise_if_not_found=False)
+            if completed and vals['stage_id'] == completed.id:
+                self.filtered('x_is_event').write({
+                    'x_closeout_hours': True, 'x_closeout_clover': True,
+                    'x_closeout_payment': True, 'x_closeout_reports': True})
             self._close_children_on_fold()
             aa = self.env.ref('elksevent.stage_after_action',
                               raise_if_not_found=False)
@@ -2490,8 +2507,7 @@ class ProjectTask(models.Model):
                 continue
             cat = role_cat.get(att.x_event_role or 'event')
             if cat:
-                out[cat] += (att.worked_hours or 0.0) * self._att_labor_rate(
-                    att, rates)
+                out[cat] += self._att_actual_pay(att, rates)
         return out
 
     _LABOR_DEPT_LABEL = {'bar': 'Bar / Lounge', 'kitchen': 'Kitchen',
@@ -2533,7 +2549,13 @@ class ProjectTask(models.Model):
         'x_room_booking_ids.subtotal',
         'x_cost_line_ids.total',
         'x_cost_line_ids.x_taxable',
-        'x_coordinator_fee',
+        'x_coordinator_fee', 'x_coordinator_paid_from_event',
+        'x_coordinator_fee_paid', 'x_attendance_ids.x_coordinator_fee_share',
+        'x_attendance_ids.x_event_pay', 'x_attendance_ids.employee_id.hourly_cost',
+        'x_attendance_ids.employee_id.x_pay_category',
+        'x_attendance_ids.employee_id.department_id.name',
+        'x_price_locked', 'x_agreed_billed', 'x_billed_snapshot',
+        'x_invoice_ids.state', 'x_invoice_ids.x_event_invoice_kind',
         'x_callout_ids.state', 'x_callout_ids.gratuity',
         'x_callout_ids.line_ids.rate', 'x_callout_ids.line_ids.hours',
         'x_callout_ids.line_ids.employee_id',
@@ -2634,17 +2656,7 @@ class ProjectTask(models.Model):
             rec.x_subtotal = customer_total
             rec.x_event_total = customer_total
 
-            # Real costs to the lodge = vendor POs + goods COGS + labor.
-            # Labor is PROJECTED then ACTUAL: before anyone works a category we
-            # use the estimated labor COGS on the cost lines; once someone
-            # clocks in for that category we switch to the actual PAID labor
-            # (which is $0 if only volunteers worked it — volunteers cost
-            # nothing).
-            po_total = sum(
-                rec.x_purchase_order_ids.filtered(
-                    lambda p: p.state != 'cancel'
-                ).mapped('amount_total')
-            )
+            # POs are deliberately excluded until vendor reconciliation is enabled.
             # COST OF GOODS: supplies / food / linens / insurance / fees only.
             # LABOR is NOT taken from the cost lines here — the certified-roster,
             # unrostered and gratuity cost lines (x_auto_source roster_* /
@@ -2676,7 +2688,7 @@ class ProjectTask(models.Model):
                 cat = labor_dept_cat.get(row['code'], 'event')
                 if cat in cats:
                     cats[cat] += row['total']
-            rec.x_cogs = goods_cogs + labor_total
+            rec.x_cogs = goods_cogs + labor_total + rec._pl_coordinator_payout()
             rec.x_cat_catering = cats['catering']
             rec.x_cat_bar = cats['bar']
             rec.x_cat_event = cats['event']
@@ -2686,8 +2698,8 @@ class ProjectTask(models.Model):
             rec.x_cat_other = (rec.x_cogs or 0.0) - (
                 cats['catering'] + cats['bar']
                 + cats['event'] + cats['cleaning'])
-            rec.x_total_costs = (rec.x_cogs or 0.0) + po_total
-            rec.x_net_income = rec.x_total_billed - rec.x_total_costs
+            rec.x_total_costs = rec.x_cogs or 0.0
+            rec.x_net_income = rec._pl_rental_income() - rec.x_total_costs
 
             # Discount dollar value = the ROOM's retail default minus the
             # billed room (event costs are never discounted).
@@ -2707,7 +2719,7 @@ class ProjectTask(models.Model):
             rec.x_balance_due = billed_for_balance - rec._amount_paid()
 
             # Budget remaining (billed minus real costs)
-            rec.x_budget_remaining = rec.x_total_billed - rec.x_total_costs
+            rec.x_budget_remaining = rec._pl_rental_income() - rec.x_total_costs
 
     # ------------------------------------------------------------------
     # Computed: invoice count
@@ -2733,12 +2745,13 @@ class ProjectTask(models.Model):
     # Computed: net income + UBI flag (for the Assessor report)
     # ------------------------------------------------------------------
     @api.depends(
-        'x_total_billed', 'x_total_costs',
+        'x_total_billed', 'x_total_costs', 'x_price_locked',
+        'x_agreed_billed', 'x_billed_snapshot', 'x_invoice_ids.state',
         'x_is_event', 'x_is_elks_event', 'x_is_member',
     )
     def _compute_is_ubi(self):
         for rec in self:
-            rec.x_event_net_income = (rec.x_total_billed or 0.0) - (
+            rec.x_event_net_income = rec._pl_rental_income() - (
                 rec.x_total_costs or 0.0)
             rec.x_is_ubi = (
                 rec.x_is_event
@@ -3713,18 +3726,17 @@ class ProjectTask(models.Model):
             # Settings. Tagged so a rebuild refreshes it to the current tier.
             lin_type = tid('linens')
             if lin_type:
-                rec.x_cost_line_ids.filtered(
-                    lambda c: c.x_auto_source == 'linen_auto').unlink()
-                if rec.x_need_linen:
+                linen_lines = rec.x_cost_line_ids.filtered(
+                    lambda c: c.cost_type_id.id == lin_type)
+                if not rec.x_need_linen:
+                    linen_lines.unlink()
+                elif not linen_lines:
                     price = rec._linen_charge(settings)
                     if price:
                         Line.create({
-                            'event_id': rec.id,
-                            'cost_type_id': lin_type,
-                            'name': _("Linens"),
-                            'quantity': 1,
-                            'unit_cost': round(price, 2),
-                            'x_line_cogs': 0.0,
+                            'event_id': rec.id, 'cost_type_id': lin_type,
+                            'name': _("Linens"), 'quantity': 1,
+                            'unit_cost': round(price, 2), 'x_line_cogs': 0.0,
                             'x_taxable': Type.browse(lin_type).taxable,
                             'x_auto_source': 'linen_auto',
                         })
@@ -3986,8 +3998,6 @@ class ProjectTask(models.Model):
         for c in self.x_cost_line_ids:
             cat = c.cost_type_id.category
             rev[cat if cat in rev else 'other'] += (c.total or 0.0)
-        po_total = sum(self.x_purchase_order_ids.filtered(
-            lambda p: p.state != 'cancel').mapped('amount_total'))
         rows = [
             {'name': 'Room Rental', 'revenue': self.x_room_net or 0.0,
              'cogs': 0.0},
@@ -4001,11 +4011,9 @@ class ProjectTask(models.Model):
              'cogs': self.x_cat_cleaning or 0.0},
             {'name': 'Coordinator Fee',
              'revenue': (self.x_coordinator_fee or 0.0) + rev['coordinator'],
-             'cogs': 0.0},
+             'cogs': self._pl_coordinator_payout()},
             {'name': 'Other / Gratuity', 'revenue': rev['other'],
-             'cogs': self.x_cat_other or 0.0},
-            {'name': 'Vendor Purchases (POs)', 'revenue': 0.0,
-             'cogs': po_total},
+             'cogs': (self.x_cat_other or 0.0) - self._pl_coordinator_payout()},
         ]
         # On-site event sales income (bar / food / door), tracked separately
         # from the rental invoice. Shown as revenue rows so they land in net.
@@ -4013,9 +4021,15 @@ class ProjectTask(models.Model):
                 ('Event Sales - Drink', self.x_sales_drink or 0.0),
                 ('Event Sales - Food', self.x_sales_food or 0.0),
                 ('Event Sales - Entry/Tickets', self.x_sales_entry or 0.0),
-                ('Event Sales - Other', self.x_sales_other or 0.0)):
+                ('Event Sales - Other', self.x_sales_other or 0.0),
+                ('Clover Sales (margin after goods)', self.x_sales_clover or 0.0)):
             if amount:
                 rows.append({'name': label, 'revenue': amount, 'cogs': 0.0})
+        rental_rows = sum(r['revenue'] for r in rows) - self.x_event_sales_income
+        adjustment = self._pl_rental_income() - rental_rows
+        if abs(adjustment) > 0.005:
+            rows.append({'name': 'Agreed / invoiced price adjustment',
+                         'revenue': adjustment, 'cogs': 0.0})
         for r in rows:
             r['net'] = r['revenue'] - r['cogs']
         return rows
@@ -4164,14 +4178,61 @@ class ProjectTask(models.Model):
             subtype_xmlid='mail.mt_note')
         return True
 
+    def _pl_rental_income(self):
+        """Agreed pre-tax rental income, independent of later cost changes."""
+        self.ensure_one()
+        if self.x_price_locked:
+            return self.x_agreed_billed or 0.0
+        if self.x_billed_snapshot or self.x_invoice_ids.filtered(
+                lambda m: m.x_event_invoice_kind == 'final' and m.state != 'cancel'):
+            return self.x_billed_snapshot or 0.0
+        return self.x_total_billed or 0.0
+
+    x_pl_rental_income = fields.Monetary(
+        "Rental Revenue (pre-tax)", currency_field='x_currency_id',
+        compute='_compute_pl_summary')
+    x_pl_total_income = fields.Monetary(
+        "Total Revenue / Sales Margin", currency_field='x_currency_id',
+        compute='_compute_pl_summary')
+    x_pl_coordinator_cost = fields.Monetary(
+        "Coordinator Payout", currency_field='x_currency_id',
+        compute='_compute_pl_summary')
+    x_event_volunteer_hours = fields.Float(
+        "Volunteer Hours (clocked)", compute='_compute_pl_summary')
+
+    def _pl_coordinator_payout(self):
+        self.ensure_one()
+        posted = sum(self.x_attendance_ids.mapped('x_coordinator_fee_share'))
+        if self.x_coordinator_fee_paid or posted:
+            return posted
+        return (self.x_coordinator_fee or 0.0) if self.x_coordinator_paid_from_event else 0.0
+
+    @api.depends('x_total_billed', 'x_price_locked', 'x_agreed_billed',
+                 'x_billed_snapshot', 'x_invoice_ids.state',
+                 'x_invoice_ids.x_event_invoice_kind',
+                 'x_event_sales_income', 'x_coordinator_fee',
+                 'x_coordinator_paid_from_event', 'x_coordinator_fee_paid',
+                 'x_attendance_ids.x_coordinator_fee_share',
+                 'x_attendance_ids.worked_hours', 'x_attendance_ids.employee_id',
+                 'x_attendance_ids.employee_id.hourly_cost',
+                 'x_attendance_ids.employee_id.x_pay_category',
+                 'x_attendance_ids.employee_id.department_id.name')
+    def _compute_pl_summary(self):
+        for rec in self:
+            rec.x_pl_rental_income = rec._pl_rental_income()
+            rec.x_pl_total_income = rec.x_pl_rental_income + rec.x_event_sales_income
+            rec.x_pl_coordinator_cost = rec._pl_coordinator_payout()
+            rec.x_event_volunteer_hours = sum(
+                a.worked_hours or 0.0 for a in rec.x_attendance_ids
+                if rec._elks_is_volunteer_att(a))
+
     def _get_pl_report_data(self):
         """Build the Event P&L data structure for `self` (a set of events).
 
         Shared by the date-range P&L wizard report and the per-event Print
-        report so both show identical numbers. Expenses = COGS by P&L category
-        (labor already inside these) + purchase orders; income = the itemized
-        quote total; profit = the event's net income. Mirrors the Financials
-        tab and avoids double-counting labor / POs.
+        report so both show identical numbers. Expenses include goods, clocked
+        wages, certified tips and coordinator payout; POs are excluded. Income
+        uses the agreed/invoiced rental price plus on-site margin after goods.
         """
         event_data = []
         grand_income = 0.0
@@ -4227,12 +4288,10 @@ class ProjectTask(models.Model):
                         'cogs': cl.x_line_cogs,
                     })
 
-            po_lines = [{
-                'name': po.name,
-                'origin': po.origin or '',
-                'total': po.amount_total,
-            } for po in evt.x_purchase_order_ids.filtered(
-                lambda p: p.state != 'cancel')]
+            po_lines = []  # Vendor POs are excluded from P&L for now.
+            if evt._pl_coordinator_payout():
+                cost_items.append({'name': 'Coordinator Payout',
+                                   'cogs': evt._pl_coordinator_payout()})
 
             # Every Event Cost line is a customer CHARGE (revenue) — show them
             # all on the income side so the P&L reconciles to the billed total.
@@ -4248,10 +4307,7 @@ class ProjectTask(models.Model):
             # invoice exists (frozen), else the live quote total. So a
             # post-payment cost change (substitution) moves cost/profit only,
             # never income.
-            billed_income = (
-                (evt.x_agreed_billed if evt.x_price_locked else 0.0)
-                or evt.x_billed_snapshot or evt.x_total_billed
-                or (room_income + eventcosts_total + coordinator))
+            billed_income = evt._pl_rental_income()
             # Discount = the actual room reduction (auto member/non-profit/COL +
             # any manual courtesy). Gross = billed + discount, so the income
             # section always ties to the billed figure shown.
@@ -4278,6 +4334,7 @@ class ProjectTask(models.Model):
                 ('Food Sales (net)', evt.x_sales_food or 0.0),
                 ('Entry / Ticket Fees (net)', evt.x_sales_entry or 0.0),
                 ('Other Sales (net)', evt.x_sales_other or 0.0),
+                ('Clover Sales (margin after goods)', evt.x_sales_clover or 0.0),
             ) if v]
             total_income = billed_income + sales_income
 
@@ -4291,6 +4348,7 @@ class ProjectTask(models.Model):
 
             event_data.append({
                 'event': evt,
+                'volunteer_hours': evt.x_event_volunteer_hours,
                 'room_lines': room_lines,
                 'charge_lines': charge_lines,
                 'sales_lines': sales_lines,
@@ -4675,12 +4733,21 @@ class ProjectTask(models.Model):
         Sale = self.env['clover.sale'].sudo()
         Line = self.env['clover.sale.line'].sudo()
         sales = Sale.search([('date', '>=', start), ('date', '<=', end)])
-        net = sum(sales.mapped('net_amount'))
-        gross = sum(sales.mapped('total_amount'))
+        settings = self._event_settings()
+        venue_products = (settings.x_facility_product_id | settings.x_deposit_product_id) if settings else self.env['product.product']
+        venue_names = {'event services payment', 'event services payments',
+                       'event deposit', 'event balance', 'facility usage and rental'}
+        all_lines = Line.search([('sale_id', 'in', sales.ids)])
+        venue_lines = all_lines.filtered(lambda ln:
+            ln.product_id in venue_products
+            or (ln.description or '').strip().casefold() in venue_names
+            or (ln.product_id.name or '').strip().casefold() in venue_names)
+        net = sum(sales.mapped('net_amount')) - sum(venue_lines.mapped('margin_amount'))
+        gross = sum(sales.mapped('total_amount')) - sum(venue_lines.mapped('amount'))
         # Aggregate lines by item name.
         agg = {}
         if sales:
-            for ln in Line.search([('sale_id', 'in', sales.ids)]):
+            for ln in all_lines - venue_lines:
                 name = (ln.product_id.name or ln.description
                         or ln.clover_item_id or _("Item"))
                 q, a = agg.get(name, (0.0, 0.0))
@@ -4700,7 +4767,7 @@ class ProjectTask(models.Model):
         self.x_clover_sales_gross = gross
         self.x_clover_synced_on = fields.Datetime.now()
         if not self.x_sales_notes:
-            self.x_sales_notes = _("Clover net batch (event window +/- buffer)")
+            self.x_sales_notes = _("Clover margin after goods (event window +/- buffer; venue payments excluded)")
         self.message_post(
             body=_("Pulled Clover sales for the event window: %(n)s orders, "
                    "$%(net).2f net, %(items)s top items.",

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="elksevent.EventValidationNavigation"
+       t-inherit="web.FormStatusIndicator" t-inherit-mode="extension">
+        <xpath expr="//span[@t-if=&quot;!props.model.root.isNew and indicatorMode === 'invalid'&quot;]" position="replace">
+            <t t-if="!props.model.root.isNew and indicatorMode === 'invalid'">
+                <button t-if="props.model.root.resModel === 'project.task' and props.model.root.data.x_is_event"
+                        type="button" class="btn btn-link text-danger small ms-2 p-0 border-0"
+                        t-on-click.stop="revealEventIssue"
+                        data-tooltip="Show the field that needs correcting"
+                        aria-label="Show the field that needs correcting">
+                    <i class="fa fa-warning"/>
+                </button>
+                <span t-else="" class="text-danger small ms-2"
+                      data-tooltip="Unable to save. Correct the issue or discard all changes">
+                    <i class="fa fa-warning"/>
+                </span>
+            </t>
+        </xpath>
+    </t>
+</templates>

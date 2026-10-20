@@ -152,6 +152,10 @@
                                     <t t-if="o.x_bar_use">
                                         <tr><td style="padding:2px 6px; width:40%;">Bars</td><td style="padding:2px 6px;"><t t-esc="o.x_num_bars or 0"/></td></tr>
                                         <tr t-if="o.x_need_beer_tub"><td style="padding:2px 6px;">Beer tub</td><td style="padding:2px 6px;">Yes</td></tr>
+                <tr><td style="padding:2px 6px;">Drink Tickets</td><td style="padding:2px 6px;"><t t-esc="'Yes' if o.x_bar_drink_tickets else 'No'"/></td></tr>
+                <tr><td style="padding:2px 6px;">Wrist Bands</td><td style="padding:2px 6px;"><t t-esc="'Yes' if o.x_bar_wrist_bands else 'No'"/></td></tr>
+                <tr><td style="padding:2px 6px;">Hosted Bar</td><td style="padding:2px 6px;"><t t-esc="'Yes' if o.x_bar_hosted else 'No'"/></td></tr>
+
                                         <tr t-if="o.x_bar_drink_requests"><td style="padding:2px 6px;">Drink requests</td><td style="padding:2px 6px;"><t t-esc="o.x_bar_drink_requests"/></td></tr>
                                         <tr t-if="o.x_bar_customer_request"><td style="padding:2px 6px;">Other requests</td><td style="padding:2px 6px;"><t t-esc="o.x_bar_customer_request"/></td></tr>
                                     </t>

@@ -290,6 +290,18 @@
                                     <div class="small text-muted">Beer Tub</div>
                                     <div class="fw-semibold"><t t-out="callout._chg('x_need_beer_tub', 'Yes' if evt.x_need_beer_tub else 'No')"/></div>
                                 </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="small text-muted">Drink Tickets</div>
+                                    <div class="fw-semibold"><t t-out="callout._chg('x_bar_drink_tickets', 'Yes' if evt.x_bar_drink_tickets else 'No')"/></div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="small text-muted">Wrist Bands</div>
+                                    <div class="fw-semibold"><t t-out="callout._chg('x_bar_wrist_bands', 'Yes' if evt.x_bar_wrist_bands else 'No')"/></div>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <div class="small text-muted">Hosted Bar</div>
+                                    <div class="fw-semibold"><t t-out="callout._chg('x_bar_hosted', 'Yes' if evt.x_bar_hosted else 'No')"/></div>
+                                </div>
                                 <div class="col-12" t-if="evt.x_bar_drink_requests or 'x_bar_drink_requests' in chgmap">
                                     <div class="small text-muted">Drink Requests</div>
                                     <div style="white-space:pre-line;"><t t-out="callout._chg('x_bar_drink_requests', evt.x_bar_drink_requests or '')"/></div>
