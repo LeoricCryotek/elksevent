@@ -27,6 +27,15 @@ class PdfLayoutTests(unittest.TestCase):
                 for call in template.findall(f".//t[@t-call='{LAYOUT}']"):
                     self.assertIsNone(call.find(".//t[@t-call='web.external_layout']"), path.name)
 
+    def test_report_actions_use_odoo19_group_field(self):
+        for path in (ROOT / 'report').glob('*.xml'):
+            tree = E.parse(path)
+            for record in tree.findall(".//record[@model='ir.actions.report']"):
+                self.assertIsNone(record.find("field[@name='groups_id']"), str(path))
+        tree = E.parse(ROOT / 'report/event_charity_certificate.xml')
+        action = tree.find("record[@id='action_report_event_charity_certificate']")
+        self.assertIsNotNone(action.find("field[@name='group_ids']"))
+
     def test_board_footer_has_plain_separator(self):
         source = (ROOT / 'report/event_board_agenda_report.xml').read_text()
         self.assertIn('event(s) - combined total:', source)

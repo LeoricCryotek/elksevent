@@ -85,6 +85,10 @@ sudo systemctl restart odona-lewistonelks896.com
 
 ## Recent changes
 
+- 19.0.9.143 — Fix charity certificate report-action access field for Odoo 19:
+  `group_ids`, not `groups_id`. Resolves the module-upgrade registry failure
+  while retaining the Event Coordinator access restriction.
+
 - 19.0.9.142 — Shared article wrapper for standalone PDF exports so Odoo keeps
   UTF-8 metadata and report styles when handing pages to wkhtmltopdf. Fixes the
   Board Agenda em-dash mojibake and uses an explicit sans-serif font stack with
