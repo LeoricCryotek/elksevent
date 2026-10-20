@@ -85,6 +85,14 @@ sudo systemctl restart odona-lewistonelks896.com
 
 ## Recent changes
 
+- 19.0.9.142 — Shared article wrapper for standalone PDF exports so Odoo keeps
+  UTF-8 metadata and report styles when handing pages to wkhtmltopdf. Fixes the
+  Board Agenda em-dash mojibake and uses an explicit sans-serif font stack with
+  ligatures disabled. Existing external-layout reports keep their own wrapper;
+  the charity certificate keeps its deliberate serif styling. Board Agenda’s
+  total-line separator is now an ASCII hyphen. Re-export existing PDFs after
+  upgrading; saved PDF files are not changed.
+
 - 19.0.9.141 — Charity allocations, including fixed requests, cannot exceed
   proceeds remaining after event costs and the coordinator supplies-fund
   reserve. Unfunded portions stay unallocated. Both financial PDFs show the

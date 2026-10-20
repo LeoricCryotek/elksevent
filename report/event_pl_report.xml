@@ -82,7 +82,7 @@
          report_event_pl_single = per-event wrapper (Print gear menu).
          ================================================================ -->
     <template id="report_event_pl">
-        <t t-call="web.html_container">
+        <t t-call="elksevent.event_pdf_html_container">
             <t t-foreach="docs" t-as="wizard">
                 <t t-set="data" t-value="wizard._get_report_data()"/>
                 <t t-set="settings"
@@ -99,7 +99,7 @@
     </template>
 
     <template id="report_event_pl_single">
-        <t t-call="web.html_container">
+        <t t-call="elksevent.event_pdf_html_container">
             <t t-foreach="docs" t-as="doc">
                 <t t-set="data" t-value="doc._get_pl_report_data()"/>
                 <t t-set="settings"

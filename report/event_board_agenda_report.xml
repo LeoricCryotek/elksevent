@@ -40,7 +40,7 @@
     </record>
 
     <template id="report_event_board_agenda">
-        <t t-call="web.html_container">
+        <t t-call="elksevent.event_pdf_html_container">
             <t t-set="settings"
                t-value="docs[0].env['elks.lodge.settings'].sudo().search([], limit=1)"/>
             <t t-set="evts" t-value="docs[0]._board_agenda_events()"/>
@@ -94,7 +94,7 @@
                         <td style="padding:4px 6px; border-top:1px solid #e3d9ee; text-align:right;">$<t t-esc="'{:,.2f}'.format(o.x_event_total or 0.0)"/></td>
                     </tr>
                     <tr style="background:#e8e0f0; font-weight:bold;">
-                        <td colspan="4" style="padding:4px 6px; text-align:right;"><t t-esc="len(evts)"/> event(s) &#8212; combined total:</td>
+                        <td colspan="4" style="padding:4px 6px; text-align:right;"><t t-esc="len(evts)"/> event(s) - combined total:</td>
                         <td style="padding:4px 6px;"></td>
                         <td style="padding:4px 6px; text-align:right;">$<t t-esc="'{:,.2f}'.format(sum(evts.mapped('x_event_total')))"/></td>
                     </tr>

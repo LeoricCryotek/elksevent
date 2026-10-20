@@ -19,7 +19,7 @@
                 <t t-set="s" t-value="o._event_settings()"/>
                 <t t-set="rows" t-value="o._bookkeeper_pl_rows()"/>
                 <t t-call="web.external_layout">
-                    <div class="page" style="font-size:12px; color:#222;">
+                    <div class="page" style="font-family:'DejaVu Sans','Liberation Sans',Arial,Helvetica,sans-serif; font-variant-ligatures:none; font-size:12px; color:#222;">
                         <div style="font-size:16px; font-weight:bold;">
                             <t t-if="s"><t t-esc="s.name"/></t><t t-else="">Elks Lodge</t>
                             <t t-if="s and s.lodge_number"> #<t t-esc="s.lodge_number"/></t>

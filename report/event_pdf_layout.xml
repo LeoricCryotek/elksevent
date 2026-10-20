@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Odoo 19 _prepare_html re-wraps .article nodes in web.minimal_layout,
+         preserving UTF-8 metadata and PDF styles. Without an article it sends
+         bare body fragments to wkhtmltopdf, which can guess a legacy encoding
+         and turn an em dash into mojibake. Keep all standalone event exports
+         on this path. Reports already using external_layout have an article. -->
+    <template id="event_pdf_html_container">
+        <t t-call="web.html_container">
+            <div class="article elksevent_pdf_document"
+                 style="font-family:'DejaVu Sans','Liberation Sans',Arial,Helvetica,sans-serif; font-variant-ligatures:none; font-feature-settings:'liga' 0, 'clig' 0;">
+                <t t-out="0"/>
+            </div>
+        </t>
+    </template>
+</odoo>

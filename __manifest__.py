@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Elks Event Bookings',
-    'version': '19.0.9.141.0',
+    'version': '19.0.9.142.0',
     'category': 'Services/Project',
     'summary': 'Facility event booking, board approval, room billing, and P&L reporting',
     'description': """
@@ -88,6 +88,7 @@ Key features
         'wizard/event_supplemental_wizard_views.xml',
         'wizard/event_price_lock_wizard_views.xml',
         'report/event_paperformat.xml',
+        'report/event_pdf_layout.xml',
         'report/event_pl_report.xml',
         'report/event_assessor_report.xml',
         'report/event_ap_breakout_report.xml',

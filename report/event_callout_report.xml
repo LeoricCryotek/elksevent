@@ -52,7 +52,7 @@
 
     <!-- ===================== CONTAINER TEMPLATES ===================== -->
     <template id="report_event_callout">
-        <t t-call="web.html_container">
+        <t t-call="elksevent.event_pdf_html_container">
             <t t-foreach="docs" t-as="o">
                 <t t-set="settings" t-value="o.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
                 <t t-set="shown" t-value="False"/>
@@ -76,7 +76,7 @@
     </template>
 
     <template id="report_event_callout_bar">
-        <t t-call="web.html_container">
+        <t t-call="elksevent.event_pdf_html_container">
             <t t-foreach="docs" t-as="o">
                 <t t-set="settings" t-value="o.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
                 <t t-set="pbreak" t-value="False"/>
@@ -86,7 +86,7 @@
         </t>
     </template>
     <template id="report_event_callout_kitchen">
-        <t t-call="web.html_container">
+        <t t-call="elksevent.event_pdf_html_container">
             <t t-foreach="docs" t-as="o">
                 <t t-set="settings" t-value="o.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
                 <t t-set="pbreak" t-value="False"/>
@@ -96,7 +96,7 @@
         </t>
     </template>
     <template id="report_event_callout_custodial">
-        <t t-call="web.html_container">
+        <t t-call="elksevent.event_pdf_html_container">
             <t t-foreach="docs" t-as="o">
                 <t t-set="settings" t-value="o.env['elks.lodge.settings'].sudo().search([], limit=1)"/>
                 <t t-set="pbreak" t-value="False"/>

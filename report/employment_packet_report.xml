@@ -13,7 +13,7 @@
     </record>
 
     <template id="report_employment_packet">
-        <t t-call="web.html_container">
+        <t t-call="elksevent.event_pdf_html_container">
             <t t-foreach="docs" t-as="o">
                 <t t-set="line" t-value="'border-bottom:1px solid #000; display:inline-block; min-width:120px;'"/>
                 <t t-set="hdr" t-value="'background:#444; color:#fff; padding:3px 6px; font-weight:bold; font-size:11px; margin:10px 0 6px;'"/>

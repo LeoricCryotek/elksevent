@@ -67,7 +67,7 @@
     </record>
 
     <template id="report_event_drawing_slips">
-        <t t-call="web.html_container">
+        <t t-call="elksevent.event_pdf_html_container">
             <t t-foreach="docs" t-as="o">
                 <t t-set="regs" t-value="o.registration_ids.filtered(lambda r: r.active and r.state in ('open', 'done'))"/>
                 <t t-call="elksevent.drawing_slips_body"/>
@@ -89,7 +89,7 @@
     </record>
 
     <template id="report_registration_drawing_slips">
-        <t t-call="web.html_container">
+        <t t-call="elksevent.event_pdf_html_container">
             <t t-set="regs" t-value="docs"/>
             <t t-call="elksevent.drawing_slips_body"/>
         </t>
