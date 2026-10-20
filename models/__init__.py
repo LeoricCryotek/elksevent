@@ -27,3 +27,5 @@ from . import survey_user_input
 from . import lodge_settings
 
 from . import event_fund
+
+from . import event_charity_disbursement

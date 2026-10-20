@@ -427,6 +427,19 @@
                             </tr>
                         </table>
 
+                        <div t-if="ed['event'].x_charity_disbursement_enabled" style="font-size:11px; border:1px solid #cbb8dd; padding:8px; margin-bottom:12px;">
+                            <strong>Charity Disbursement — planned allocation</strong>
+                            <div>Beneficiary: <t t-esc="ed['event'].x_charity_beneficiary_id.display_name"/></div>
+                            <div>Method: <t t-esc="dict(ed['event']._fields['x_charity_disbursement_method'].selection).get(ed['event'].x_charity_disbursement_method)"/>
+                                <t t-if="ed['event'].x_charity_disbursement_method == 'percent'"> (<t t-esc="'%g' % ed['event'].x_charity_disbursement_percent"/>%)</t>
+                            </div>
+                            <div>Available proceeds (after coordinator reserve): $<t t-esc="'{:,.2f}'.format(ed['event'].x_charity_available_proceeds)"/></div>
+                            <div>Allocated to charity: $<t t-esc="'{:,.2f}'.format(ed['event'].x_charity_disbursement_amount)"/></div>
+                            <div><strong>Net retained after charity: $<t t-esc="'{:,.2f}'.format(ed['event'].x_charity_retained_net)"/></strong></div>
+                            <div t-if="ed['event'].x_charity_disbursement_shortfall">Requested amount not allocated (insufficient proceeds): $<t t-esc="'{:,.2f}'.format(ed['event'].x_charity_disbursement_shortfall)"/></div>
+                            <div t-if="ed['event'].x_charity_disbursement_notes" style="white-space:pre-line;"><t t-esc="ed['event'].x_charity_disbursement_notes"/></div>
+                        </div>
+
                         <!-- UBI / property-tax reserve (non-member rentals) -->
                         <t t-if="not ed['is_member'] and ed['ubi_room_income']">
                             <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 10px;">

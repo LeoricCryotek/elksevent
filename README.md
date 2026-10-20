@@ -85,6 +85,25 @@ sudo systemctl restart odona-lewistonelks896.com
 
 ## Recent changes
 
+- 19.0.9.141 — Charity allocations, including fixed requests, cannot exceed
+  proceeds remaining after event costs and the coordinator supplies-fund
+  reserve. Unfunded portions stay unallocated. Both financial PDFs show the
+  beneficiary, actual allocation and net retained. Print Charity Certificate
+  on the Charity Disbursement tab produces a landscape Letter certificate with
+  lodge, beneficiary, event, date, net-proceeds allocation and signature lines.
+  Certificate Message is recipient-facing; internal Charity Notes stay off the
+  certificate. Printing requires a positive allocation. The certificate records
+  an allocation, not an issued payment, and always reflects current event totals.
+
+- 19.0.9.140 — Charity Disbursement event tab: enable flag, beneficiary contact,
+  notes and allocation of all available proceeds, a percentage (0–100) or an
+  exact fixed amount. Available proceeds are positive event profit after the
+  coordinator supplies-fund reserve; fixed allocations may exceed proceeds
+  with a visible funding-shortfall warning. Financials, P&L and bookkeeper PDFs
+  show the charity allocation and net retained separately from operating profit.
+  These are live planned allocations, not issued payments, ledger postings or
+  confirmed elkscharity contributions. No new elkscharity dependency is required.
+
 - 19.0.9.139 — Coordinator / Supplies Fund register under Elks Events and a
   Financials shortcut. The former gross pool total now shows posted available
   funds: contributions minus spending/timecard allocations and open confirmed

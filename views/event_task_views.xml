@@ -935,7 +935,10 @@
                             <field name="x_event_sales_income" readonly="1" string="On-site Sales Margin (after goods)" help="Formula: Clover sales total minus Clover goods costs, excluding venue-payment item margins, plus any historical manually entered sales. Source: After Action → Clover and historical sales. Venue payments belong under Payments." />
                             <field name="x_pl_total_income" readonly="1" help="Formula: Rental Revenue (pre-tax) + On-site Sales Margin (after goods). Source: this summary and After Action → Pull Clover Sales. Clover goods costs are already deducted." />
                             <field name="x_total_costs" readonly="1" string="Total Event Expenses" help="Formula: Event Costs → COGS for non-labor items + clocked paid wages + certified department gratuities + coordinator payout. Source: Event Costs, Timesheets, department call-out sheets and Coordinator Pay. POs excluded." />
-                            <field name="x_pl_net_total" readonly="1" string="Event Profit / (Loss)" class="oe_subtotal_footer_separator" decoration-danger="x_pl_net_total &lt; 0" decoration-success="x_pl_net_total &gt;= 0" help="Formula: Rental Revenue + On-site Sales Margin − Total Event Expenses. Source: this summary; identical to Print → Event P&amp;L. Sales goods costs are already deducted by Clover. POs excluded." />
+                            <field name="x_pl_net_total" readonly="1" string="Event Profit Before Charity" class="oe_subtotal_footer_separator" decoration-danger="x_pl_net_total &lt; 0" decoration-success="x_pl_net_total &gt;= 0" help="Formula: Rental Revenue + On-site Sales Margin − Total Event Expenses. Source: this summary; identical to Print → Event P&amp;L. Sales goods costs are already deducted by Clover. POs excluded." />
+                            <field name="x_charity_disbursement_amount" readonly="1" invisible="not x_charity_disbursement_enabled"/>
+                            <field name="x_charity_retained_net" readonly="1" invisible="not x_charity_disbursement_enabled"/>
+
                         </group>
                         <group string="Payments &amp; People">
                             <field name="x_total_paid" readonly="1" help="Formula: sum of recorded payments excluding write-offs, with the legacy deposit used when no payment log exists. Source: Payments → payment list / Deposit." />
@@ -1085,6 +1088,51 @@
                             </group>
                         </page>
                     </notebook>
+                </page>
+
+                <page string="Charity Disbursement" name="event_charity_disbursement"
+                      groups="elksevent.group_event_coordinator" invisible="not x_is_event">
+                    <group>
+                        <group string="Charity Allocation">
+                            <field name="x_charity_disbursement_enabled" widget="boolean_toggle"/>
+                            <field name="x_charity_beneficiary_id" invisible="not x_charity_disbursement_enabled"
+                                   required="x_charity_disbursement_enabled"/>
+                            <field name="x_charity_disbursement_method" invisible="not x_charity_disbursement_enabled"/>
+                            <field name="x_charity_disbursement_percent"
+                                   invisible="not x_charity_disbursement_enabled or x_charity_disbursement_method != 'percent'"/>
+                            <field name="x_charity_disbursement_fixed"
+                                   invisible="not x_charity_disbursement_enabled or x_charity_disbursement_method != 'fixed'"/>
+                        </group>
+                        <group string="Proceeds Breakdown" invisible="not x_charity_disbursement_enabled">
+                            <field name="x_pl_net_total" string="Event Profit Before Charity" readonly="1"
+                                   help="Formula: agreed/invoiced rental revenue + on-site sales margin − event expenses. Source: Financials → Event P&amp;L. Charity is allocated from proceeds after this calculation."/>
+                            <field name="x_coordinator_to_supplies" readonly="1" string="Reserved for Coordinator Supplies Fund"/>
+                            <field name="x_charity_available_proceeds" readonly="1"/>
+                            <field name="x_charity_disbursement_amount" readonly="1"/>
+                            <field name="x_charity_retained_net" readonly="1"
+                                   decoration-danger="x_charity_retained_net &lt; 0"/>
+                        </group>
+                    </group>
+                    <div class="alert alert-warning" role="alert"
+                         invisible="not x_charity_disbursement_enabled or not x_charity_disbursement_shortfall">
+                        The requested fixed amount exceeds available proceeds by
+                        <field name="x_charity_disbursement_shortfall" readonly="1" class="oe_inline"/>.
+                        This portion is not allocated. The charity receives only proceeds remaining after costs and the coordinator reserve.
+                    </div>
+                    <div class="text-muted mb-3">
+                        Available proceeds are positive event profit after expenses and the coordinator fee
+                        reserved for the supplies fund. These amounts update as event totals change.
+                        This tab records the planned allocation; it does not issue payment or post a charity contribution.
+                    </div>
+                    <group string="Charity Certificate" invisible="not x_charity_disbursement_enabled">
+                        <field name="x_charity_certificate_message" placeholder="Optional dedication to print for the charity..."/>
+                        <button name="action_print_charity_certificate" type="object" string="Print Charity Certificate"
+                                icon="fa-certificate" class="btn-primary"/>
+                    </group>
+                    <group string="Charity Notes">
+                        <field name="x_charity_disbursement_notes" nolabel="1"
+                               placeholder="Charity purpose, approval, restrictions and disbursement instructions..."/>
+                    </group>
                 </page>
 
                 <!-- ===== Documents / Print (event-only, replaces the global

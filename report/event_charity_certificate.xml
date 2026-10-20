@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="paperformat_event_charity_certificate" model="report.paperformat">
+        <field name="name">Charity Certificate (Letter Landscape)</field>
+        <field name="format">Letter</field>
+        <field name="orientation">Landscape</field>
+        <field name="margin_top">12</field>
+        <field name="margin_bottom">12</field>
+        <field name="margin_left">12</field>
+        <field name="margin_right">12</field>
+        <field name="header_line" eval="False"/>
+        <field name="header_spacing">0</field>
+        <field name="dpi">90</field>
+    </record>
+    <record id="action_report_event_charity_certificate" model="ir.actions.report">
+        <field name="name">Charity Certificate</field>
+        <field name="model">project.task</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">elksevent.report_event_charity_certificate</field>
+        <field name="report_file">elksevent.report_event_charity_certificate</field>
+        <field name="paperformat_id" ref="paperformat_event_charity_certificate"/>
+        <field name="groups_id" eval="[(4, ref('elksevent.group_event_coordinator'))]"/>
+        <field name="print_report_name">'Charity Certificate - %s' % (object.name or 'Event')</field>
+    </record>
+    <template id="report_event_charity_certificate">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="validated" t-value="o._validate_charity_certificate()"/>
+                <t t-set="company" t-value="o.company_id or res_company"/>
+                <div class="page" style="font-family:Georgia, 'Times New Roman', serif; color:#2d2536; padding:0; page-break-after:always;">
+                    <div style="border:7px double #634579; padding:9mm 12mm; text-align:center; min-height:165mm; box-sizing:border-box;">
+                        <div style="font-family:Arial,sans-serif; color:#634579; font-size:15px; letter-spacing:2px; text-transform:uppercase;">
+                            <span t-field="company.name"/>
+                        </div>
+                        <div style="font-size:35px; margin:8mm 0 2mm; line-height:1.2;">Certificate of Charitable Support</div>
+                        <div style="height:1px; background:#bda56c; width:70%; margin:4mm auto 5mm;"/>
+                        <div style="font-family:Arial,sans-serif; font-size:13px; letter-spacing:2px; color:#75687e;">PRESENTED TO</div>
+                        <div style="font-size:29px; font-weight:bold; margin:3mm 0 4mm; line-height:1.15; overflow-wrap:break-word;">
+                            <span t-field="o.x_charity_beneficiary_id.name"/>
+                        </div>
+                        <div style="font-size:17px;">In support of your service to our community, we have allocated</div>
+                        <div style="font-size:39px; font-weight:bold; color:#634579; margin:3mm 0;">
+                            <span t-field="o.x_charity_disbursement_amount" t-options="{'widget': 'monetary', 'display_currency': o.x_currency_id}"/>
+                        </div>
+                        <div style="font-size:16px;">from the net proceeds of</div>
+                        <div style="font-size:21px; font-weight:bold; margin:3mm 0 1mm; line-height:1.2; overflow-wrap:break-word;"><span t-field="o.name"/></div>
+                        <div style="font-size:15px;" t-if="o.x_event_date"><span t-field="o.x_event_date"/></div>
+                        <div t-if="o.x_charity_certificate_message" style="font-size:15px; font-style:italic; white-space:pre-line; margin:4mm 0 0; overflow-wrap:break-word;">
+                            <span t-field="o.x_charity_certificate_message"/>
+                        </div>
+                        <div style="font-family:Arial,sans-serif; font-size:11px; color:#75687e; margin:5mm 0 7mm;">
+                            Allocated from proceeds remaining after event costs and the coordinator supplies-fund reserve.
+                        </div>
+                        <table style="width:85%; margin:0 auto; font-family:Arial,sans-serif; font-size:11px; border-collapse:collapse;">
+                            <tr>
+                                <td style="width:65%; border-top:1px solid #75687e; padding-top:2mm;">Authorized Lodge Representative</td>
+                                <td style="width:10%;"/>
+                                <td style="width:25%; border-top:1px solid #75687e; padding-top:2mm;">Date</td>
+                            </tr>
+                        </table>
+                        <div style="font-family:Arial,sans-serif; font-size:9px; color:#857a8b; margin-top:5mm;">Event proceeds allocation. Payment is recorded separately.</div>
+                    </div>
+                </div>
+            </t>
+        </t>
+    </template>
+</odoo>

@@ -78,6 +78,15 @@
                             </tr>
                         </table>
 
+                        <div t-if="o.x_charity_disbursement_enabled" style="border:1px solid #ccc; padding:8px; margin-top:12px;">
+                            <strong>Charity Disbursement — planned allocation</strong>
+                            <div>Beneficiary: <t t-esc="o.x_charity_beneficiary_id.display_name"/></div>
+                            <div>Available proceeds (after coordinator reserve): $<t t-esc="'{:,.2f}'.format(o.x_charity_available_proceeds)"/></div>
+                            <div>Allocated to charity: $<t t-esc="'{:,.2f}'.format(o.x_charity_disbursement_amount)"/></div>
+                            <div>Net retained after charity: $<t t-esc="'{:,.2f}'.format(o.x_charity_retained_net)"/></div>
+                            <div t-if="o.x_charity_disbursement_shortfall">Requested amount not allocated (insufficient proceeds): $<t t-esc="'{:,.2f}'.format(o.x_charity_disbursement_shortfall)"/></div>
+                            <div t-if="o.x_charity_disbursement_notes" style="white-space:pre-line;"><t t-esc="o.x_charity_disbursement_notes"/></div>
+                        </div>
                         <p>Volunteer hours (clocked): <t t-esc="'{:,.2f}'.format(o.x_event_volunteer_hours)"/> — $0 labor cost.</p>
                         <p style="font-size:10px; color:#777; margin-top:10px;">
                             Revenue is what the customer is charged; Cost (COGS) is the lodge's cost including clocked paid labor, certified gratuities and coordinator payout. Vendor POs are excluded. On-site sales are margin after goods costs. Net is Revenue minus Cost per category. Post revenue to the matching income accounts and costs to the matching expense accounts for each category.
