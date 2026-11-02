@@ -85,6 +85,10 @@ sudo systemctl restart odona-lewistonelks896.com
 
 ## Recent changes
 
+- 19.0.9.145 — Resolve fund-view warnings: advisory payroll text uses the
+  accessibility status role; Post Contribution and its Posted to Fund modifier
+  field are explicitly restricted to Event Coordinators.
+
 - 19.0.9.143 — Fix charity certificate report-action access field for Odoo 19:
   `group_ids`, not `groups_id`. Resolves the module-upgrade registry failure
   while retaining the Event Coordinator access restriction.

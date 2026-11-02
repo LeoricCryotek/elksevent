@@ -78,7 +78,7 @@
                             <field name="posted_on" invisible="state != 'posted'"/>
                         </group>
                     </group>
-                    <div class="alert alert-info" invisible="kind != 'payroll'">Post to Timecard adds this amount as a flat coordinator fee on the selected date. It does not issue payment. Do not also use the event's Pay Coordinator button for this same allocation.</div>
+                    <div class="alert alert-info" role="status" invisible="kind != 'payroll'">Post to Timecard adds this amount as a flat coordinator fee on the selected date. It does not issue payment. Do not also use the event's Pay Coordinator button for this same allocation.</div>
                     <field name="notes" readonly="state == 'posted'" placeholder="Purpose, approval, receipt details or correction explanation..."/>
                 </sheet>
                 <chatter/>
@@ -92,8 +92,8 @@
                 <field name="x_event_date"/><field name="name"/><field name="stage_id"/>
                 <field name="x_coordinator_to_supplies" string="Allocated Fee" sum="Allocated"/>
                 <field name="x_total_paid"/><field name="x_balance_remaining"/>
-                <field name="x_coordinator_fund_posted" string="Posted to Fund"/>
-                <button name="action_contribute_coordinator_fund" type="object" string="Post Contribution" invisible="x_coordinator_fund_posted"/>
+                <field name="x_coordinator_fund_posted" string="Posted to Fund" groups="elksevent.group_event_coordinator"/>
+                <button name="action_contribute_coordinator_fund" type="object" string="Post Contribution" invisible="x_coordinator_fund_posted" groups="elksevent.group_event_coordinator"/>
                 <field name="x_currency_id" column_invisible="1"/>
             </list>
         </field>
