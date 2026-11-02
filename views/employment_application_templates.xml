@@ -153,11 +153,16 @@
                         </select>
                     </div>
                     <div class="form-check"><input type="checkbox" name="w4_multiple_jobs" value="1" class="form-check-input" id="w4m"/><label class="form-check-label" for="w4m">Step 2 applies (multiple jobs / spouse works)</label></div>
+                    <p class="small text-muted mb-1">Step 3 — Dependents (enter how many; we calculate the dollar amount for box 3):</p>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6 col-md-3"><label class="form-label small mb-0"># Children under 17 (3a)</label><input type="number" min="0" step="1" name="w4_qualifying_children" class="form-control" placeholder="0"/></div>
+                        <div class="col-6 col-md-3"><label class="form-label small mb-0"># Other dependents (3b)</label><input type="number" min="0" step="1" name="w4_other_dependents" class="form-control" placeholder="0"/></div>
+                        <div class="col-6 col-md-3"><label class="form-label small mb-0">Other credits $ (optional)</label><input type="text" name="w4_other_credits" class="form-control" placeholder="0"/></div>
+                    </div>
                     <div class="row g-2 mb-3">
-                        <div class="col-6 col-md-3"><label class="form-label small mb-0">Dependents $ (3)</label><input type="text" name="w4_dependents" class="form-control"/></div>
-                        <div class="col-6 col-md-3"><label class="form-label small mb-0">Other income (4a)</label><input type="text" name="w4_other_income" class="form-control"/></div>
-                        <div class="col-6 col-md-3"><label class="form-label small mb-0">Deductions (4b)</label><input type="text" name="w4_deductions" class="form-control"/></div>
-                        <div class="col-6 col-md-3"><label class="form-label small mb-0">Extra withholding (4c)</label><input type="text" name="w4_extra" class="form-control"/></div>
+                        <div class="col-6 col-md-4"><label class="form-label small mb-0">Other income (4a)</label><input type="text" name="w4_other_income" class="form-control"/></div>
+                        <div class="col-6 col-md-4"><label class="form-label small mb-0">Deductions (4b)</label><input type="text" name="w4_deductions" class="form-control"/></div>
+                        <div class="col-6 col-md-4"><label class="form-label small mb-0">Extra withholding (4c)</label><input type="text" name="w4_extra" class="form-control"/></div>
                     </div>
 
                     <h5 class="mt-3">Idaho Withholding (Form ID W-4)</h5>

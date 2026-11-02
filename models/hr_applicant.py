@@ -99,7 +99,28 @@ class HrApplicant(models.Model):
         ('hoh', 'Head of Household'),
     ], string="W-4 Filing Status")
     x_w4_multiple_jobs = fields.Boolean("W-4 Step 2 (multiple jobs) applies")
-    x_w4_dependents_amt = fields.Char("W-4 Dependents Amount (Step 3)")
+    # Step 3 dependents: collect COUNTS (not dollars) so the box is always a
+    # correct amount. Box 3 = children under 17 x $2,200 + other deps x $500
+    # + any other credits.
+    x_w4_qualifying_children = fields.Integer(
+        "W-4 Qualifying Children under 17 (Step 3a)", default=0,
+        help="Number of qualifying children under age 17. Each is worth "
+             "$2,200 on line 3(a).")
+    x_w4_other_dependents = fields.Integer(
+        "W-4 Other Dependents (Step 3b)", default=0,
+        help="Number of other dependents. Each is worth $500 on line 3(b).")
+    x_w4_other_credits = fields.Float(
+        "W-4 Other Credits ($)", default=0.0,
+        help="Any other tax credits to add on Step 3 (optional).")
+    x_w4_3a_amount = fields.Float(
+        "Step 3(a) Amount", compute="_compute_w4_step3", store=True)
+    x_w4_3b_amount = fields.Float(
+        "Step 3(b) Amount", compute="_compute_w4_step3", store=True)
+    x_w4_dependents_amt = fields.Char(
+        "W-4 Dependents Total (Step 3)", compute="_compute_w4_step3",
+        store=True,
+        help="Box 3 total = children x $2,200 + other dependents x $500 + "
+             "other credits. Computed from the counts above.")
     x_w4_other_income = fields.Char("W-4 Other Income (Step 4a)")
     x_w4_deductions = fields.Char("W-4 Deductions (Step 4b)")
     x_w4_extra_withholding = fields.Char("W-4 Extra Withholding (Step 4c)")
@@ -111,6 +132,19 @@ class HrApplicant(models.Model):
     ], string="Idaho W-4 Withholding Status")
     x_id_w4_allowances = fields.Char("Idaho W-4 Allowances (line 1)")
     x_id_w4_additional = fields.Char("Idaho W-4 Additional Withholding (line 2)")
+
+    @api.depends('x_w4_qualifying_children', 'x_w4_other_dependents',
+                 'x_w4_other_credits')
+    def _compute_w4_step3(self):
+        for rec in self:
+            a = (rec.x_w4_qualifying_children or 0) * 2200.0
+            b = (rec.x_w4_other_dependents or 0) * 500.0
+            rec.x_w4_3a_amount = a
+            rec.x_w4_3b_amount = b
+            total = a + b + (rec.x_w4_other_credits or 0.0)
+            # Blank when nothing to claim, so the box prints empty not "$0".
+            rec.x_w4_dependents_amt = (
+                "{:,.0f}".format(total) if total else False)
     # Direct deposit
     x_dd_request_type = fields.Selection([
         ('new', 'New enrollment'),
@@ -653,11 +687,17 @@ class HrApplicant(models.Model):
         if self.x_w4_filing in fsy:
             X(3, 117, fsy[self.x_w4_filing])
         if self.x_w4_multiple_jobs:
-            X(3, 523, 392)
-        T(3, 560, 516, self.x_w4_dependents_amt)
-        T(3, 560, 560, self.x_w4_other_income)
-        T(3, 230, 435, self.x_w4_deductions)
-        T(3, 560, 614, self.x_w4_extra_withholding)
+            X(3, 565, 411)
+        # Step 3: the 3(a) children and 3(b) other-dependent sub-amounts, then
+        # the box-3 total. All dollar amounts (not counts).
+        if self.x_w4_3a_amount:
+            T(3, 422, 489, "{:,.0f}".format(self.x_w4_3a_amount))
+        if self.x_w4_3b_amount:
+            T(3, 422, 501, "{:,.0f}".format(self.x_w4_3b_amount))
+        T(3, 515, 525, self.x_w4_dependents_amt)
+        T(3, 515, 561, self.x_w4_other_income)
+        T(3, 515, 597, self.x_w4_deductions)
+        T(3, 515, 615, self.x_w4_extra_withholding)
         S(3, 115, 698); T(3, 430, 700, date)
 
         # -------- PAGE 5: Idaho W-4 --------

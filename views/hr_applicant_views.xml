@@ -178,7 +178,11 @@
                         <group string="Federal Withholding (W-4)">
                             <field name="x_w4_filing"/>
                             <field name="x_w4_multiple_jobs"/>
-                            <field name="x_w4_dependents_amt"/>
+                            <field name="x_w4_qualifying_children"/>
+                            <field name="x_w4_other_dependents"/>
+                            <field name="x_w4_other_credits"/>
+                            <field name="x_w4_dependents_amt" readonly="1"
+                                   string="Step 3 Total (box 3)"/>
                             <field name="x_w4_other_income"/>
                             <field name="x_w4_deductions"/>
                             <field name="x_w4_extra_withholding"/>

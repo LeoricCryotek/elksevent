@@ -72,6 +72,19 @@ class EmploymentApplication(http.Controller):
         def g(k):
             return (post.get(k) or '').strip()
 
+        def to_int(v):
+            try:
+                return int(float((v or '0').replace(',', '').strip() or 0))
+            except (ValueError, TypeError):
+                return 0
+
+        def to_float(v):
+            try:
+                return float((v or '0').replace(',', '').replace(
+                    '$', '').strip() or 0)
+            except (ValueError, TypeError):
+                return 0.0
+
         first, middle, last = g('first_name'), g('middle_initial'), g('last_name')
         name = ' '.join(p for p in [first, middle, last] if p).strip()
 
@@ -125,7 +138,9 @@ class EmploymentApplication(http.Controller):
                             if post.get('w4_filing') in (
                                 'single', 'married', 'hoh') else False),
             'x_w4_multiple_jobs': bool(post.get('w4_multiple_jobs')),
-            'x_w4_dependents_amt': g('w4_dependents'),
+            'x_w4_qualifying_children': to_int(g('w4_qualifying_children')),
+            'x_w4_other_dependents': to_int(g('w4_other_dependents')),
+            'x_w4_other_credits': to_float(g('w4_other_credits')),
             'x_w4_other_income': g('w4_other_income'),
             'x_w4_deductions': g('w4_deductions'),
             'x_w4_extra_withholding': g('w4_extra'),
