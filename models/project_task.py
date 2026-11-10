@@ -2514,34 +2514,55 @@ class ProjectTask(models.Model):
                          'custodial': 'Custodial', 'event': 'Event Worker'}
 
     def _pl_labor_paid_by_dept(self):
-        """Actual labor PAID OUT per department for the P&L expense side:
-        wages (each clocked-in, non-volunteer worker's hours x their pay rate —
-        a 1099 at the call-out rate, a W-2 at their wage) PLUS the tips paid out
-        to that department. One row per department (Bar / Lounge, Kitchen,
-        Custodial, Event Worker). Volunteers cost nothing."""
+        """Labor cost the Lodge carries, per department, for the P&L expense
+        side = wages + tips paid.
+
+        Wages are PROJECTED then ACTUAL, by department:
+        - Before anyone clocks in for a department, the committed cost is the
+          CERTIFIED call-out roster's raw pay (hours x the rate the manager
+          entered — what the Lodge actually pays, NOT the marked-up billed
+          amount). This is what shows the moment a roster is certified.
+        - Once a non-volunteer actually clocks in for that department, we switch
+          to the REAL paid labor (clocked hours x each worker's rate; a 1099 at
+          the call-out rate, a W-2 at their wage). Volunteers cost nothing.
+        Tips are the certified call-out gratuity for the department.
+
+        One row per department (Bar / Lounge, Kitchen, Custodial, Event Worker).
+        """
         self.ensure_one()
         rates = self._event_role_rates(self._event_settings())
         role_dept = {'bartender': 'bar', 'kitchen': 'kitchen',
                      'custodial': 'custodial', 'event': 'event'}
-        wages = {'bar': 0.0, 'kitchen': 0.0, 'custodial': 0.0, 'event': 0.0}
+        # Actual clocked (non-volunteer) pay + whether ANYONE clocked in, by dept.
+        actual = {'bar': 0.0, 'kitchen': 0.0, 'custodial': 0.0, 'event': 0.0}
+        clocked = {'bar': False, 'kitchen': False, 'custodial': False,
+                   'event': False}
         for att in self.x_attendance_ids:
             if self._elks_is_volunteer_att(att):
                 continue
+            if (att.worked_hours or 0.0) <= 0.0:
+                continue
             dept = role_dept.get(att.x_event_role or 'event', 'event')
-            wages[dept] += self._att_actual_pay(att, rates)
-        # Tips actually paid out, by department, from the certified call-outs.
+            actual[dept] += self._att_actual_pay(att, rates)
+            clocked[dept] = True
+        # Certified-roster committed raw pay + tips, by department.
+        committed = {'bar': 0.0, 'kitchen': 0.0, 'custodial': 0.0, 'event': 0.0}
         tips = {'bar': 0.0, 'kitchen': 0.0, 'custodial': 0.0, 'event': 0.0}
         for co in self.x_callout_ids.filtered(lambda c: c.state == 'certified'):
-            tips[co.department] = tips.get(co.department, 0.0) + (
-                co.gratuity or 0.0)
+            d = co.department
+            committed[d] = committed.get(d, 0.0) + (co.raw_cost_total or 0.0)
+            tips[d] = tips.get(d, 0.0) + (co.gratuity or 0.0)
         rows = []
         for d in ('bar', 'kitchen', 'custodial', 'event'):
-            total = wages[d] + tips.get(d, 0.0)
+            # Actual once clocked in, else the certified-roster commitment.
+            wages = actual[d] if clocked[d] else committed.get(d, 0.0)
+            total = wages + tips.get(d, 0.0)
             if total > 0.005:
                 rows.append({
                     'dept': self._LABOR_DEPT_LABEL[d], 'code': d,
-                    'wages': round(wages[d], 2),
+                    'wages': round(wages, 2),
                     'tips': round(tips.get(d, 0.0), 2),
+                    'actual': clocked[d],
                     'total': round(total, 2)})
         return rows
 
@@ -2557,8 +2578,10 @@ class ProjectTask(models.Model):
         'x_price_locked', 'x_agreed_billed', 'x_billed_snapshot',
         'x_invoice_ids.state', 'x_invoice_ids.x_event_invoice_kind',
         'x_callout_ids.state', 'x_callout_ids.gratuity',
+        'x_callout_ids.raw_cost_total',
         'x_callout_ids.line_ids.rate', 'x_callout_ids.line_ids.hours',
         'x_callout_ids.line_ids.employee_id',
+        'x_attendance_ids.worked_hours', 'x_attendance_ids.x_event_role',
         'x_room_rental_rate',
         'x_cost_line_ids.x_line_cogs',
         'x_cost_line_ids.cost_type_id',
@@ -4269,10 +4292,12 @@ class ProjectTask(models.Model):
                     bits.append('$%.2f wages' % row['wages'])
                 if row['tips']:
                     bits.append('$%.2f tips' % row['tips'])
+                tag = '' if row.get('actual') else ' — roster (committed)'
                 labor_items.append({
-                    'name': '%s Labor%s' % (
+                    'name': '%s Labor%s%s' % (
                         row['dept'],
-                        (' (%s)' % ' + '.join(bits)) if bits else ''),
+                        (' (%s)' % ' + '.join(bits)) if bits else '',
+                        tag),
                     'cogs': row['total'],
                 })
             cost_items.extend(labor_items)
